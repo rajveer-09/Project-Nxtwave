@@ -19,7 +19,8 @@ export const ATTENDANCE_SERVICE: ServiceConfig = {
   originEnv: "ATTENDANCE_API_ORIGIN",
   secretEnv: "ATTENDANCE_JWT_SECRET",
   upstreamPrefix: "/api",
-  // Without the Go service: read the attendance schema when there's a database
-  // (read-only; saving needs the service), otherwise the in-memory sample.
-  sample: (request, path, user) => (authMode() === "database" ? attendanceDb : attendanceSample)(request, path, user),
+  // Without the Go service: read the attendance schema when there's a database (real data,
+  // read-only; saving needs the service; allowed in production), otherwise the development sample.
+  fallback: () => (authMode() === "database" ? attendanceDb : null),
+  sample: attendanceSample,
 };

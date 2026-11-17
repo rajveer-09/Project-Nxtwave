@@ -21,8 +21,9 @@ export const metadata = { title: "Staff and roles" };
 
 async function StaffContent() {
   const user = await requireAccess("/admin/staff");
-  const { rows, sample } = await listStaff(user);
-  const active = rows.filter((r) => r.active).length;
+  const { rows: all, sample } = await listStaff(user);
+  const rows = all.filter((r) => r.active);
+  const deactivated = all.length - rows.length;
   const roles = assignableRoles(user.role);
   const senior = user.role === "senior_instructor";
 
@@ -45,8 +46,16 @@ async function StaffContent() {
           <AddStaffForm roles={roles} />
         </SectionCard>
       ) : null}
-      <SectionCard title={`${active} active`} description={`${rows.length - active} inactive or left`} bodyClassName="px-0 pb-2">
-        <StaffTable rows={rows} viewer={user} />
+      <SectionCard
+        title={`${rows.length} active`}
+        description={
+          deactivated
+            ? `${deactivated} deactivated ${deactivated === 1 ? "person is" : "people are"} with the super admins, who reactivate or delete.`
+            : "Deactivated people go to the super admins, who reactivate or delete."
+        }
+        bodyClassName="px-0 pb-2"
+      >
+        <StaffTable rows={rows} roles={roles} mode={roles.length && !sample ? "active" : "readonly"} />
       </SectionCard>
     </>
   );

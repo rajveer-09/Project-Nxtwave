@@ -20,6 +20,9 @@ export const TAGS = {
   interactions: "interactions",
   student: (niatId: string) => `student:${niatId.toUpperCase()}`,
   home: "home",
+  staff: "staff",
+  tests: "tests",
+  curriculum: "curriculum",
 } as const;
 
 export function expire(...tags: string[]) {

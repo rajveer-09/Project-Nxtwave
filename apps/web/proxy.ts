@@ -7,7 +7,7 @@ Date : 15 Nov 2026
 */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { authMode, DEV_ROLE_COOKIE, SESSION_COOKIE } from "@/common/auth/config";
+import { authMode, DEV_ROLE_COOKIE, SESSION_COOKIE, STUDENT_COOKIE } from "@/common/auth/config";
 import { isRole } from "@/common/auth/roles";
 import { canAccess } from "@/common/lib/nav";
 
@@ -19,6 +19,12 @@ import { canAccess } from "@/common/lib/nav";
  */
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  // Student portal: its own cookie; staff pages never accept it.
+  if (pathname === "/me" || pathname.startsWith("/me/")) {
+    if (!request.cookies.get(STUDENT_COOKIE)?.value) return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.next();
+  }
 
   if (authMode() === "database") {
     if (!request.cookies.get(SESSION_COOKIE)?.value) {

@@ -17,6 +17,7 @@ import { Button } from "@/common/ui/button";
 import { Skeleton } from "@/common/ui/skeleton";
 import { ApiError } from "@/common/lib/api-client";
 import { attendanceApi } from "@/modules/attendance/api";
+import { saveAttendanceAction } from "@/modules/attendance/actions";
 import type { Mark, SheetRow } from "@/modules/attendance/types";
 import { formatDate } from "@/common/lib/dates";
 import { cn } from "@/common/lib/utils";
@@ -27,11 +28,26 @@ const control =
 /**
  * Hall attendance sheet (ported from the attendance dashboard's MarkAttendance).
  * Keyboard: ↑/↓ move between students, P / A mark and move down, Delete clears.
- * Only changed rows are sent; the service saves all of them or none.
- * savingNeedsService: marks are read from the database but saving needs the Go service.
+ * Only changed rows are sent; all of them are saved or none.
+ * savesInHub: NxtOne saves the marks to the database itself (saveAttendanceAction); otherwise they go
+ * to the attendance service (or the development sample).
+ * mine: an instructor's own students and their hall. The sheet opens on that hall showing only them;
+ * "Everyone in this hall" shows (and lets them mark) the rest.
  */
-export function HallSheet({ canMark, savingNeedsService = false, today }: { canMark: boolean; savingNeedsService?: boolean; today: string }) {
+export function HallSheet({
+  canMark,
+  savesInHub = false,
+  today,
+  mine,
+}: {
+  canMark: boolean;
+  savesInHub?: boolean;
+  today: string;
+  mine?: { ids: string[]; hall: string | null };
+}) {
   const queryClient = useQueryClient();
+  const myIds = new Set(mine?.ids ?? []);
+  const [onlyMine, setOnlyMine] = useState(!!mine && mine.ids.length > 0);
   // null until a hall is picked; "" is the students with no hall.
   const [hall, setHall] = useState<string | null>(null);
   const [date, setDate] = useState(today);
@@ -41,7 +57,8 @@ export function HallSheet({ canMark, savingNeedsService = false, today }: { canM
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
 
   const halls = useQuery({ queryKey: ["attendance", "halls"], queryFn: attendanceApi.halls });
-  const selectedHall = hall ?? halls.data?.halls[0]?.hall ?? null;
+  const myHall = mine?.hall !== null && mine?.hall !== undefined && halls.data?.halls.some((h) => h.hall === mine.hall) ? mine.hall : undefined;
+  const selectedHall = hall ?? myHall ?? halls.data?.halls[0]?.hall ?? null;
   const hallName = selectedHall === null ? "…" : selectedHall || "No hall";
   const sheet = useQuery({
     queryKey: ["attendance", "sheet", date, selectedHall],
@@ -49,13 +66,17 @@ export function HallSheet({ canMark, savingNeedsService = false, today }: { canM
     enabled: selectedHall !== null,
   });
 
-  const rows = (sheet.data?.students ?? []).filter(
+  // The students in view: an instructor's own (by default) or everyone in the hall.
+  const all = sheet.data?.students ?? [];
+  const minesHere = all.filter((r) => myIds.has(r.niat_id)).length;
+  const base = onlyMine ? all.filter((r) => myIds.has(r.niat_id)) : all;
+  const rows = base.filter(
     (r) => !search.trim() || r.name.toLowerCase().includes(search.trim().toLowerCase()) || r.niat_id.toLowerCase().includes(search.trim().toLowerCase()),
   );
   const current = (r: SheetRow): Mark => (r.niat_id in edits ? edits[r.niat_id] : r.status);
   const changed = (sheet.data?.students ?? []).filter((r) => r.niat_id in edits && edits[r.niat_id] !== r.status);
   const dirty = changed.length > 0;
-  const counted = (sheet.data?.students ?? []).filter((r) => r.counted);
+  const counted = base.filter((r) => r.counted);
   const present = counted.filter((r) => current(r) === "P").length;
   const absent = counted.filter((r) => current(r) === "A").length;
 
@@ -68,13 +89,19 @@ export function HallSheet({ canMark, savingNeedsService = false, today }: { canM
   }, [dirty]);
 
   const save = useMutation({
-    mutationFn: () => attendanceApi.saveMarks(changed.map((r) => ({ niat_id: r.niat_id, date, status: edits[r.niat_id] }))),
+    mutationFn: async () => {
+      const marks = changed.map((r) => ({ niat_id: r.niat_id, date, status: edits[r.niat_id] }));
+      if (!savesInHub) return attendanceApi.saveMarks(marks);
+      const result = await saveAttendanceAction(marks);
+      if (!result.ok) throw new Error(result.details?.length ? `${result.error} ${result.details[0].niat_id}: ${result.details[0].message}` : result.error);
+      return { saved: result.saved, cleared: result.cleared };
+    },
     onSuccess: async (result) => {
       toast.success(`Saved ${result.saved} mark${result.saved === 1 ? "" : "s"}${result.cleared ? `, cleared ${result.cleared}` : ""} for ${hallName} on ${formatDate(date)}.`);
       setEdits({});
       await queryClient.invalidateQueries({ queryKey: ["attendance", "sheet", date, selectedHall] });
     },
-    onError: (error) => toast.error(error instanceof ApiError ? error.message : "Couldn't save. Your marks are still here; try again."),
+    onError: (error) => toast.error(error instanceof ApiError || error instanceof Error ? error.message : "Couldn't save. Your marks are still here; try again."),
   });
 
   function switchTo(next: { hall?: string; date?: string }) {
@@ -136,6 +163,33 @@ export function HallSheet({ canMark, savingNeedsService = false, today }: { canM
             Date
             <input type="date" value={date} max={today} onChange={(e) => e.target.value && switchTo({ date: e.target.value })} className={control} />
           </label>
+          {mine ? (
+            <div role="group" aria-label="Students shown" className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+              Show
+              <span className="inline-flex h-10 items-center gap-0.5 rounded-lg bg-muted p-0.5">
+                {[
+                  [true, `My students${selectedHall !== null ? ` · ${minesHere}` : ""}`],
+                  [false, "Everyone in this hall"],
+                ].map(([value, text]) => (
+                  <button
+                    key={String(value)}
+                    type="button"
+                    aria-pressed={onlyMine === value}
+                    onClick={() => {
+                      setOnlyMine(value as boolean);
+                      setActive(0);
+                    }}
+                    className={cn(
+                      "h-9 rounded-md px-3 text-[13px] font-semibold",
+                      onlyMine === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {text as string}
+                  </button>
+                ))}
+              </span>
+            </div>
+          ) : null}
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Find in hall
             <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or NIAT ID" className={cn(control, "w-48")} />
@@ -157,19 +211,20 @@ export function HallSheet({ canMark, savingNeedsService = false, today }: { canM
 
       {!canMark ? (
         <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
-          Read only: marking attendance is done by admins. You can see your hall&apos;s marks here.
+          Read only: you can see the hall&apos;s marks here. Instructors and admins mark attendance.
         </p>
-      ) : savingNeedsService ? (
+      ) : null}
+      {onlyMine && sheet.data && minesHere === 0 ? (
         <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
-          Read only on this environment: these are the saved marks, but saving new ones needs the attendance service (services/attendance-api), which isn&apos;t
-          running here.
+          None of your students are in {hallName}. Switch to &quot;Everyone in this hall&quot; to mark this hall
+          {myHall !== undefined && myHall !== selectedHall ? `, or pick ${myHall || "No hall"}` : ""}.
         </p>
       ) : null}
 
       <section aria-label={`${hallName} attendance sheet`} className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <span className="text-sm font-semibold">
-            {hallName} · {formatDate(date)} · {sheet.data?.students.length ?? 0} students
+            {hallName} · {formatDate(date)} · {onlyMine ? `${base.length} of your students` : `${all.length} students`}
           </span>
           {canMark ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -229,7 +284,7 @@ export function HallSheet({ canMark, savingNeedsService = false, today }: { canM
                       tabIndex={i === active ? 0 : -1}
                       onFocus={() => setActive(i)}
                       aria-label={`${row.name}, ${mark === "P" ? "present" : mark === "A" ? "absent" : "not marked"}${row.counted ? "" : `, can't be marked: ${row.reason}`}`}
-                      className={cn("outline-none focus-visible:bg-accent", edited && "bg-[#FFFBF5]", !row.counted && "text-muted-foreground")}
+                      className={cn("outline-none focus-visible:bg-accent", edited && "bg-[#FFFBF5] dark:bg-[#1F1A14]", !row.counted && "text-muted-foreground")}
                     >
                       <td className="border-b border-muted py-2 pr-3 pl-4">
                         <span className="font-semibold text-foreground">{row.name}</span>

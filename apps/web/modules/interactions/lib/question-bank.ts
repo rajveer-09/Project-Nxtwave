@@ -10,7 +10,7 @@ Date : 16 Nov 2026
  * Sample roadmap question bank until the Curriculum admin (UI-7, logs.questions) exists.
  * Keyed by "Level N|Topic" or "Level N|Topic|Subtopic"; step codes follow the curriculum.
  */
-export type BankQuestion = { title: string; step: string; source: string };
+export type BankQuestion = { title: string; step: string; source: string; url?: string };
 
 export const QUESTION_BANK: Record<string, BankQuestion[]> = {
   "Level 1|Arrays|Prefix & Suffix sum": [

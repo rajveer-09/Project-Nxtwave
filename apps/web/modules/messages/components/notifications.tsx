@@ -48,7 +48,7 @@ export function UrgentBanner() {
   if (!urgent) return null;
   return (
     <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning-border bg-warning-soft px-4 py-3">
-      <div className="flex min-w-0 flex-[1_1_360px] items-start gap-3 text-[#6E3005]">
+      <div className="flex min-w-0 flex-[1_1_360px] items-start gap-3 text-[#6E3005] dark:text-[#F5B98A]">
         <Megaphone aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-[13px]">

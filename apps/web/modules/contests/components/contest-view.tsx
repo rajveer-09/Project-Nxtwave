@@ -88,7 +88,7 @@ export function ContestView({ slug, canReview, hasStudents }: { slug: string; ca
 
       {canReview && d.review ? (
         <section aria-label="Scan waiting for review" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning-border bg-warning-soft px-4 py-3.5">
-          <div className="flex flex-col gap-0.5 text-[13px] text-[#6E3005]">
+          <div className="flex flex-col gap-0.5 text-[13px] text-[#6E3005] dark:text-[#F5B98A]">
             <span className="font-bold">A manual {d.review.kind} scan is waiting for your review</span>
             <span>
               {d.review.participated} took part{d.review.participated_before !== null ? ` (was ${d.review.participated_before})` : ""} · {d.review.joined ?? 0} newly joined · {d.review.left ?? 0} dropped out ·{" "}

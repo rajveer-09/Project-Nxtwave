@@ -7,6 +7,7 @@ Date : 15 Nov 2026
 */
 
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/common/db/pool";
@@ -23,8 +24,11 @@ const DEV_USERS: Record<SessionUser["role"], SessionUser> = {
   success_coach: { id: "dev-coach", name: "Farhan A.", email: "coach@example.com", role: "success_coach" },
 };
 
-/** The signed-in user, or null. Use in route handlers that answer with 401 themselves. */
-export async function getOptionalSessionUser(): Promise<SessionUser | null> {
+/**
+ * The signed-in user, or null. Use in route handlers that answer with 401 themselves.
+ * Looked up once per request, however many components ask (each lookup is a database round trip).
+ */
+export const getOptionalSessionUser = cache(async function getOptionalSessionUser(): Promise<SessionUser | null> {
   // Read request data first: during prerendering this defers the rest to request time.
   const store = await cookies();
   if (authMode() === "dev") {
@@ -35,7 +39,7 @@ export async function getOptionalSessionUser(): Promise<SessionUser | null> {
     return DEV_USERS[isRole(role) ? role : "owner"];
   }
   return getSessionUserByToken(getDb(), store.get(SESSION_COOKIE)?.value);
-}
+});
 
 /** The signed-in user; sends anyone else to /login. Use in pages and layouts. */
 export async function getSessionUser(): Promise<SessionUser> {

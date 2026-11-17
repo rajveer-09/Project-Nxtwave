@@ -17,10 +17,10 @@ export type CalendarCell = {
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const STYLE: Record<CalendarCell["status"], string> = {
-  present: "bg-[#DCE4FB] text-accent-strong",
-  absent: "bg-[#F8D9C2] text-[#6E3005]",
+  present: "bg-[#DCE4FB] dark:bg-[#1E2A52] text-accent-strong",
+  absent: "bg-[#F8D9C2] dark:bg-[#4A2A14] text-[#6E3005] dark:text-[#F5B98A]",
   holiday: "bg-muted text-muted-foreground",
-  upcoming: "border border-border bg-card text-[#6B7080]",
+  upcoming: "border border-border bg-card text-[#6B7080] dark:text-[#A3A9B7]",
   blank: "",
 };
 const TAG: Record<CalendarCell["status"], string> = { present: "P", absent: "A", holiday: "Sun", upcoming: "", blank: "" };
@@ -61,8 +61,8 @@ export function CalendarMonth({ label, cells }: { label: string; cells: Calendar
         )}
       </ol>
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-[#DCE4FB]" />P · present</span>
-        <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-[#F8D9C2]" />A · absent</span>
+        <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-[#DCE4FB] dark:bg-[#1E2A52]" />P · present</span>
+        <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-[#F8D9C2] dark:bg-[#4A2A14]" />A · absent</span>
         <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-muted" />Holiday</span>
         <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm border border-border bg-card" />Upcoming</span>
       </div>

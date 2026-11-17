@@ -5,7 +5,7 @@ import type { PoolClient } from 'pg';
 import { getPool } from './pool.ts';
 import type { Actor, CreateInstructorResult, InstructorChange, InstructorListEntry, InstructorMatchStatus, InstructorOption, InteractionLog, LevelConversion, NewInstructorInput, Student } from '../types.ts';
 import { type DirectoryInstructor, matchInstructor, normalizeInstructorName } from '../domain/instructor-directory.ts';
-import { LEVELS, coerceStep, coerceSubtopic, getDefaultTopicForLevel, getReachedStepOptions, getStepOptionsForTopic, getSubtopicOptions, getTopicOptions } from '../domain/curriculum.ts';
+import { LEVELS, coerceStep, coerceSubtopic, getDefaultTopicForLevel, getKnownStepCodes, getStepOptionsForTopic, getSubtopicOptions, isKnownSubtopic, isKnownTopic } from '../domain/curriculum.ts';
 import { STRICT_RULE_FROM, requiredTopicsByLevelNumber } from '../domain/level-completion.ts';
 import { hashPassword } from '../password.ts';
 
@@ -20,6 +20,18 @@ function assertCanEdit(student: Student, actor: Actor) {
   if (actor.role !== 'instructor' || !actor.instructorId || student.instructorId !== actor.instructorId) {
     throw new ForbiddenError(`Only ${student.instructorFullName ?? 'the assigned instructor'} can update ${student.name}.`);
   }
+}
+
+// Logging an interaction: the assigned instructor, as above; or anyone else who signs in here (an
+// instructor, a senior or a hub admin) when they took the interaction themselves. The web app's
+// "Log interaction" page sends their own name as "taken by" and shows them nothing else of the student.
+function assertCanLog(student: Student, actor: Actor, log: Pick<InteractionLog, 'instructorName' | 'instructorEmail'>, takenById: string | null) {
+  const assigned = actor.role === 'instructor' && !!actor.instructorId && student.instructorId === actor.instructorId;
+  if (assigned) return;
+  const self = actor.role === 'instructor'
+    ? !!actor.instructorId && takenById === actor.instructorId
+    : (log.instructorEmail ?? '').trim().toLowerCase() === actor.email || (log.instructorName ?? '').trim() === actor.name;
+  if (!self) throw new ForbiddenError(`Only ${student.instructorFullName ?? 'the assigned instructor'} can log for ${student.name} with someone else as "taken by". Log what you took yourself.`);
 }
 
 const levelNumber = (label: string) => Number(label.replace('Level ', ''));
@@ -141,14 +153,14 @@ export async function updateStudentProgress(
   const levelChanged = level !== current.level;
 
   const topic = patch.currentTopic ?? (levelChanged ? getDefaultTopicForLevel(level) : current.currentTopic ?? getDefaultTopicForLevel(level));
-  if (!getTopicOptions(level).includes(topic)) throw new ValidationError(`Topic "${topic}" is not part of ${level}.`);
+  if (!topic || !isKnownTopic(level, topic)) throw new ValidationError(`Topic "${topic ?? ''}" is not part of ${level}.`);
   const topicChanged = topic !== current.currentTopic;
 
   const subtopicOptions = getSubtopicOptions(level, topic);
   const subtopic = patch.currentSubtopic !== undefined
     ? patch.currentSubtopic || null
     : coerceSubtopic(level, topic, levelChanged || topicChanged ? undefined : current.currentSubtopic);
-  if (subtopic ? !subtopicOptions.includes(subtopic) : subtopicOptions.length > 0) {
+  if (subtopic ? !isKnownSubtopic(level, topic, subtopic) : subtopicOptions.length > 0) {
     throw new ValidationError(subtopic ? `Subtopic "${subtopic}" is not part of ${topic}.` : `Choose a subtopic for ${topic}.`);
   }
   const subtopicChanged = subtopic !== (current.currentSubtopic ?? null);
@@ -357,15 +369,14 @@ function validateSubtopics(level: string | undefined, topics: string | undefined
   if (!chosen.length) return;
   const topicList = splitList(topics);
   if (topicList.length !== 1) throw new ValidationError('Pick one topic when choosing subtopics.');
-  const options = getSubtopicOptions(level ?? 'Level 0', topicList[0]);
-  const unknown = chosen.filter((s) => !options.includes(s));
+  const unknown = chosen.filter((s) => !isKnownSubtopic(level ?? 'Level 0', topicList[0], s));
   if (unknown.length) throw new ValidationError(`Not subtopics of ${topicList[0]}: ${unknown.join(', ')}.`);
 }
 
 // Steps reached: one valid step code per subtopic covered (or per topic when the interaction has no subtopics).
 // Entries for anything not covered are dropped. Level 0 has no steps.
 function cleanStepsReached(level: string | undefined, topics: string | undefined, subtopics: string | undefined, steps: unknown): Record<string, string> {
-  const codes = getReachedStepOptions(level).map((s) => s.code);
+  const codes = getKnownStepCodes(level);
   if (!codes.length || !steps || typeof steps !== 'object') return {};
   const covered = splitList(subtopics).length ? splitList(subtopics) : splitList(topics);
   const cleaned: Record<string, string> = {};
@@ -480,7 +491,9 @@ export async function addInteraction(log: InteractionLog, actor: Actor): Promise
     await setChangeContext(client, actor);
     const student = await getStudent(log.studentId, client);
     if (!student) throw new ValidationError(`Unknown student "${log.studentId}".`);
-    assertCanEdit(student, actor);
+    const directory = await loadDirectory(client);
+    const takenBy = directory.find((i) => i.id === log.takenByInstructorId) ?? matchInstructor(directory, log.instructorName, log.instructorEmail).instructor;
+    assertCanLog(student, actor, log, takenBy?.id ?? null);
 
     validateSubtopics(log.level ?? student.level, log.topics, log.subtopics);
     const stepsReached = cleanStepsReached(log.level ?? student.level, log.topics, log.subtopics, log.stepsReached);

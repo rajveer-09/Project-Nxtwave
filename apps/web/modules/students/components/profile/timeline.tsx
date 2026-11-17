@@ -17,7 +17,7 @@ const MODULES = {
   attendance: ["Attendance", "bg-accent text-accent-strong"],
   interactions: ["Interaction", "bg-muted text-sidebar-foreground"],
   tests: ["Weekly test", "bg-warning-soft text-warning"],
-  contests: ["Contest", "bg-[#EDE9FE] text-[#5B21B6]"],
+  contests: ["Contest", "bg-[#EDE9FE] dark:bg-[#2E1F5E] text-[#5B21B6] dark:text-[#C4B5FD]"],
 } as const;
 
 const FILTERS = [["all", "All"], ["attendance", "Attendance"], ["interactions", "Interactions"], ["tests", "Weekly tests"], ["contests", "Contests"]] as const;

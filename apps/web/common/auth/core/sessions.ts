@@ -86,8 +86,41 @@ export async function createSession(
   return token;
 }
 
+/*
+ * A checked session is remembered for up to a minute, so moving between pages doesn't pay a
+ * database round trip each time. Sign-out, deactivation and role changes forget it at once on
+ * this server; another server instance notices within the minute.
+ */
+const MEMO_MS = 60_000;
+// Entries remove themselves after MEMO_MS (a timer, so rendering never reads the clock).
+const memo = ((globalThis as unknown as { __sessionMemo?: Map<string, { user: SessionUser }> }).__sessionMemo ??= new Map());
+
+function remember(key: string, user: SessionUser) {
+  if (memo.size > 5000) memo.clear();
+  const entry = { user };
+  memo.set(key, entry);
+  setTimeout(() => {
+    if (memo.get(key) === entry) memo.delete(key);
+  }, MEMO_MS).unref?.();
+}
+
+/** Forget remembered sessions: one person's (role change, deactivation) or everyone's. */
+export function forgetSessions(staffId?: string) {
+  if (!staffId) return memo.clear();
+  for (const [key, entry] of memo) if (entry.user.id === staffId) memo.delete(key);
+}
+
 export async function getSessionUserByToken(db: Db, token: string | undefined | null): Promise<SessionUser | null> {
   if (!token) return null;
+  const key = hashToken(token);
+  const hit = memo.get(key);
+  if (hit) return hit.user;
+  const user = await lookupSession(db, token);
+  if (user) remember(key, user);
+  return user;
+}
+
+async function lookupSession(db: Db, token: string): Promise<SessionUser | null> {
   const { rows } = await db.query<StaffRow & { expires_at: string }>(
     `${STAFF_WITH_ROLES.replace("SELECT s.id,", "SELECT s.id, se.expires_at,")}
      JOIN core.sessions se ON se.staff_id = s.id
@@ -111,11 +144,13 @@ export async function getSessionUserByToken(db: Db, token: string | undefined | 
 }
 
 export async function deleteSession(db: Db, token: string | undefined | null) {
+  if (token) memo.delete(hashToken(token));
   if (token) await db.query("DELETE FROM core.sessions WHERE token_hash = $1", [hashToken(token)]);
 }
 
 /** Ends every session of a staff member (password change, deactivation, "sign out everywhere"). */
 export async function revokeAllSessions(db: Db, staffId: string) {
+  forgetSessions(staffId);
   await db.query("UPDATE core.staff SET session_version = session_version + 1 WHERE id = $1", [staffId]);
   await db.query("DELETE FROM core.sessions WHERE staff_id = $1", [staffId]);
 }

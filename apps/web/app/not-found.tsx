@@ -12,7 +12,7 @@ import { EmptyState } from "@/common/components/empty-state";
 
 export default function NotFound() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4">
+    <main className="mx-auto flex min-h-app max-w-lg flex-col justify-center px-4">
       <EmptyState
         icon={SearchX}
         title="Page not found"

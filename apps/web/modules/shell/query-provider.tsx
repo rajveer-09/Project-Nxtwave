@@ -19,6 +19,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         defaultOptions: {
           queries: {
             staleTime: 30_000,
+            gcTime: 10 * 60_000,
             refetchOnWindowFocus: false,
             // Don't retry errors the user has to fix (auth, permissions, bad input, missing).
             retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,

@@ -184,10 +184,18 @@ Checks: `npm run lint`, `npm run typecheck`, `npm run build`.
 | Senior instructor | Senior SDI panel: assignments and their team (read-only) | Admins, super admins, the change log |
 | Instructor | My students (assigned to them), no panel | Any panel |
 | Success coach | My students (the students they coach), no panel | Any panel |
+| Student | Their own page at `/me`: attendance, DSA progress, instructor feedback, weekly tests, contests. Signs in with NIAT ID + password (Student tab on `/login`); admins issue the first password in Admin › Student access | Every staff page and API, other students |
 
 The menu (`apps/web/common/lib/nav.ts`) and the rank rules (`apps/web/common/auth/roles.ts`) are checked on the server for every page and action, not only hidden in the menu.
 
 Every change to who teaches or coaches a student, to a student's class (college, section, hall, status) and to staff and roles is written to `core.change_log` by database triggers, so nothing can skip it. Each entry records who made it and where from: NxtOne, an Excel import (with the file name), the Interactions or Attendance service, or a direct database edit (with the database user). Writers say who they are with `set_config('app.*', …, true)` in their transaction (`apps/web/common/db/change.ts`). The log is append-only for every app role. Admins and super admins read it at `/admin/change-log` and on each student's page; admins see a super admin's edits as "Super admin".
+
+## Speed
+
+- Shared data (roster, interactions, each student's page, Home numbers) is read through `"use cache: remote"` with tags; a write expires exactly the tags it touched (`apps/web/common/data/cache.ts`).
+- Every app page is partially prerendered: the layout is served at once and the data streams in. The sign-in page is fully static.
+- Deploy the web app and the services in Singapore, next to the database (`apps/web/vercel.json` pins `sin1`). Most of a cold database read is the network round trip, not the query.
+- Real users' Core Web Vitals are logged as JSON lines by `/api/vitals`. CI runs Lighthouse on the sign-in page and fails if it gets slower than the budget in `apps/web/lighthouserc.json`.
 
 ## Branches
 

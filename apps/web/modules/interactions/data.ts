@@ -17,7 +17,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { callService } from "@/common/services/call";
 import { todayIst } from "@/common/lib/dates";
 import { INTERACTIONS_SERVICE } from "@/modules/interactions/service";
-import { canLogFor } from "@/modules/interactions/lib/permissions";
+import { canLogFor, canLogForOthers } from "@/modules/interactions/lib/permissions";
 import { interactionInput, STATUSES, type AskedQuestion, type Interaction, type InteractionInput, type InteractionStatus } from "@/modules/interactions/lib/types";
 import { buildStudentDetail, SAMPLE_TODAY } from "@/common/sample-data/student-detail";
 import { ROSTER } from "@/common/sample-data/roster";
@@ -141,7 +141,9 @@ export async function createInteraction(raw: unknown, user: SessionUser): Promis
   if (authMode() === "database") return dbCreateInteraction(input, user);
   const student = ROSTER.find((s) => s.niatId === input.niatId);
   if (!student) return { ok: false, error: "That student isn't in the roster." };
-  if (!canLogFor(user, student)) return { ok: false, error: "You can only log interactions for students assigned to you." };
+  if (!canLogFor(user, student) && !(canLogForOthers(user) && input.takenBy === user.name)) {
+    return { ok: false, error: "For a student who isn't yours, log what you took yourself: \"Taken by\" must be you." };
+  }
 
   if (input.date > todayIst()) return { ok: false, error: "The date can't be in the future.", fieldErrors: { date: "Pick today or an earlier date" } };
 
@@ -300,7 +302,9 @@ async function dbListInteractions(filter: { instructor?: string; niatId?: string
 async function dbCreateInteraction(input: InteractionInput, user: SessionUser): Promise<CreateResult> {
   const student = await getRosterStudent(input.niatId);
   if (!student) return { ok: false, error: "That student isn't in the roster." };
-  if (!canLogFor(user, student)) return { ok: false, error: "You can only log interactions for students assigned to you." };
+  if (!canLogFor(user, student) && !(canLogForOthers(user) && input.takenBy === user.name)) {
+    return { ok: false, error: "For a student who isn't yours, log what you took yourself: \"Taken by\" must be you." };
+  }
   if (input.date > todayIst()) return { ok: false, error: "The date can't be in the future.", fieldErrors: { date: "Pick today or an earlier date" } };
 
   const { rows } = await getDb().query<{ round: number; step: string | null; subtopic: string | null }>(

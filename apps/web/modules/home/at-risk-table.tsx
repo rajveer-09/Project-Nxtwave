@@ -9,7 +9,7 @@ Date : 14 Nov 2026
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import Link from "next/link";
+import { IntentLink } from "@/common/components/intent-link";
 import { FlagChip } from "@/common/components/chips";
 import { DataTable } from "@/common/components/data-table";
 import type { AtRiskStudent } from "@/modules/home/sample-data";
@@ -21,9 +21,9 @@ const columns: ColumnDef<AtRiskStudent>[] = [
     header: "Student",
     cell: ({ row }) => (
       <div className="flex flex-col">
-        <Link href={`/students/${row.original.niatId}`} className="font-semibold text-foreground hover:text-primary">
+        <IntentLink href={`/students/${row.original.niatId}`} className="font-semibold text-foreground hover:text-primary">
           {row.original.name}
-        </Link>
+        </IntentLink>
         <span className="text-xs text-muted-foreground tabular">{row.original.niatId}</span>
       </div>
     ),

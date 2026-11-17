@@ -8,12 +8,13 @@ Date : 17 Nov 2026
 
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { IntentLink } from "@/common/components/intent-link";
 import { useState } from "react";
 import { StatusPill, type PillTone } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
 import { Skeleton } from "@/common/ui/skeleton";
+import type { ContestScope } from "@/modules/contests/types";
 import { contestApi, contestDate, pct } from "@/modules/contests/api";
 import type { ContestListItem } from "@/modules/contests/types";
 import { cn } from "@/common/lib/utils";
@@ -39,7 +40,13 @@ export function stateLabel(c: Pick<ContestListItem, "state" | "in_review" | "fin
   }
 }
 
-export function ContestsList() {
+export function ContestsList({ defaultScope = "all" }: { defaultScope?: ContestScope }) {
+  const queryClient = useQueryClient();
+  // Hovering a contest loads what its page shows (same keys as ContestView).
+  const preload = (slug: string) => {
+    void queryClient.prefetchQuery({ queryKey: ["contests", "detail", slug, defaultScope], queryFn: () => contestApi.detail(slug, defaultScope), staleTime: 60_000 });
+    void queryClient.prefetchQuery({ queryKey: ["contests", "results", slug, defaultScope], queryFn: () => contestApi.results(slug, defaultScope), staleTime: 60_000 });
+  };
   const [type, setType] = useState("");
   const [q, setQ] = useState("");
   const query = useQuery({ queryKey: ["contests", "list", type, q], queryFn: () => contestApi.list({ type, q }) });
@@ -136,9 +143,9 @@ export function ContestsList() {
                   return (
                     <tr key={c.slug} className="hover:bg-surface-subtle">
                       <td className="border-b border-muted py-3 pr-3 pl-5">
-                        <Link href={`/contests/${c.slug}`} className="font-semibold hover:text-primary">
+                        <IntentLink href={`/contests/${c.slug}`} onIntent={() => preload(c.slug)} className="font-semibold hover:text-primary">
                           {c.title}
-                        </Link>
+                        </IntentLink>
                         <div className="text-xs text-muted-foreground">{contestDate(c.start_time)}</div>
                       </td>
                       <td className="border-b border-muted px-3 py-3">

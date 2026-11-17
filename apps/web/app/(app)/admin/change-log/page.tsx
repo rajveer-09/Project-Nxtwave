@@ -8,6 +8,7 @@ Date : 18 Nov 2026
 
 import Link from "next/link";
 import { Suspense } from "react";
+import { LiveForm } from "@/common/components/live-form";
 import { PageHeader } from "@/common/components/page-header";
 import { SectionCard } from "@/common/components/section-card";
 import { Skeleton } from "@/common/ui/skeleton";
@@ -54,7 +55,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
           </a>
         }
       />
-      <form className="flex flex-wrap items-end gap-3" aria-label="Filter the change log">
+      <LiveForm className="flex flex-wrap items-end gap-3" aria-label="Filter the change log">
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Search
           <input name="q" defaultValue={filter.q} placeholder="Student, NIAT ID, staff or name" className={`${field} w-64`} />
@@ -89,13 +90,10 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
           On or before
           <input type="date" name="to" defaultValue={filter.to} className={field} />
         </label>
-        <button type="submit" className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/85">
-          Apply
-        </button>
         <Link href="/admin/change-log" className="flex h-10 items-center px-2 text-sm font-semibold text-primary hover:text-accent-strong">
           Clear
         </Link>
-      </form>
+      </LiveForm>
       <SectionCard title={`Page ${page}`} bodyClassName="px-0 pb-2">
         <ChangeTable entries={entries} />
       </SectionCard>

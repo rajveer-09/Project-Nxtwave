@@ -16,6 +16,7 @@ import {
   updateInteraction, updateStudentProgress,
 } from './db/queries.ts';
 import type { Actor, InstructorRole, InteractionLog, NewInstructorInput } from './types.ts';
+import { refreshCurriculum } from './domain/curriculum.ts';
 
 /*
  * Same routes, permissions and responses as the original Instructor_Evaluation app/api routes,
@@ -55,6 +56,11 @@ export function createApp() {
     await next();
     c.header('cache-control', 'private, no-store');
   });
+  // The roadmap (levels, topics, subtopics, steps) is edited on the hub; reload it at most every 30 s.
+  app.use('/api/*', async (_c, next) => {
+    await refreshCurriculum((sql) => getPool().query(sql));
+    await next();
+  });
 
   app.get('/health', async (c) => {
     try {
@@ -65,14 +71,14 @@ export function createApp() {
     }
   });
 
-  // Interactions: everyone signed in reads; only the student's assigned instructor logs (checked in addInteraction).
+  // Interactions: everyone signed in reads; the assigned instructor logs, and anyone else logs what they took themselves (addInteraction).
   app.get('/api/interactions', (c) => withActor(c, async () => c.json(await getInteractions()), ALL));
   app.post('/api/interactions', (c) => withActor(c, async (actor) => {
     const log = await body<InteractionLog>(c);
     // The client generates the id (as in the original form), so a retry can't log twice.
     if (typeof log.id !== 'string' || !log.id.trim()) return c.json({ error: 'Missing interaction id.' }, 400);
     return c.json(await addInteraction(log as InteractionLog, actor), 201);
-  }, ['instructor']));
+  }, ['instructor', 'admin']));
   // Edit or delete (with a reason): assigned instructor or the author (checked in the queries).
   app.patch('/api/interactions/:id', (c) => withActor(c, async (actor) => {
     return c.json(await updateInteraction(c.req.param('id'), await body<InteractionLog>(c), actor));

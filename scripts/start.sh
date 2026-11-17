@@ -4,13 +4,16 @@
 # Date : 17 Nov 2026
 # @ Nxtwave
 #
-# Starts the whole Student Hub.
+# Starts the whole of NxtOne.
 #
 #   scripts/start.sh                  Docker if it's running, otherwise local mode
 #   scripts/start.sh --docker         everything in Docker (Postgres + all services + web)
 #   scripts/start.sh --local          without Docker: the web app, plus every service whose
 #                                     tools and .env file are present (see below)
 #   scripts/start.sh --worker         also start the LeetCode scan worker
+#   scripts/start.sh --prod           local mode with the web app built for production: fast
+#                                     page loads and pre-loading (dev mode compiles each page on
+#                                     first visit and doesn't pre-load links); no live reload
 #   scripts/start.sh --install-only   install dependencies and exit (used by scripts/clone.sh)
 #
 # Local mode needs a database for the services, so each one starts only when its .env exists:
@@ -29,8 +32,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE=auto
 WORKER=0
 INSTALL_ONLY=0
+PROD=0
 
-usage() { sed -n '7,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '7,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 for arg in "$@"; do
   case "$arg" in
@@ -38,6 +42,7 @@ for arg in "$@"; do
     --local) MODE=local ;;
     --worker) WORKER=1 ;;
     --install-only) INSTALL_ONLY=1 ;;
+    --prod) PROD=1; MODE=local ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; usage; exit 2 ;;
   esac
@@ -153,10 +158,17 @@ stop_all() {
 }
 trap stop_all EXIT INT TERM
 
-bold "Starting the Student Hub locally"
+bold "Starting NxtOne locally"
 
-run web "$ROOT/apps/web" npm run dev
-note "web               http://localhost:3000"
+if [ "$PROD" = 1 ]; then
+  bold "Building the web app for production (about a minute)"
+  (cd "$ROOT/apps/web" && NEXT_TELEMETRY_DISABLED=1 npm run build) || { echo "Build failed." >&2; exit 1; }
+  run web "$ROOT/apps/web" npx next start -p 3000
+  note "web               http://localhost:3000  (production build)"
+else
+  run web "$ROOT/apps/web" npm run dev
+  note "web               http://localhost:3000  (dev mode: slower first loads; use --prod for full speed)"
+fi
 
 if [ -f "$ROOT/services/interactions-api/.env" ] && [ "$(node_major)" -ge 24 ]; then
   run interactions "$ROOT/services/interactions-api" npm run dev

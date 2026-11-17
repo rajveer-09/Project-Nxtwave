@@ -20,9 +20,9 @@ import { cn } from "@/common/lib/utils";
 const KIND: Record<CalendarDay["kind"], { label: string; cls: string }> = {
   working: { label: "Working day", cls: "bg-card border-border" },
   sunday: { label: "Sunday", cls: "bg-muted border-muted text-muted-foreground" },
-  holiday: { label: "Holiday", cls: "bg-[#F0F2F5] border-[#D5D8DF]" },
+  holiday: { label: "Holiday", cls: "bg-[#F0F2F5] dark:bg-[#232731] border-[#D5D8DF] dark:border-[#343A47]" },
   exam: { label: "Exam", cls: "bg-warning-soft border-warning-border" },
-  exam_prep: { label: "Exam preparation", cls: "bg-[#FFF3D6] border-[#F0D9A0]" },
+  exam_prep: { label: "Exam preparation", cls: "bg-[#FFF3D6] dark:bg-[#2E2410] border-[#F0D9A0] dark:border-[#6B5420]" },
   event: { label: "Event", cls: "bg-accent border-accent-border" },
 };
 

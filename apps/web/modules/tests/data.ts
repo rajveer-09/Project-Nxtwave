@@ -7,6 +7,8 @@ Date : 17 Nov 2026
 */
 
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
+import { expire, TAGS } from "@/common/data/cache";
 import { randomUUID } from "node:crypto";
 import { authMode } from "@/common/auth/config";
 import type { SessionUser } from "@/common/auth/roles";
@@ -160,6 +162,13 @@ const toResult = (r: ResultRow): TestResult => ({
 
 export async function listFormats(): Promise<ResultFormat[]> {
   if (!fromDb()) return store().formats;
+  return cachedFormats();
+}
+
+async function cachedFormats(): Promise<ResultFormat[]> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.tests);
   const { rows } = await getDb().query<{ id: string; name: string; versions: (Omit<FormatVersion, "publishedAt"> & { publishedAt: string })[] }>(
     `SELECT f.id, f.name,
             json_agg(json_build_object('version', v.version, 'passMark', v.pass_mark, 'fields', v.fields,
@@ -178,14 +187,20 @@ export async function getFormatVersion(formatId: string, version?: number) {
 
 export async function listTests(): Promise<WeeklyTest[]> {
   if (!fromDb()) return [...store().tests].sort((a, b) => b.heldOn.localeCompare(a.heldOn) || a.band.localeCompare(b.band));
+  return cachedTests();
+}
+
+async function cachedTests(): Promise<WeeklyTest[]> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.tests);
   const { rows } = await getDb().query<TestRow>(`SELECT ${TEST_COLUMNS} FROM core.weekly_tests ORDER BY held_on DESC, band`);
   return rows.map(toTest);
 }
 
 export async function getTest(testId: string): Promise<WeeklyTest | null> {
   if (!fromDb()) return store().tests.find((t) => t.id === testId) ?? null;
-  const { rows } = await getDb().query<TestRow>(`SELECT ${TEST_COLUMNS} FROM core.weekly_tests WHERE id = $1`, [testId]);
-  return rows[0] ? toTest(rows[0]) : null;
+  return (await cachedTests()).find((t) => t.id === testId) ?? null;
 }
 
 /** Students who sit a test: its band, limited to one instructor when given. */
@@ -201,6 +216,13 @@ export async function getResults(testId: string, niatIds: string[]): Promise<(Te
     return niatIds.map((id) => s.results.get(key(testId, id)) ?? null);
   }
   if (!niatIds.length) return [];
+  return cachedResults(testId, niatIds);
+}
+
+async function cachedResults(testId: string, niatIds: string[]): Promise<(TestResult | null)[]> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.tests);
   const { rows } = await getDb().query<ResultRow>(
     `SELECT test_id, niat_id, present, "values", entered_by, updated_at FROM core.test_results WHERE test_id = $1 AND niat_id = ANY($2::text[])`,
     [testId, niatIds],
@@ -211,6 +233,13 @@ export async function getResults(testId: string, niatIds: string[]): Promise<(Te
 
 export async function listSubmissions(testId: string): Promise<Submission[]> {
   if (!fromDb()) return store().submissions.filter((x) => x.testId === testId);
+  return cachedSubmissions(testId);
+}
+
+async function cachedSubmissions(testId: string): Promise<Submission[]> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.tests);
   const { rows } = await getDb().query<{ test_id: string; instructor: string; submitted_at: string }>(
     "SELECT test_id, instructor, submitted_at FROM core.test_submissions WHERE test_id = $1",
     [testId],
@@ -298,6 +327,7 @@ export async function saveResults(
          SET present = EXCLUDED.present, "values" = EXCLUDED."values", entered_by = EXCLUDED.entered_by, updated_at = now()`,
       [testId, JSON.stringify(clean.map((r) => ({ niat_id: r.niatId, present: r.present, values: r.values }))), user.name],
     );
+    expire(TAGS.tests);
   } else {
     const s = store();
     const now = new Date().toISOString();
@@ -325,6 +355,7 @@ export async function submitResults(user: SessionUser, testId: string): Promise<
   if (Object.keys(problems).length) return { ok: false, error: `${Object.keys(problems).length} students still need results.`, problems };
   if (fromDb()) {
     await getDb().query("INSERT INTO core.test_submissions (test_id, instructor) VALUES ($1, $2) ON CONFLICT DO NOTHING", [testId, user.name]);
+    expire(TAGS.tests);
   } else {
     store().submissions.push({ testId, instructor: user.name, submittedAt: new Date().toISOString() });
   }
@@ -336,6 +367,7 @@ export async function unlockResults(user: SessionUser, testId: string, instructo
   let removed: boolean;
   if (fromDb()) {
     const { rows } = await getDb().query("DELETE FROM core.test_submissions WHERE test_id = $1 AND instructor = $2 RETURNING test_id", [testId, instructor]);
+    expire(TAGS.tests);
     removed = rows.length > 0;
   } else {
     const s = store();
@@ -364,6 +396,7 @@ export async function createTest(
         "INSERT INTO core.weekly_tests (id, name, band, held_on, due_at, format_id, version, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         [test.id, test.name, test.band, test.heldOn, test.dueAt, test.formatId, test.version, test.createdBy],
       );
+    expire(TAGS.tests);
     } catch (err) {
       if ((err as { code?: string }).code === "23505") return { ok: false, error: `${input.band} already has a test called "${test.name}".` };
       throw err;
@@ -391,6 +424,7 @@ export async function publishFormat(user: SessionUser, formatId: string, input: 
        RETURNING version`,
       [formatId, input.passMark, JSON.stringify(input.fields), user.name],
     );
+    expire(TAGS.tests);
     return { ok: true, version: rows[0].version };
   }
   const version = (format.versions.at(-1)?.version ?? 0) + 1;

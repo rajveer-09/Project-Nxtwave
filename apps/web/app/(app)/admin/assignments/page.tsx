@@ -8,6 +8,7 @@ Date : 18 Nov 2026
 
 import Link from "next/link";
 import { Suspense } from "react";
+import { LiveForm } from "@/common/components/live-form";
 import { StatusPill } from "@/common/components/chips";
 import { PageHeader } from "@/common/components/page-header";
 import { SectionCard } from "@/common/components/section-card";
@@ -17,6 +18,7 @@ import { getRoster, usingSampleData } from "@/common/data/roster";
 import { withParams, type SearchParamsRecord } from "@/common/lib/url";
 import { staffOptions } from "@/modules/admin/assignments-data";
 import { AssignSelect, ImportPanel } from "@/modules/admin/components/assignment-controls";
+import { AssignmentHistoryButton } from "@/modules/admin/components/assignment-history";
 
 export const metadata = { title: "Assignments" };
 
@@ -63,7 +65,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
       <SectionCard title="Upload from Excel" description="Move many students at once. You'll see exactly what changes before anything is saved.">
         <ImportPanel />
       </SectionCard>
-      <form className="flex flex-wrap items-end gap-3" aria-label="Filter students">
+      <LiveForm className="flex flex-wrap items-end gap-3" aria-label="Filter students">
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Search
           <input name="q" defaultValue={one(params.q)} placeholder="Name or NIAT ID" className={`${field} w-60`} />
@@ -90,23 +92,23 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
             ))}
           </select>
         </label>
-        <button type="submit" className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/85">
-          Apply
-        </button>
         <Link href="/admin/assignments" className="flex h-10 items-center px-2 text-sm font-semibold text-primary hover:text-accent-strong">
           Clear
         </Link>
-      </form>
+      </LiveForm>
       <SectionCard title={`${filtered.length} students`} description={`Page ${Math.min(page, pageCount)} of ${pageCount}`} bodyClassName="px-0 pb-2">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] border-collapse text-[13px]">
+          <table className="w-full min-w-[940px] border-collapse text-[13px]">
             <caption className="sr-only">Students and their instructor and coach</caption>
             <thead>
               <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
                 <th scope="col" className="border-b border-border px-5 py-2.5 font-semibold">Student</th>
                 <th scope="col" className="border-b border-border px-3 py-2.5 font-semibold">Class</th>
                 <th scope="col" className="border-b border-border px-3 py-2.5 font-semibold">Instructor</th>
-                <th scope="col" className="border-b border-border px-5 py-2.5 font-semibold">Success coach</th>
+                <th scope="col" className="border-b border-border px-3 py-2.5 font-semibold">Success coach</th>
+                <th scope="col" className="border-b border-border px-5 py-2.5 text-right font-semibold">
+                  <span className="sr-only">History</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -124,8 +126,11 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
                   <td className="border-b border-muted px-3 py-2">
                     <AssignSelect niatId={s.niatId} student={s.name} kind="instructor" current={s.instructor} options={options.instructor} />
                   </td>
-                  <td className="border-b border-muted px-5 py-2">
+                  <td className="border-b border-muted px-3 py-2">
                     <AssignSelect niatId={s.niatId} student={s.name} kind="coach" current={s.coach} options={options.coach} />
+                  </td>
+                  <td className="border-b border-muted px-5 py-2 text-right">
+                    <AssignmentHistoryButton niatId={s.niatId} student={s.name} />
                   </td>
                 </tr>
               ))}

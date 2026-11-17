@@ -13,7 +13,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 
 const config = {
   score: { label: "Score", color: "var(--chart-1)" },
-  classAvg: { label: "Class average", color: "#D5D8DF" },
+  classAvg: { label: "Class average", color: "var(--input)" },
 } satisfies ChartConfig;
 
 /** Student score vs class average per weekly test; bars below the pass mark turn orange. */

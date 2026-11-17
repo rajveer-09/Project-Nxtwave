@@ -7,9 +7,11 @@ Date : 18 Nov 2026
 */
 
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
+import { expire, TAGS } from "@/common/data/cache";
 import { authMode } from "@/common/auth/config";
 import { passwordPolicyError, hashPassword } from "@/common/auth/core/password";
-import { platformRole, revokeAllSessions } from "@/common/auth/core/sessions";
+import { forgetSessions, platformRole, revokeAllSessions } from "@/common/auth/core/sessions";
 import { assignableRoles, visibleRoles, type Role, type SessionUser } from "@/common/auth/roles";
 import { withChange } from "@/common/db/change";
 import { getDb } from "@/common/db/pool";
@@ -36,12 +38,15 @@ export type StaffListRow = {
   studentsAssigned: number;
   /** Whether the person looking may change this row. */
   editable: boolean;
+  deactivatedAt: string | null;
+  deactivatedBy: string | null;
 };
 
 const fromDb = () => authMode() === "database";
 
 function canEdit(viewer: SessionUser, staffId: string, role: Role | null) {
   if (staffId === viewer.id) return false;
+  if (role === "owner") return false; // super admins change only in the database
   const allowed = assignableRoles(viewer.role);
   return allowed.length > 0 && (role === null || allowed.includes(role));
 }
@@ -67,30 +72,47 @@ function sampleRows(viewer: SessionUser): StaffListRow[] {
     roles: MODULE_ROLE[s.role],
     studentsAssigned: ROSTER.filter((r) => r.instructor === s.name).length,
     editable: false,
+    deactivatedAt: null,
+    deactivatedBy: null,
   }));
 }
 
-export async function listStaff(viewer: SessionUser): Promise<{ rows: StaffListRow[]; sample: boolean }> {
-  if (!fromDb()) return { rows: sampleRows(viewer), sample: true };
-  const { rows } = await getDb().query<{
-    id: string;
-    name: string;
-    email: string;
-    instructor_code: string | null;
-    active: boolean;
-    has_password: boolean;
-    roles: { module: string; role: string }[];
-    students: number;
-  }>(
-    `SELECT s.id::text, s.name, lower(s.email::text) AS email, s.instructor_code, s.active AND s.left_on IS NULL AS active,
+const STAFF_SQL = `SELECT s.id::text, s.name, lower(s.email::text) AS email, s.instructor_code, s.active AND s.left_on IS NULL AS active,
             s.password_hash IS NOT NULL AS has_password,
             COALESCE((SELECT json_agg(json_build_object('module', r.module, 'role', r.role) ORDER BY r.module)
                       FROM core.staff_roles r WHERE r.staff_id = s.id), '[]') AS roles,
             (SELECT count(*)::int FROM core.student_assignments a
-              WHERE a.staff_id = s.id AND a.to_date IS NULL) AS students
+              WHERE a.staff_id = s.id AND a.to_date IS NULL) AS students,
+            s.deactivated_at, s.deactivated_by_name
      FROM core.staff s
-     ORDER BY s.active DESC, s.name`,
-  );
+     WHERE s.deleted_at IS NULL
+     ORDER BY s.active DESC, s.name`;
+
+type StaffRow = {
+  id: string;
+  name: string;
+  email: string;
+  instructor_code: string | null;
+  active: boolean;
+  has_password: boolean;
+  roles: { module: string; role: string }[];
+  students: number;
+  deactivated_at: string | null;
+  deactivated_by_name: string | null;
+};
+
+/** Everyone, shared by all viewers; each viewer's filter is applied afterwards. */
+async function cachedStaffRows(): Promise<StaffRow[]> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.staff, TAGS.roster);
+  const { rows } = await getDb().query<StaffRow>(STAFF_SQL);
+  return rows;
+}
+
+export async function listStaff(viewer: SessionUser): Promise<{ rows: StaffListRow[]; sample: boolean }> {
+  if (!fromDb()) return { rows: sampleRows(viewer), sample: true };
+  const rows = await cachedStaffRows();
   const visible = new Set<Role | null>(visibleRoles(viewer.role));
   // People with no platform access are listed for admins (so they can be given a role), not for seniors.
   if (assignableRoles(viewer.role).length) visible.add(null);
@@ -110,6 +132,8 @@ export async function listStaff(viewer: SessionUser): Promise<{ rows: StaffListR
           roles: r.roles,
           studentsAssigned: r.students,
           editable: canEdit(viewer, r.id, role),
+          deactivatedAt: r.deactivated_at ? new Date(r.deactivated_at).toISOString() : null,
+          deactivatedBy: r.deactivated_by_name,
         };
       })
       .filter((r) => visible.has(r.role)),
@@ -149,18 +173,104 @@ export async function setStaffRole(viewer: SessionUser, staffId: string, role: R
       [staffId, role],
     ),
   );
+  forgetSessions(staffId); // the new role applies on their next click
+  expire(TAGS.staff);
   return { ok: true, message: `${check.target.name} is now ${role.replace("_", " ")}.` };
 }
 
-export async function setStaffActive(viewer: SessionUser, staffId: string, active: boolean): Promise<Result> {
-  const check = await checkTarget(viewer, staffId);
+const ids = (staffIds: string[]) => [...new Set(staffIds.map(String))].filter((id) => /^\d+$/.test(id));
+const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
+
+/** Checks each target like a single change; any one failing stops the whole batch. */
+async function checkTargets(viewer: SessionUser, staffIds: string[]) {
+  const list = ids(staffIds);
+  if (!list.length) return { error: "Pick at least one person." } as const;
+  if (list.length > 300) return { error: "Up to 300 people at a time." } as const;
+  const targets: { id: string; name: string; role: Role | null }[] = [];
+  for (const id of list) {
+    const check = await checkTarget(viewer, id);
+    if ("error" in check) return { error: `${check.error}${list.length > 1 ? " Nothing was changed." : ""}` } as const;
+    targets.push({ id, name: check.target.name, role: check.target.role });
+  }
+  return { targets } as const;
+}
+
+/**
+ * Admins and super admins deactivate: the people can't sign in from now on, and they move to the
+ * super admins' Deactivated list (who did it and when is kept), where only super admins reactivate or delete.
+ */
+export async function deactivateStaff(viewer: SessionUser, staffIds: string[]): Promise<Result> {
+  const check = await checkTargets(viewer, staffIds);
   if ("error" in check) return { ok: false, error: check.error! };
-  await withChange(viewer, "ui", null, async (db) => {
-    await db.query("UPDATE core.staff SET active = $2 WHERE id = $1", [staffId, active]);
-    // Signing someone out everywhere when they're deactivated.
-    if (!active) await revokeAllSessions(db, staffId);
+  await withChange(viewer, "ui", check.targets.length > 1 ? `deactivated ${check.targets.length} people` : null, async (db) => {
+    for (const t of check.targets) {
+      await db.query(
+        `UPDATE core.staff SET active = false, deactivated_at = now(), deactivated_by = $2, deactivated_by_name = $3
+         WHERE id = $1 AND active`,
+        [t.id, /^\d+$/.test(viewer.id) ? viewer.id : null, viewer.name],
+      );
+      await revokeAllSessions(db, t.id); // signed out everywhere
+    }
   });
-  return { ok: true, message: `${check.target.name} ${active ? "can sign in again" : "can no longer sign in"}.` };
+  expire(TAGS.staff);
+  return { ok: true, message: `${check.targets.length === 1 ? check.targets[0].name : people(check.targets.length)} deactivated. Super admins can reactivate or delete from their Deactivated list.` };
+}
+
+export async function reactivateStaff(viewer: SessionUser, staffIds: string[]): Promise<Result> {
+  if (viewer.role !== "owner") return { ok: false, error: "Only super admins reactivate people." };
+  const check = await checkTargets(viewer, staffIds);
+  if ("error" in check) return { ok: false, error: check.error! };
+  await withChange(viewer, "ui", check.targets.length > 1 ? `reactivated ${check.targets.length} people` : null, async (db) => {
+    for (const t of check.targets) {
+      await db.query("UPDATE core.staff SET active = true, deactivated_at = NULL, deactivated_by = NULL, deactivated_by_name = NULL WHERE id = $1", [t.id]);
+    }
+  });
+  expire(TAGS.staff);
+  return { ok: true, message: `${check.targets.length === 1 ? check.targets[0].name : people(check.targets.length)} can sign in again.` };
+}
+
+/**
+ * Super admins delete deactivated people. The row stays (so the change log and assignment history
+ * still name them) but sign-in, roles and the email are removed, and their students are unassigned.
+ */
+export async function deleteStaff(viewer: SessionUser, staffIds: string[]): Promise<Result> {
+  if (viewer.role !== "owner") return { ok: false, error: "Only super admins delete people." };
+  const check = await checkTargets(viewer, staffIds);
+  if ("error" in check) return { ok: false, error: check.error! };
+  const { rows: active } = await getDb().query<{ name: string }>("SELECT name FROM core.staff WHERE id = ANY($1::bigint[]) AND active", [check.targets.map((t) => t.id)]);
+  if (active.length) return { ok: false, error: `Deactivate first: ${active.map((r) => r.name).slice(0, 3).join(", ")}${active.length > 3 ? "…" : ""}. Nothing was deleted.` };
+  let unassigned = 0;
+  await withChange(viewer, "ui", check.targets.length > 1 ? `deleted ${check.targets.length} people` : null, async (db) => {
+    for (const t of check.targets) {
+      const { rows: current } = await db.query<{ niat_id: string; kind: string }>(
+        "SELECT niat_id, kind FROM core.student_assignments WHERE staff_id = $1 AND to_date IS NULL",
+        [t.id],
+      );
+      for (const a of current) {
+        await db.query("SELECT core.assign_staff($1, $2, NULL)", [a.niat_id, a.kind]);
+        if (a.kind === "instructor") {
+          await db.query(
+            `UPDATE logs.students SET instructor_id = NULL, instructor_raw = '', instructor_match = 'unmatched', updated_at = now()
+             WHERE upper(id) = $1 AND instructor_id IS NOT NULL`,
+            [a.niat_id],
+          );
+        }
+        unassigned++;
+      }
+      await db.query("DELETE FROM core.staff_roles WHERE staff_id = $1", [t.id]);
+      await revokeAllSessions(db, t.id);
+      await db.query(
+        `UPDATE core.staff SET deleted_at = now(), password_hash = NULL, email = 'deleted-' || id || '@deleted.nxtone.invalid'
+         WHERE id = $1`,
+        [t.id],
+      );
+    }
+  });
+  expire(TAGS.staff, TAGS.roster, TAGS.home);
+  return {
+    ok: true,
+    message: `${check.targets.length === 1 ? check.targets[0].name : people(check.targets.length)} deleted${unassigned ? `; ${unassigned} student assignment${unassigned === 1 ? "" : "s"} ended` : ""}.`,
+  };
 }
 
 export async function addStaff(viewer: SessionUser, input: { name: string; email: string; role: Role; password: string }): Promise<Result> {
@@ -184,5 +294,6 @@ export async function addStaff(viewer: SessionUser, input: { name: string; email
     if ((err as { code?: string }).code === "23505") return { ok: false, error: `${email} already has an account.` };
     throw err;
   }
+  expire(TAGS.staff);
   return { ok: true, message: `${name} added${hash ? "" : " (Google sign-in only)"}.` };
 }

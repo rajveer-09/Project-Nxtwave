@@ -6,7 +6,7 @@ Date : 16 Nov 2026
 
 */
 
-import Link from "next/link";
+import { IntentLink } from "@/common/components/intent-link";
 import { StatusPill } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
 import { formatDate } from "@/common/lib/dates";
@@ -48,9 +48,9 @@ export function RecentLogs({ rows, total, exportHref }: { rows: Interaction[]; t
                   <tr key={it.id}>
                     <td className="border-b border-muted py-2.5 pr-2.5 pl-5 whitespace-nowrap text-sidebar-foreground">{formatDate(it.date)}</td>
                     <td className="border-b border-muted px-2.5 py-2.5">
-                      <Link href={`/students/${it.niatId}`} className="font-semibold hover:text-primary">
+                      <IntentLink href={`/students/${it.niatId}`} className="font-semibold hover:text-primary">
                         {it.studentName}
-                      </Link>
+                      </IntentLink>
                       <div className="text-xs text-muted-foreground">
                         round {it.round} · {it.takenBy}
                       </div>

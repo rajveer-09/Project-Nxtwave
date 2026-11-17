@@ -35,3 +35,11 @@ jobs:
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+      # Speed check: the sign-in page (static, no database needed) must stay fast.
+      - name: Speed check (Lighthouse)
+        run: |
+          npx next start -p 3000 &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/login >/dev/null && break; sleep 1; done
+          npx --yes @lhci/cli@0.16.0 autorun
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"

@@ -8,6 +8,7 @@ Date : 17 Nov 2026
 
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
+import { connection } from "next/server";
 import { authMode } from "@/common/auth/config";
 import { expire, TAGS } from "@/common/data/cache";
 import { getDb } from "@/common/db/pool";
@@ -30,7 +31,8 @@ export function invalidateRoster(niatId?: string) {
   expire(TAGS.roster, TAGS.home, ...(niatId ? [TAGS.student(niatId)] : []));
 }
 
-async function cachedRoster(today: string): Promise<RosterStudent[]> {
+/** The roster for a given IST day; safe to call from other cached functions. */
+export async function cachedRoster(today: string): Promise<RosterStudent[]> {
   "use cache: remote";
   cacheLife({ stale: 30, revalidate: 60, expire: 900 });
   cacheTag(TAGS.roster);
@@ -39,6 +41,7 @@ async function cachedRoster(today: string): Promise<RosterStudent[]> {
 
 export async function getRoster(): Promise<RosterStudent[]> {
   if (authMode() !== "database") return ROSTER;
+  await connection(); // "today" is request-time
   return cachedRoster(todayIst());
 }
 

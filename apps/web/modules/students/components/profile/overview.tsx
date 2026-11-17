@@ -74,7 +74,7 @@ export function FlagsBanner({ d }: { d: StudentDetail }) {
     );
   }
   return (
-    <div role="note" className="flex flex-wrap items-start gap-x-5 gap-y-3 rounded-xl border border-warning-border bg-warning-soft px-4 py-3.5 text-[#6E3005]">
+    <div role="note" className="flex flex-wrap items-start gap-x-5 gap-y-3 rounded-xl border border-warning-border bg-warning-soft px-4 py-3.5 text-[#6E3005] dark:text-[#F5B98A]">
       <span className="flex items-center gap-2.5 font-bold">
         <TriangleAlert aria-hidden="true" className="size-5" />
         Needs attention · {d.flags.length} flag{d.flags.length === 1 ? "" : "s"}

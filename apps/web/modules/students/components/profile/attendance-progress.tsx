@@ -11,11 +11,11 @@ import type { StudentDetail } from "@/modules/students/data";
 import { cn } from "@/common/lib/utils";
 import { SectionHeading } from "@/modules/students/components/profile/overview";
 
-export function AttendanceSection({ d }: { d: StudentDetail }) {
+export function AttendanceSection({ d, student = false }: { d: StudentDetail; student?: boolean }) {
   const a = d.attendance;
   return (
     <section id="attendance" aria-labelledby="attendance-h" className="flex scroll-mt-6 flex-col gap-3.5">
-      <SectionHeading id="attendance" title="Attendance" link={{ href: "/attendance", label: "Open attendance sheet" }} />
+      <SectionHeading id="attendance" title="Attendance" link={student ? undefined : { href: "/attendance", label: "Open attendance sheet" }} />
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-[1_1_380px] rounded-xl border border-border bg-card p-4">
           <div className="mb-3 flex items-baseline justify-between gap-2">
@@ -80,15 +80,15 @@ const LEVEL_BAR = { cleared: "bg-primary", current: "bg-accent-border ring-1 rin
 const SUB_STYLE = { done: "bg-accent text-accent-strong", now: "bg-foreground text-background", todo: "bg-muted text-muted-foreground" } as const;
 const TOPIC_STATE = {
   cleared: ["Cleared", "text-accent-strong", "border-border bg-card"],
-  current: ["In progress", "text-warning", "border-warning-border bg-[#FFFAF6]"],
+  current: ["In progress", "text-warning", "border-warning-border bg-[#FFFAF6] dark:bg-[#24180F]"],
   "not-started": ["Not started", "text-muted-foreground", "border-border bg-card"],
 } as const;
 
-export function ProgressSection({ d }: { d: StudentDetail }) {
+export function ProgressSection({ d, student = false }: { d: StudentDetail; student?: boolean }) {
   const p = d.progress;
   return (
     <section id="progress" aria-labelledby="progress-h" className="flex scroll-mt-6 flex-col gap-3.5">
-      <SectionHeading id="progress" title="DSA progress" link={{ href: "/admin/curriculum", label: "View roadmap" }} />
+      <SectionHeading id="progress" title="DSA progress" link={student ? undefined : { href: "/admin/curriculum", label: "View roadmap" }} />
       <div className="flex flex-col gap-5 rounded-xl border border-border bg-card p-4">
         <ol aria-label="Levels" className="grid grid-cols-8 gap-1.5">
           {p.levels.map((l) => (
@@ -138,7 +138,7 @@ export function ProgressSection({ d }: { d: StudentDetail }) {
                       "flex min-w-16 flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 text-[11px] font-semibold",
                       step.state === "done" && "border-accent bg-accent text-accent-strong",
                       step.state === "now" && "border-foreground bg-foreground text-background",
-                      step.state === "todo" && "border-border bg-card text-[#6B7080]",
+                      step.state === "todo" && "border-border bg-card text-[#6B7080] dark:text-[#A3A9B7]",
                     )}
                   >
                     <span className="text-[13px] font-bold">{step.code}</span>
@@ -153,7 +153,7 @@ export function ProgressSection({ d }: { d: StudentDetail }) {
               <ol className="flex flex-col gap-2.5">
                 {p.levelHistory.map((h, i) => (
                   <li key={h.change} className="flex gap-2.5">
-                    <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full", i === 0 ? "bg-primary" : "bg-[#C9CCD4]")} aria-hidden="true" />
+                    <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full", i === 0 ? "bg-primary" : "bg-[#C9CCD4] dark:bg-[#4A505E]")} aria-hidden="true" />
                     <span>
                       <span className="font-semibold">{h.change}</span>{" "}
                       <span className="text-[13px] text-muted-foreground">

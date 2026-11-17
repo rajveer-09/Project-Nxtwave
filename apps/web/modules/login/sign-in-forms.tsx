@@ -50,14 +50,17 @@ export function PasswordForm({ enabled }: { enabled: boolean }) {
         <NextField />
       </Suspense>
       <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-        Email
+        Email or NIAT ID
         <input
           name="email"
-          type="email"
+          type="text"
+          inputMode="email"
           autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
           required
           defaultValue={state.email}
-          placeholder="name@nxtwave.co.in"
+          placeholder="name@nxtwave.com or N24H01A0001"
           disabled={!enabled}
           className={inputClass}
         />
@@ -98,3 +101,4 @@ export function DevRolePicker() {
     </form>
   );
 }
+

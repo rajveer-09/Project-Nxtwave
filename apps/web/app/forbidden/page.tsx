@@ -14,7 +14,7 @@ export const metadata = { title: "No access" };
 
 export default function ForbiddenPage() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4">
+    <main className="mx-auto flex min-h-app max-w-lg flex-col justify-center px-4">
       <EmptyState
         icon={ShieldAlert}
         title="You don't have access to this page"

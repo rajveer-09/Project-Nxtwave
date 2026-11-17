@@ -166,7 +166,7 @@ export function ResultsEntry({
                     return !(v === null || v === undefined || v === "" || (Array.isArray(v) && !v.length));
                   }).length;
                   return (
-                    <tr key={s.niatId} className={cn(sel === s.niatId && "bg-accent/50", dirty.has(s.niatId) && "bg-[#FFFBF5]")}>
+                    <tr key={s.niatId} className={cn(sel === s.niatId && "bg-accent/50", dirty.has(s.niatId) && "bg-[#FFFBF5] dark:bg-[#1F1A14]")}>
                       <td className="border-b border-muted py-2 pr-2 pl-4">
                         <span className="font-semibold">{s.name}</span>
                         <div className="text-xs text-muted-foreground">

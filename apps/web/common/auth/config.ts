@@ -22,6 +22,8 @@ export function devSessionAllowed(): boolean {
 }
 
 export const SESSION_COOKIE = "nx_session";
+/** Student sessions use their own cookie (common/auth/student/session.ts). */
+export const STUDENT_COOKIE = "nx_student";
 export const DEV_ROLE_COOKIE = "dev_role";
 export const OAUTH_COOKIE = "nx_oauth";
 

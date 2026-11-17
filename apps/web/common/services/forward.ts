@@ -31,6 +31,11 @@ export type ServiceConfig = {
    * connected and sample services are allowed (development). Production never uses it.
    */
   sample?: (request: Request, path: string[], user: SessionUser) => Promise<Response>;
+  /**
+   * Real implementation used while the service isn't connected, in every environment (unlike
+   * `sample`): e.g. reading the attendance schema directly. Returns null to fall through.
+   */
+  fallback?: () => ((request: Request, path: string[], user: SessionUser) => Promise<Response>) | null;
 };
 
 export function sampleServicesAllowed() {
@@ -61,6 +66,8 @@ export async function forwardToService(request: Request, service: ServiceConfig,
   const origin = process.env[service.originEnv];
   const secret = process.env[service.secretEnv];
   if (!origin || !secret) {
+    const fallback = service.fallback?.();
+    if (fallback) return fallback(request, path, user);
     if (service.sample && sampleServicesAllowed()) return service.sample(request, path, user);
     return json(503, `The ${service.name} service isn't connected on this environment yet.`);
   }

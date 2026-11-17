@@ -10,6 +10,8 @@ import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import { TooltipProvider } from "@/common/ui/tooltip";
 import { Toaster } from "@/common/ui/sonner";
+import { WebVitals } from "@/common/components/web-vitals";
+import { ThemeProvider } from "@/common/components/theme";
 import { cn } from "@/common/lib/utils";
 import "./globals.css";
 
@@ -24,10 +26,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={cn(inter.variable, spaceGrotesk.variable)}>
+    <html lang="en" className={cn(inter.variable, spaceGrotesk.variable)} suppressHydrationWarning>
       <body>
-        <TooltipProvider>{children}</TooltipProvider>
-        <Toaster />
+        <ThemeProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+          <Toaster />
+        </ThemeProvider>
+        <WebVitals />
       </body>
     </html>
   );

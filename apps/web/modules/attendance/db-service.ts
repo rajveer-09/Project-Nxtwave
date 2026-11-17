@@ -16,16 +16,14 @@ import type { CalendarDay, CalendarEntry, CalendarMonth, DayType, Hall, Internsh
  * Attendance routes read straight from the attendance schema (web_svc has SELECT on
  * it), for environments where the Go attendance service isn't running. Same routes,
  * JSON and rules as services/attendance-api (internal/http, internal/stats); each
- * request is one query. Writes still need the Go service, so they answer 503.
+ * request is one query. Hall marks are saved here too (saveMarksFromHub); other writes still
+ * need the Go service, so they answer 503.
  */
 
-const SAVE_NEEDS_SERVICE =
-  "Saving attendance needs the attendance service (services/attendance-api). It isn't running on this environment.";
 const CHANGE_NEEDS_SERVICE = "This change needs the attendance service (services/attendance-api). It isn't running on this environment.";
 
 const json = (status: number, body: unknown) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const err = (status: number, code: string, message: string, details?: unknown) => json(status, { error: { code, message, details } });
-const isAdmin = (u: SessionUser) => u.role === "owner" || u.role === "admin";
 
 /* ------------------------------------------------------------------ rules (stats.go) */
 
@@ -401,14 +399,103 @@ async function listInternships(url: URL, today: string) {
   return json(200, { from, to, today, current, internships });
 }
 
+/* ------------------------------------------------------------------ saving marks from NxtOne */
+
+/** Who can mark attendance in NxtOne: admins, and instructors and senior instructors for any hall. */
+export const canMarkAttendance = (u: Pick<SessionUser, "role">) => u.role === "owner" || u.role === "admin" || u.role === "senior_instructor" || u.role === "instructor";
+
+export type MarkRowError = { index: number; niat_id: string; message: string };
+export type SaveMarksResult = { ok: true; saved: number; cleared: number } | { ok: false; error: string; details?: MarkRowError[] };
+
+const MARK_RULES_SQL = `
+SELECT ${TERMS_JSON} AS terms,
+  ${entriesJson("c.date = ANY($1::date[])")} AS entries,
+  (SELECT coalesce(json_agg(json_build_object('niat_id', s.niat_id, 'degree', s.degree_code, 'status', s.status,
+       'joined_on', s.joined_on::text, 'dropped_on', s.dropped_on::text)), '[]'::json)
+     FROM attendance.students s WHERE s.niat_id = ANY($2::text[])) AS students`;
+
+/**
+ * demo.go handleSaveAttendance, run by NxtOne itself (migration 000015 lets web_svc write marks):
+ * every mark is checked first (known, active student; a date that counts for them; P, A or null to
+ * clear) and either all are saved or none. Who marked is kept in attendance.marked_by.
+ */
+export async function saveMarksFromHub(user: SessionUser, marks: { niat_id: string; date: string; status: string | null }[]): Promise<SaveMarksResult> {
+  if (!canMarkAttendance(user)) return { ok: false, error: "You can't mark attendance." };
+  if (!Array.isArray(marks) || !marks.length) return { ok: false, error: "Send at least one mark." };
+  if (marks.length > 5000) return { ok: false, error: "Too many marks at once." };
+  const rows = marks.map((m) => ({ niat_id: String(m.niat_id ?? "").trim().toUpperCase(), date: String(m.date ?? ""), status: m.status ?? null }));
+  const dates = [...new Set(rows.map((r) => r.date).filter(isDate))];
+  const today = todayIst();
+  const db = getDb();
+  const { rows: loaded } = await db.query<{ terms: TermRange[]; entries: EntryRow[]; students: { niat_id: string; degree: string; status: string; joined_on: string | null; dropped_on: string | null }[] }>(
+    MARK_RULES_SQL,
+    [dates, [...new Set(rows.map((r) => r.niat_id))]],
+  );
+  const rules = rulesOf(today, loaded[0].terms, loaded[0].entries);
+  const byId = new Map(loaded[0].students.map((s) => [s.niat_id, s]));
+  const errors: MarkRowError[] = [];
+  const set: typeof rows = [];
+  const clear: typeof rows = [];
+  rows.forEach((m, index) => {
+    const fail = (message: string) => errors.push({ index, niat_id: m.niat_id, message });
+    const st = byId.get(m.niat_id);
+    if (!st) return fail("Unknown NIAT ID.");
+    if (st.status !== "active") return fail("Student is not active.");
+    if (!isDate(m.date)) return fail(badDate(m.date));
+    if (m.status !== null && m.status !== "P" && m.status !== "A") return fail('status must be "P", "A" or null.');
+    const day = resolveDay(m.date, ruleStudent(st.degree, st.status, st.joined_on, st.dropped_on), rules);
+    if (!day.counted) return fail(notCountedReason(day));
+    (m.status === null ? clear : set).push(m);
+  });
+  if (errors.length) return { ok: false, error: `${errors.length} of ${rows.length} marks were refused; nothing was saved.`, details: errors };
+
+  const who = `${user.name} <${user.email}>`;
+  const client = await (db as unknown as import("pg").Pool).connect();
+  try {
+    await client.query("BEGIN");
+    let saved = 0;
+    let cleared = 0;
+    if (set.length) {
+      // queries/attendance.sql UpsertMarks: a hand mark keeps the stored category when the status is unchanged.
+      const r = await client.query(
+        `INSERT INTO attendance.attendance (niat_id, date, status, category, updated_at, updated_by, marked_by)
+         SELECT u.niat_id, u.date, u.status, NULL, now(), NULL, $4
+         FROM unnest($1::text[], $2::date[], $3::text[]) AS u(niat_id, date, status)
+         ON CONFLICT (niat_id, date) DO UPDATE
+         SET category = CASE WHEN attendance.status = EXCLUDED.status THEN attendance.category ELSE NULL END,
+             status = EXCLUDED.status, updated_at = EXCLUDED.updated_at, updated_by = NULL, marked_by = EXCLUDED.marked_by`,
+        [set.map((m) => m.niat_id), set.map((m) => m.date), set.map((m) => m.status), who],
+      );
+      saved = r.rowCount ?? 0;
+    }
+    if (clear.length) {
+      const r = await client.query(
+        "DELETE FROM attendance.attendance a USING unnest($1::text[], $2::date[]) AS u(niat_id, date) WHERE a.niat_id = u.niat_id AND a.date = u.date",
+        [clear.map((m) => m.niat_id), clear.map((m) => m.date)],
+      );
+      cleared = r.rowCount ?? 0;
+    }
+    await client.query("COMMIT");
+    return { ok: true, saved, cleared };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function attendanceDb(request: Request, path: string[], user: SessionUser): Promise<Response> {
   const url = new URL(request.url);
   const route = `${request.method} ${path.join("/")}`;
   const today = todayIst();
 
   if (route === "PUT admin/attendance") {
-    if (!isAdmin(user)) return err(403, "forbidden", "Only admins can mark attendance.");
-    return err(503, "service_unavailable", SAVE_NEEDS_SERVICE);
+    const body = await request.json().catch(() => null);
+    const result = await saveMarksFromHub(user, Array.isArray(body) ? body : []);
+    if (result.ok) return json(200, { saved: result.saved, cleared: result.cleared });
+    if (result.details) return err(422, "validation_failed", result.error, result.details);
+    return result.error.startsWith("You can't") ? err(403, "forbidden", result.error) : err(400, "bad_request", result.error);
   }
 
   try {

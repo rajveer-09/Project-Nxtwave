@@ -7,6 +7,8 @@ Date : 16 Nov 2026
 */
 
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
+import { TAGS } from "@/common/data/cache";
 import { randomUUID } from "node:crypto";
 import { authMode } from "@/common/auth/config";
 import { platformRole } from "@/common/auth/core/sessions";
@@ -41,6 +43,13 @@ export type Message = {
 
 export async function directory(): Promise<DirectoryEntry[]> {
   if (!fromDb()) return STAFF.map(({ id, name, role, active, colleges, halls }) => ({ id, name, role, active, colleges, halls }));
+  return cachedDirectory();
+}
+
+async function cachedDirectory(): Promise<DirectoryEntry[]> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.staff, TAGS.roster);
   const { rows } = await getDb().query<{ id: string; name: string; active: boolean; roles: { module: string; role: string }[]; colleges: string[]; halls: string[] }>(
     `SELECT s.id::text, s.name, s.active AND s.left_on IS NULL AS active,
             COALESCE((SELECT json_agg(json_build_object('module', r.module, 'role', r.role)) FROM core.staff_roles r WHERE r.staff_id = s.id), '[]') AS roles,
@@ -48,7 +57,7 @@ export async function directory(): Promise<DirectoryEntry[]> {
                            WHERE a.staff_id = s.id AND a.to_date IS NULL ORDER BY 1), '{}') AS colleges,
             COALESCE(ARRAY(SELECT DISTINCT cs.hall FROM core.student_assignments a JOIN core.students cs ON cs.niat_id = a.niat_id
                            WHERE a.staff_id = s.id AND a.to_date IS NULL AND cs.hall IS NOT NULL ORDER BY 1), '{}') AS halls
-     FROM core.staff s ORDER BY s.name`,
+     FROM core.staff s WHERE s.deleted_at IS NULL ORDER BY s.name`,
   );
   return rows.flatMap((r) => {
     const role = platformRole(r.roles);

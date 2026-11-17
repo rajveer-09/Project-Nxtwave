@@ -45,7 +45,7 @@ async function StudentsResults({ searchParams }: { searchParams: Promise<SearchP
   return (
     <>
       <Suspense fallback={<StudentsFiltersFallback />}>
-        <StudentsFilters options={result.options} />
+        <StudentsFilters options={result.options} hide={scope?.instructor ? ["college", "section", "hall", "instructor"] : []} />
       </Suspense>
 
       <nav aria-label="Quick filters" className="flex flex-wrap gap-2">
@@ -71,7 +71,7 @@ async function StudentsResults({ searchParams }: { searchParams: Promise<SearchP
 
       <section aria-label="Student list" className="overflow-hidden rounded-xl border border-border bg-card">
         {result.rows.length ? (
-          <StudentsTable rows={result.rows} query={query} params={params} />
+          <StudentsTable rows={result.rows} query={query} params={params} viewer={user} />
         ) : (
           <div className="p-5">
             <EmptyState title="No students match these filters" description="Clear a filter or search for a different name or NIAT ID." />

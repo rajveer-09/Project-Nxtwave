@@ -14,28 +14,31 @@ import { SectionHeading } from "@/modules/students/components/profile/overview";
 import { TestsChart } from "@/modules/students/components/profile/tests-chart";
 import { Timeline } from "@/modules/students/components/profile/timeline";
 
-export function InteractionsSection({ d }: { d: StudentDetail }) {
+export function InteractionsSection({ d, student = false }: { d: StudentDetail; student?: boolean }) {
   return (
     <section id="interactions" aria-labelledby="interactions-h" className="flex scroll-mt-6 flex-col gap-3">
       <SectionHeading
         id="interactions"
         title="Interactions"
         extra={`· ${d.snapshot.interactions} rounds${d.snapshot.avgRating !== null ? ` · avg rating ${d.snapshot.avgRating}` : ""}`}
-        link={{ href: `/interactions?student=${d.student.niatId}`, label: "Log a new one" }}
+        link={student ? undefined : { href: `/interactions?student=${d.student.niatId}`, label: "Log a new one" }}
       />
-      <InteractionsList items={d.interactions} />
+      <InteractionsList
+        student={student}
+        items={student ? d.interactions.map((it) => ({ ...it, transcriptWords: 0 })) : d.interactions}
+      />
     </section>
   );
 }
 
-export function TestsSection({ d }: { d: StudentDetail }) {
+export function TestsSection({ d, student = false }: { d: StudentDetail; student?: boolean }) {
   const t = d.tests;
   const maxArea = Math.max(1, ...t.recurringAreas.map((a) => a.count));
   return (
     <section id="tests" aria-labelledby="tests-h" className="flex scroll-mt-6 flex-col gap-3.5">
-      <SectionHeading id="tests" title="Weekly tests" link={{ href: "/tests", label: "Weekly tests" }} />
+      <SectionHeading id="tests" title="Weekly tests" link={student ? undefined : { href: "/tests", label: "Weekly tests" }} />
       {!t.list.length ? (
-        <p className="rounded-xl border border-border bg-card px-4 py-3.5 text-sm text-muted-foreground">No weekly test results recorded for this student yet.</p>
+        <p className="rounded-xl border border-border bg-card px-4 py-3.5 text-sm text-muted-foreground">{student ? "No weekly test results yet." : "No weekly test results recorded for this student yet."}</p>
       ) : (
       <>
       <div className="flex flex-wrap items-start gap-4">
@@ -108,7 +111,7 @@ export function TestsSection({ d }: { d: StudentDetail }) {
   );
 }
 
-export function ContestsSection({ d }: { d: StudentDetail }) {
+export function ContestsSection({ d, student = false }: { d: StudentDetail; student?: boolean }) {
   const c = d.contests;
   const stats: [string, string, boolean][] = [
     ["Rating", c.rating ? c.rating.toLocaleString("en-IN") : "—", false],
@@ -120,7 +123,7 @@ export function ContestsSection({ d }: { d: StudentDetail }) {
   ];
   return (
     <section id="contests" aria-labelledby="contests-h" className="flex scroll-mt-6 flex-col gap-3.5">
-      <SectionHeading id="contests" title="LeetCode contests" extra={c.handle ? `· ${c.handle}` : "· no handle on file"} link={{ href: "/contests", label: "All contests" }} />
+      <SectionHeading id="contests" title="LeetCode contests" extra={c.handle ? `· ${c.handle}` : "· no handle on file"} link={student ? undefined : { href: "/contests", label: "All contests" }} />
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
         {stats.map(([label, value, warn]) => (
           <div key={label} className="rounded-xl border border-border bg-card px-3.5 py-3">

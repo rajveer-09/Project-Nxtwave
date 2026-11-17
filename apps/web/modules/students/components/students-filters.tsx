@@ -19,7 +19,7 @@ const selectClass =
   "h-10 rounded-lg border border-input bg-card px-2.5 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
 /** Search box (debounced) and dropdown filters, all stored in the URL. */
-export function StudentsFilters({ options }: { options: Options }) {
+export function StudentsFilters({ options, hide = [] }: { options: Options; /** Filters that can't narrow this person's list (an instructor's students share one college, section and hall). */ hide?: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -47,7 +47,7 @@ export function StudentsFilters({ options }: { options: Options }) {
     { key: "hall", label: "Hall", all: "All", values: options.halls.map((v) => ({ value: v, label: v })) },
     { key: "instructor", label: "Instructor", all: "All", values: options.instructors.map((v) => ({ value: v, label: v })) },
     { key: "level", label: "Level", all: "All", values: [0, 1, 2, 3, 4].map((v) => ({ value: String(v), label: `L${v}` })) },
-  ];
+  ].filter((select) => !hide.includes(select.key));
 
   return (
     <div className="flex flex-wrap items-end gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5" aria-busy={pending}>

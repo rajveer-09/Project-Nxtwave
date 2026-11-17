@@ -1,6 +1,6 @@
 // Ported from Instructor_Evaluation lib/levelCompletion.ts.
 
-import { LEVELS, getSubtopicOptions, getTopicOptions } from './curriculum.ts';
+import { LEVELS, getRequiredTopics, getSubtopicOptions } from './curriculum.ts';
 
 // What a level conversion means (decided 2026-10-13). Applied in SQL in getLevelConversions (db/queries.ts).
 //  - From STRICT_RULE_FROM: a student has converted from Level N once every required topic of Level N has its own
@@ -14,19 +14,17 @@ import { LEVELS, getSubtopicOptions, getTopicOptions } from './curriculum.ts';
 // doesn't switch it to the new rule.
 export const STRICT_RULE_FROM = '2026-10-13T16:00:00+05:30';
 
-// Topics that never count towards completing a level.
-const NOT_REQUIRED: Record<string, string[]> = { 'Level 0': ['Introduction', 'Data Types'] };
-
+// Topics that count towards completing a level: live topics marked "counts" on the hub's Curriculum page
+// (Level 0's Introduction and Data Types never did).
 export function requiredTopics(level: string): string[] {
-  const skip = NOT_REQUIRED[level] ?? [];
-  return getTopicOptions(level).filter((topic) => !skip.includes(topic));
+  return getRequiredTopics(level);
 }
 
 // For SQL (levels as numbers): { "0": [{ "topic": "If else", "subtopics": [] }, ...],
 //                                "1": [{ "topic": "Maths", "subtopics": ["Digit Manipulation", ...] }, ...] }
 export function requiredTopicsByLevelNumber(): Record<string, Array<{ topic: string; subtopics: string[] }>> {
-  return Object.fromEntries(LEVELS.map((level, index) => [
-    String(index),
+  return Object.fromEntries(LEVELS.map((level) => [
+    level.replace(/^Level\s+/, ''),
     requiredTopics(level).map((topic) => ({ topic, subtopics: getSubtopicOptions(level, topic) })),
   ]));
 }

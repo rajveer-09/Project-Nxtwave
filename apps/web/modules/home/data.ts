@@ -42,8 +42,11 @@ export type HomeData = {
 const signed = (n: number, unit = "") => `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}${unit}`;
 const pctOf = (part: number, whole: number) => (whole ? Math.round((part * 1000) / whole) / 10 : null);
 
-/** The whole-cohort numbers: the same for everyone, so shared and kept a minute. */
-async function homeQueries(today: string) {
+/**
+ * The headline numbers: for the whole cohort, or (ids) only an instructor's or coach's own students.
+ * Shared by everyone with the same view and kept a minute.
+ */
+async function homeQueries(today: string, ids: string[] | null) {
   "use cache: remote";
   cacheLife({ stale: 30, revalidate: 60, expire: 900 });
   cacheTag(TAGS.home, TAGS.roster, TAGS.interactions);
@@ -52,7 +55,7 @@ async function homeQueries(today: string) {
     // Latest day with marks (today if marking has started), and the same weekday a week earlier
     db.query<{ date: string; present: number; marked: number; halls_marked: number; halls_total: number; prev_present: number; prev_marked: number }>(
       `WITH latest AS (SELECT max(date) AS d FROM attendance.attendance WHERE date <= $1::date),
-            active AS (SELECT niat_id, hall_no FROM attendance.students WHERE status = 'active')
+            active AS (SELECT niat_id, hall_no FROM attendance.students WHERE status = 'active' AND ($2::text[] IS NULL OR niat_id = ANY($2::text[])))
        SELECT (SELECT d FROM latest)::text AS date,
               count(*) FILTER (WHERE a.date = (SELECT d FROM latest) AND a.status = 'P')::int AS present,
               count(*) FILTER (WHERE a.date = (SELECT d FROM latest))::int AS marked,
@@ -62,13 +65,13 @@ async function homeQueries(today: string) {
               count(*) FILTER (WHERE a.date = (SELECT d FROM latest) - 7)::int AS prev_marked
        FROM attendance.attendance a JOIN active s ON s.niat_id = a.niat_id
        WHERE a.date IN ((SELECT d FROM latest), (SELECT d FROM latest) - 7)`,
-      [today],
+      [today, ids],
     ),
     db.query<{ this_week: number; last_week: number }>(
       `SELECT count(*) FILTER (WHERE date > $1::date - 7)::int AS this_week,
               count(*) FILTER (WHERE date <= $1::date - 7 AND date > $1::date - 14)::int AS last_week
-       FROM logs.interactions WHERE date > $1::date - 14 AND date <= $1::date`,
-      [today],
+       FROM logs.interactions WHERE date > $1::date - 14 AND date <= $1::date AND ($2::text[] IS NULL OR upper(student_id) = ANY($2::text[]))`,
+      [today, ids],
     ),
     db.query<{ slug: string; title: string; start_time: string; took_part: number; handles: number; median_solved: number | null; best_rank: number | null; kind: string | null }>(
       `SELECT ct.slug, ct.title, ct.start_time::text,
@@ -78,7 +81,10 @@ async function homeQueries(today: string) {
               min(r.global_rank) FILTER (WHERE r.status IN ('solved', 'zero')) AS best_rank,
               (SELECT kind FROM contest.scan_runs sr WHERE sr.contest_slug = ct.slug AND sr.status = 'done' ORDER BY sr.finished_at DESC NULLS LAST LIMIT 1) AS kind
        FROM contest.contests ct JOIN contest.results r ON r.contest_slug = ct.slug
+       JOIN contest.students cst ON cst.id = r.student_id
+       WHERE $1::text[] IS NULL OR upper(cst.roll_no) = ANY($1::text[])
        GROUP BY ct.slug ORDER BY ct.start_time DESC LIMIT 2`,
+      [ids],
     ),
     db.query<{ n: number }>("SELECT count(*)::int AS n FROM contest.scan_drafts"),
     db.query<{ n: number }>("SELECT count(*)::int AS n FROM logs.interactions WHERE questions_asked ILIKE '%(off-roadmap)%'"),
@@ -120,7 +126,7 @@ async function loadHomeData(): Promise<HomeData> {
   // Instructors and success coaches see their own students; everyone else the whole roster.
   const scope = studentScope(await getSessionUser());
   const roster = (await getRoster()).filter((s) => inScope(scope, s));
-  const { day, interactions, contests, drafts, offRoadmap, term } = await homeQueries(today);
+  const { day, interactions, contests, drafts, offRoadmap, term } = await homeQueries(today, scope ? roster.map((s) => s.niatId).sort() : null);
 
   // ---- attendance
   const d = day.rows[0];

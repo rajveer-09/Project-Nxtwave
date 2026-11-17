@@ -25,6 +25,12 @@ import { latestTestTotals } from "@/modules/tests/data";
 import { RISK_THRESHOLDS } from "@/common/domain/risk";
 import type { SearchParamsRecord } from "@/common/lib/url";
 import { questionBank as loadQuestionBank } from "@/modules/curriculum/data";
+import { getStructure } from "@/modules/curriculum/structure";
+import { SectionCard } from "@/common/components/section-card";
+import { LiveForm } from "@/common/components/live-form";
+import { DateRange } from "@/common/components/date-range";
+import { DailyBars } from "@/common/components/charts";
+import { eachDay, parseRange, shortDay } from "@/common/lib/range";
 
 export const metadata = { title: "Interactions" };
 
@@ -46,11 +52,32 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   const sample = usingSampleData();
   const myStudents = roster.filter((s) => inScope(scope, s)).sort((a, b) => a.name.localeCompare(b.name));
   const latestTests = sample ? null : await latestTestTotals(myStudents.map((s) => s.niatId));
-  const [all, questionBank] = await Promise.all([listInteractions(scope?.coach !== undefined ? { niatIds: myStudents.map((s) => s.niatId) } : { instructor: scope?.instructor }), loadQuestionBank()]);
+  const [all, questionBank, structure] = await Promise.all([
+    listInteractions(scope?.coach !== undefined ? { niatIds: myStudents.map((s) => s.niatId) } : { instructor: scope?.instructor }),
+    loadQuestionBank(),
+    getStructure(),
+  ]);
   const overdue = myStudents.filter((s) => s.lastInteractionDays === null || s.lastInteractionDays >= RISK_THRESHOLDS.interactionGapDays);
   const today = todayIst();
   const weekAgo = addDays(today, -7);
   const thisWeek = all.filter((it) => it.date > weekAgo).length;
+
+  // Activity for the chosen dates (and, for admins, one person who took the interactions)
+  const range = parseRange(params, today, 30);
+  const takenBy = typeof params.by === "string" && params.by ? params.by : null;
+  const people = [...new Set(all.map((it) => it.takenBy))].sort();
+  const inRange = all.filter((it) => it.date >= range.from && it.date <= range.to && (!takenBy || it.takenBy === takenBy));
+  const perDay = new Map<string, number>();
+  for (const it of inRange) perDay.set(it.date, (perDay.get(it.date) ?? 0) + 1);
+  const daily = eachDay(range).map((day) => ({ day, label: shortDay(day), value: perDay.get(day) ?? 0 }));
+  const busiest = daily.reduce((best, d) => (d.value > (best?.value ?? 0) ? d : best), null as (typeof daily)[number] | null);
+  const reached = new Set(inRange.map((it) => it.niatId)).size;
+  const activity = [
+    ["Interactions", inRange.length.toLocaleString("en-IN")],
+    ["Per day", (inRange.length / range.days).toFixed(1)],
+    ["Busiest day", busiest && busiest.value ? `${busiest.label} · ${busiest.value}` : "—"],
+    ["Students reached", reached.toLocaleString("en-IN")],
+  ];
 
   const formStudents: FormStudent[] = myStudents.map((s) => ({
     niatId: s.niatId,
@@ -105,6 +132,41 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
         </p>
       ) : null}
 
+      <SectionCard
+        title="Interactions per day"
+        description={`${shortDay(range.from)} – ${shortDay(range.to)}${takenBy ? ` · taken by ${takenBy}` : ""}`}
+      >
+        <div className="flex flex-col gap-4">
+          <LiveForm className="flex flex-wrap items-end gap-3" aria-label="Filter interactions">
+            {student ? <input type="hidden" name="student" value={student} /> : null}
+            <DateRange from={range.from} to={range.to} today={today} />
+            {!logging || user.role === "senior_instructor" ? (
+              <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+                Taken by
+                <select name="by" defaultValue={takenBy ?? ""} className="h-10 rounded-lg border border-input bg-card px-2.5 pr-8 text-sm text-foreground">
+                  <option value="">Everyone</option>
+                  {people.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </LiveForm>
+          <dl className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3">
+            {activity.map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-border px-3.5 py-2.5">
+                <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
+                <dd className="font-heading text-xl font-semibold tabular">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <DailyBars data={daily} valueLabel="Interactions" />
+          <p className="sr-only">{daily.map((d) => `${d.label}: ${d.value}`).join(", ")}</p>
+        </div>
+      </SectionCard>
+
       <div className="flex flex-wrap items-start gap-5">
         {logging ? (
           <InteractionForm
@@ -116,9 +178,10 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
             initialStudent={student}
             today={today}
             questionBank={questionBank}
+            structure={structure}
           />
         ) : null}
-        <RecentLogs rows={all.slice(0, logging ? 12 : 40)} total={all.length} exportHref="/api/logs/interactions/export" />
+        <RecentLogs rows={inRange.slice(0, logging ? 12 : 40)} total={inRange.length} exportHref="/api/logs/interactions/export" />
       </div>
     </>
   );

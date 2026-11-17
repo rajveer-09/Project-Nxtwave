@@ -14,7 +14,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { logInteraction } from "@/modules/interactions/actions";
 import { Button } from "@/common/ui/button";
-import { getReachedStepOptions, getSubtopicOptions, getTopicOptions, LEVELS } from "@/modules/interactions/lib/curriculum";
+import { QuestionTitle } from "@/modules/curriculum/components/question-title";
+import { liveTopics, reachedSteps, subtopicNames, topicNames, type Structure } from "@/modules/curriculum/lib/structure";
 import { clearInteractionDraft, interactionDraftKey, loadInteractionDraft, saveInteractionDraft } from "@/modules/interactions/lib/draft";
 import { blockKeyboardSubmit } from "@/modules/interactions/lib/forms";
 import { questionsFor, type BankQuestion } from "@/modules/interactions/lib/question-bank";
@@ -124,9 +125,19 @@ export function InteractionForm({
   initialStudent,
   today,
   questionBank,
+  structure,
+  fixedTakenBy,
 }: {
+  /**
+   * Logging for another instructor's student (the Log interaction page): "Taken by" is always the
+   * person logging, the student is the one they looked up, and the context from other modules
+   * (attendance, tests, contests, the student page) is not shown.
+   */
+  fixedTakenBy?: string;
   /** Live question bank from the Curriculum module, keyed by bankKey(). */
   questionBank: Record<string, BankQuestion[]>;
+  /** The roadmap's levels, topics, subtopics and steps (Curriculum module). */
+  structure: Structure;
   students: FormStudent[];
   instructors: string[];
   userId: string;
@@ -138,8 +149,10 @@ export function InteractionForm({
   const [pending, startTransition] = useTransition();
   const [niatId, setNiatId] = useState(students.some((s) => s.niatId === initialStudent) ? initialStudent! : "");
   const student = students.find((s) => s.niatId === niatId);
-  // "Taken by" is not filled in from the signed-in user (rule carried over from the Interactions app).
-  const [f, setF] = useState<Fields>(() => blankFields(student, today, ""));
+  // "Taken by" is not filled in from the signed-in user (rule carried over from the Interactions app),
+  // except on the Log interaction page, where it is always the person logging.
+  const takenByStart = fixedTakenBy ?? "";
+  const [f, setF] = useState<Fields>(() => blankFields(student, today, takenByStart));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
   const [draftOff, setDraftOff] = useState("");
@@ -156,30 +169,32 @@ export function InteractionForm({
     if (!draftKey || loadedKey.current === draftKey) return;
     loadedKey.current = draftKey;
     const draft = loadInteractionDraft<Fields>(draftKey);
-    setF(draft ? { ...blankFields(student, today, ""), ...draft.fields } : blankFields(student, today, ""));
+    setF(draft ? { ...blankFields(student, today, takenByStart), ...draft.fields, ...(fixedTakenBy ? { takenBy: fixedTakenBy } : {}) } : blankFields(student, today, takenByStart));
     setDraftNotice(draft ? new Date(draft.savedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : null);
     setErrors({});
-  }, [draftKey, student, today]);
+  }, [draftKey, student, today, takenByStart, fixedTakenBy]);
 
   // Keep the draft up to date (after the first load for this student).
   useEffect(() => {
     if (!draftKey || loadedKey.current !== draftKey) return;
-    const untouched = JSON.stringify(f) === JSON.stringify(blankFields(student, today, ""));
+    const untouched = JSON.stringify(f) === JSON.stringify(blankFields(student, today, takenByStart));
     const t = setTimeout(() => (untouched ? clearInteractionDraft(draftKey) : saveInteractionDraft(draftKey, f)), 400);
     return () => clearTimeout(t);
-  }, [draftKey, f, student, today]);
+  }, [draftKey, f, student, today, takenByStart]);
 
   const level = levelName(f.level);
-  const topicOptions = getTopicOptions(level);
-  const subtopicMode = f.topics.length === 1 && getSubtopicOptions(level, f.topics[0]).length > 0;
-  const subtopicOptions = subtopicMode ? getSubtopicOptions(level, f.topics[0]) : [];
-  const stepOptions = getReachedStepOptions(level);
+  const levelOptions = structure.levels.filter((l) => l.level === f.level || liveTopics(structure, l.level).length);
+  const topicOptions = topicNames(structure, f.level);
+  const subtopicMode = f.topics.length === 1 && subtopicNames(structure, f.level, f.topics[0]).length > 0;
+  const subtopicOptions = subtopicMode ? subtopicNames(structure, f.level, f.topics[0]) : [];
+  const stepOptions = reachedSteps(structure, f.level);
   const stepItems = stepOptions.length ? (subtopicMode ? f.subtopics : f.topics) : [];
   const bank = questionsFor(level, f.topics, subtopicMode ? f.subtopics : [], questionBank);
   const words = f.transcriptText.trim() ? f.transcriptText.trim().split(/\s+/).length : 0;
 
   function changeLevel(n: number) {
-    setF((prev) => ({ ...prev, level: n, topics: [getTopicOptions(levelName(n))[0]], subtopics: [], stepsReached: {}, picked: [] }));
+    const first = topicNames(structure, n)[0];
+    setF((prev) => ({ ...prev, level: n, topics: first ? [first] : [], subtopics: [], stepsReached: {}, picked: [] }));
   }
   function toggleTopic(topic: string) {
     setF((prev) => {
@@ -203,7 +218,7 @@ export function InteractionForm({
     setF((prev) => ({
       ...prev,
       date: v.date ?? prev.date,
-      takenBy: v.takenByName && instructors.includes(v.takenByName) ? v.takenByName : prev.takenBy,
+      takenBy: !fixedTakenBy && v.takenByName && instructors.includes(v.takenByName) ? v.takenByName : prev.takenBy,
       topics: v.topics?.length ? (v.topics.length === 1 ? v.topics : v.topics) : prev.topics,
       subtopics: v.topics?.length ? [] : prev.subtopics,
       status: v.status ?? prev.status,
@@ -216,7 +231,7 @@ export function InteractionForm({
       meetRecording: v.meetRecording ?? prev.meetRecording,
     }));
     const warnings = [...result.warnings];
-    if (v.takenByName && !instructors.includes(v.takenByName)) warnings.push(`"${v.takenByName}" isn't in the instructor list. Pick "Taken by" by hand.`);
+    if (!fixedTakenBy && v.takenByName && !instructors.includes(v.takenByName)) warnings.push(`"${v.takenByName}" isn't in the instructor list. Pick "Taken by" by hand.`);
     setPasteWarnings(warnings);
     if (result.filled) {
       toast.success(`Filled ${result.filled} field${result.filled === 1 ? "" : "s"} from the sheet. Check them before saving.`);
@@ -293,6 +308,14 @@ export function InteractionForm({
       noValidate
     >
       <div className="flex flex-wrap gap-3">
+        {fixedTakenBy ? (
+          <div className={cn(label, "flex-[2_1_240px]")}>
+            Student
+            <span className="flex h-11 items-center rounded-lg border border-input bg-background px-3 text-sm font-semibold">
+              {student ? `${student.name} · ${student.niatId}` : "—"}
+            </span>
+          </div>
+        ) : (
         <label className={cn(label, "flex-[2_1_240px]")}>
           Student
           <select
@@ -311,11 +334,18 @@ export function InteractionForm({
           </select>
           <FieldError id="err-student" message={errors.niatId} />
         </label>
+        )}
         <label className={cn(label, "flex-[1_1_150px]")}>
           Date
           <input type="date" value={f.date} max={today} onChange={(e) => set("date", e.target.value)} aria-invalid={!!errors.date} aria-describedby="err-date" className={input} />
           <FieldError id="err-date" message={errors.date} />
         </label>
+        {fixedTakenBy ? (
+          <div className={cn(label, "flex-[1_1_170px]")}>
+            Taken by
+            <span className="flex h-11 items-center rounded-lg border border-input bg-background px-3 text-sm font-semibold">{fixedTakenBy} (you)</span>
+          </div>
+        ) : (
         <label className={cn(label, "flex-[1_1_170px]")}>
           Taken by
           <select value={f.takenBy} onChange={(e) => set("takenBy", e.target.value)} aria-invalid={!!errors.takenBy} aria-describedby="err-taken" className={input}>
@@ -329,6 +359,7 @@ export function InteractionForm({
           </select>
           <FieldError id="err-taken" message={errors.takenBy} />
         </label>
+        )}
       </div>
 
       {student ? (
@@ -340,7 +371,7 @@ export function InteractionForm({
                 type="button"
                 onClick={() => {
                   if (draftKey) clearInteractionDraft(draftKey);
-                  setF(blankFields(student, today, ""));
+                  setF(blankFields(student, today, takenByStart));
                   setDraftNotice(null);
                 }}
                 className="min-h-8 rounded-md px-2 font-semibold underline-offset-2 hover:underline"
@@ -350,6 +381,7 @@ export function InteractionForm({
             </div>
           ) : null}
 
+          {fixedTakenBy ? null : (
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 rounded-lg bg-background px-3.5 py-3 text-[13px] text-sidebar-foreground">
             <span className="w-full font-semibold text-foreground">From other modules · {student.group}</span>
             <span>
@@ -362,6 +394,7 @@ export function InteractionForm({
               Open student page →
             </a>
           </div>
+          )}
 
           <div className="flex flex-col gap-2.5 rounded-lg border border-dashed border-input p-3">
             <button
@@ -404,9 +437,10 @@ export function InteractionForm({
             <label className={cn(label, "max-w-48")}>
               Level
               <select value={f.level} onChange={(e) => changeLevel(Number(e.target.value))} className={input}>
-                {LEVELS.map((name, i) => (
-                  <option key={name} value={i}>
-                    {name}
+                {levelOptions.map((l) => (
+                  <option key={l.level} value={l.level}>
+                    {levelName(l.level)}
+                    {l.title ? ` · ${l.title}` : ""}
                   </option>
                 ))}
               </select>
@@ -476,7 +510,9 @@ export function InteractionForm({
                           onChange={() => set("picked", on ? f.picked.filter((t) => t !== q.title) : [...f.picked, q.title])}
                           className="size-[18px] accent-primary"
                         />
-                        <span className="flex-1 font-medium">{q.title}</span>
+                        <span className="flex-1 font-medium">
+                          <QuestionTitle title={q.title} url={q.url} className="font-medium" />
+                        </span>
                         <span className="text-xs text-muted-foreground">
                           {q.step} · {q.source}
                         </span>

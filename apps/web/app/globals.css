@@ -138,9 +138,9 @@ Date : 14 Nov 2026
     --border: #2A2F3A;
     --input: #343A47;
     --ring: #7D97F2;
-    --chart-1: #7D97F2;
+    --chart-1: #6382EC;
     --chart-2: #4E5E9C;
-    --chart-3: #E8894A;
+    --chart-3: #D9772E;
     --chart-4: #2BB3A3;
     --chart-5: #A78BFA;
     --sidebar: #13161B;
@@ -153,7 +153,41 @@ Date : 14 Nov 2026
     --sidebar-ring: #7D97F2;
 }
 
+/*
+ * Interface scale: on desktop everything renders at 90% (what the app looks like at 90% browser
+ * zoom). Full-height layouts use h-app / min-h-app, which divide by the scale so they still fill
+ * the window. Phones and small tablets stay at 100%.
+ */
+:root {
+  --ui-zoom: 1;
+}
+@media (min-width: 1024px) {
+  :root {
+    --ui-zoom: 0.9;
+  }
+}
+@utility min-h-app {
+  min-height: calc(100dvh / var(--ui-zoom));
+}
+@utility h-app {
+  height: calc(100dvh / var(--ui-zoom));
+}
+
 @layer base {
+  html {
+    zoom: var(--ui-zoom);
+  }
+  /* No visible scrollbars anywhere; wheel, trackpad, touch and keyboard scrolling still work. */
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+  /* Nothing may push the page sideways (clip, unlike hidden, keeps the sticky sidebar working). */
+  body {
+    overflow-x: clip;
+  }
   * {
     @apply border-border outline-ring/50;
   }
@@ -174,28 +208,44 @@ Date : 14 Nov 2026
   }
 }
 
-/* ---- Page transitions (React <ViewTransition default="page"> in the app shell) ---- */
-::view-transition-old(.page) {
-  animation: 110ms ease-out both nx-page-out;
+/* ---- Theme: native controls follow it; switching crossfades the page (common/components/theme.tsx) ---- */
+:root {
+  color-scheme: light;
 }
-::view-transition-new(.page) {
-  animation: 200ms cubic-bezier(0.2, 0, 0, 1) both nx-page-in;
+.dark {
+  color-scheme: dark;
 }
-@keyframes nx-page-out {
-  to {
-    opacity: 0;
+html[data-theme-switch]::view-transition-old(root),
+html[data-theme-switch]::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+}
+
+/* ---- Collapsible sidebar (modules/shell/sidebar-frame.tsx): a slim icon rail on desktop ---- */
+@media (min-width: 1024px) {
+  nav[data-sidebar] {
+    transition: width 160ms ease-out, padding 160ms ease-out;
+  }
+  nav[data-sidebar="collapsed"] {
+    width: 4.75rem;
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
+  }
+  nav[data-sidebar="collapsed"] .sb-hide {
+    display: none !important;
+  }
+  nav[data-sidebar="collapsed"] .sb-col {
+    flex-direction: column;
+  }
+  nav[data-sidebar="collapsed"] .sb-center {
+    justify-content: center;
+  }
+  nav[data-sidebar="open"] .sb-only {
+    display: none !important;
   }
 }
-@keyframes nx-page-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
+@media (max-width: 1023.98px) {
+  .sb-only {
+    display: none !important;
   }
 }

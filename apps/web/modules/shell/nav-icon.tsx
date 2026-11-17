@@ -14,8 +14,10 @@ import {
   History,
   House,
   IdCard,
+  KeyRound,
   Megaphone,
   MessageCircle,
+  NotebookPen,
   ShieldCheck,
   Shuffle,
   Trophy,
@@ -38,6 +40,8 @@ const ICONS = {
   assignments: Shuffle,
   changelog: History,
   shield: ShieldCheck,
+  studentkey: KeyRound,
+  logany: NotebookPen,
 } satisfies Record<NavIconName, React.ComponentType<LucideProps>>;
 
 export function NavIcon({ name, ...props }: { name: NavIconName } & LucideProps) {

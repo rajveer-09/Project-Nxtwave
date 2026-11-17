@@ -25,7 +25,7 @@ function PendingDot() {
     <span
       aria-hidden="true"
       className={cn(
-        "ml-auto size-1.5 rounded-full bg-primary transition-opacity duration-150",
+        "sb-hide ml-auto size-1.5 rounded-full bg-primary transition-opacity duration-150",
         pending ? "animate-pulse opacity-100 delay-100" : "opacity-0",
       )}
     />
@@ -40,7 +40,7 @@ export function SideNavLinks({ sections }: { sections: NavSection[] }) {
       {sections.map((section, i) => (
         <div key={section.label ?? i} className="flex flex-col gap-0.5">
           {section.label ? (
-            <span className="px-3 pt-5 pb-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
+            <span className="sb-hide px-3 pt-5 pb-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
               {section.label}
             </span>
           ) : null}
@@ -50,14 +50,17 @@ export function SideNavLinks({ sections }: { sections: NavSection[] }) {
               <Link
                 key={item.href}
                 href={item.href}
+                // Load each section fully ahead of the click, so moving between sections is instant.
+                prefetch={true}
                 aria-current={active ? "page" : undefined}
+                title={item.label}
                 className={cn(
-                  "flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-muted hover:text-foreground",
+                  "sb-center flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-muted hover:text-foreground",
                   active && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 )}
               >
-                <NavIcon name={item.icon} className="size-[18px]" />
-                {item.label}
+                <NavIcon name={item.icon} className="size-[18px] shrink-0" />
+                <span className="sb-hide">{item.label}</span>
                 <PendingDot />
               </Link>
             );
@@ -75,7 +78,7 @@ export function SideNavLinksFallback({ sections }: { sections: NavSection[] }) {
       {sections.map((section, i) => (
         <div key={section.label ?? i} className="flex flex-col gap-0.5">
           {section.label ? (
-            <span className="px-3 pt-5 pb-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
+            <span className="sb-hide px-3 pt-5 pb-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
               {section.label}
             </span>
           ) : null}
@@ -83,10 +86,11 @@ export function SideNavLinksFallback({ sections }: { sections: NavSection[] }) {
             <Link
               key={item.href}
               href={item.href}
-              className="flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-sidebar-foreground"
+              title={item.label}
+              className="sb-center flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-sidebar-foreground"
             >
-              <NavIcon name={item.icon} className="size-[18px]" />
-              {item.label}
+              <NavIcon name={item.icon} className="size-[18px] shrink-0" />
+              <span className="sb-hide">{item.label}</span>
             </Link>
           ))}
         </div>

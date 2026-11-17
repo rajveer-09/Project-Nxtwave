@@ -13,7 +13,8 @@ import { addDays, formatDate, todayIst } from "@/common/lib/dates";
 import type { RosterStudent } from "@/common/sample-data/roster";
 import type { buildStudentDetail, CalendarDay } from "@/common/sample-data/student-detail";
 import { listInteractions } from "@/modules/interactions/data";
-import { getStepOptionsForTopic, getSubtopicOptions, getTopicOptions } from "@/modules/interactions/lib/curriculum";
+import { getStructure } from "@/modules/curriculum/structure";
+import { studentSteps, subtopicNames } from "@/modules/curriculum/lib/structure";
 import { STATUS_LABEL } from "@/modules/interactions/lib/types";
 
 /**
@@ -163,13 +164,14 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
   }
 
   // ---------------------------------------------------------------- DSA progress
-  const levelName = `Level ${s.level}`;
-  const topics = getTopicOptions(levelName);
+  const structure = await getStructure();
+  // Archived topics stay in the list while the student is still on one.
+  const topics = (structure.levels.find((l) => l.level === s.level)?.topics ?? []).filter((t) => !t.archived || t.name === s.topic).map((t) => t.name);
   const topicIndex = Math.max(0, topics.indexOf(s.topic));
-  const stepOptions = getStepOptionsForTopic(levelName, s.topic);
+  const stepOptions = studentSteps(structure, s.level, s.topic);
   const currentStep = stepOptions.findIndex((o) => o === s.step || stepCode(o) === stepCode(s.step));
   const subtopicsOf = (topic: string, state: "cleared" | "current" | "not-started") => {
-    const subs = getSubtopicOptions(levelName, topic);
+    const subs = subtopicNames(structure, s.level, topic);
     const now = state === "current" ? subs.indexOf(s.subtopic ?? "") : -1;
     return subs.map((name, j) => ({
       name,
@@ -192,7 +194,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     topic: s.topic,
     subtopic: s.subtopic,
     weeksAtLevel: s.risk.weeksAtLevel,
-    levels: Array.from({ length: 8 }, (_, i) => ({ level: i, state: i < s.level ? "cleared" : i === s.level ? "current" : "future" })),
+    levels: structure.levels.map(({ level: i }) => ({ level: i, state: i < s.level ? "cleared" : i === s.level ? "current" : "future" })),
     topics: topics.map((name, i) => {
       const state = i < topicIndex ? "cleared" : i === topicIndex ? "current" : "not-started";
       return { name, state, subtopics: subtopicsOf(name, state) };

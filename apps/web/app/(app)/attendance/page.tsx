@@ -12,19 +12,28 @@ import { HallSheet } from "@/modules/attendance/components/hall-sheet";
 import { Skeleton } from "@/common/ui/skeleton";
 import { authMode } from "@/common/auth/config";
 import { requireAccess } from "@/common/auth/guard";
-import { isAdminRole } from "@/common/auth/roles";
+import { getRoster } from "@/common/data/roster";
 import { todayIst } from "@/common/lib/dates";
+import { canMarkAttendance } from "@/modules/attendance/db-service";
 
 export const metadata = { title: "Mark attendance" };
-
-/** Without the Go service, marks are read from the database but can't be saved. */
-const savingNeedsService = () =>
-  authMode() === "database" && !(process.env.ATTENDANCE_API_ORIGIN && process.env.ATTENDANCE_JWT_SECRET);
 
 async function Sheet() {
   await connection();
   const user = await requireAccess("/attendance");
-  return <HallSheet canMark={isAdminRole(user.role)} savingNeedsService={savingNeedsService()} today={todayIst()} />;
+  // Instructors (and senior instructors) open on their own students and their hall; they can switch
+  // to everyone in the hall and mark them too.
+  let mine: { ids: string[]; hall: string | null } | undefined;
+  if (user.role === "instructor" || user.role === "senior_instructor") {
+    const own = (await getRoster()).filter((s) => s.instructor === user.name);
+    if (own.length) {
+      const halls = new Map<string, number>();
+      for (const s of own) halls.set(s.hall, (halls.get(s.hall) ?? 0) + 1);
+      const hall = [...halls.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      mine = { ids: own.map((s) => s.niatId), hall: hall === "No hall" || hall === "—" ? "" : hall };
+    }
+  }
+  return <HallSheet canMark={canMarkAttendance(user)} savesInHub={authMode() === "database"} today={todayIst()} mine={mine} />;
 }
 
 export default function MarkHallPage() {

@@ -21,7 +21,9 @@ export type NavIcon =
   | "analytics"
   | "assignments"
   | "changelog"
-  | "shield";
+  | "shield"
+  | "studentkey"
+  | "logany";
 
 export type NavItem = {
   href: string;
@@ -36,6 +38,8 @@ export type NavSection = {
 };
 
 const EVERYONE: readonly Role[] = ["owner", "admin", "senior_instructor", "instructor", "success_coach"];
+/** Who can log an interaction for any student by NIAT ID (taken by themselves). */
+const LOGGERS: readonly Role[] = ["owner", "admin", "senior_instructor", "instructor"];
 /** Admin panel (admins) and Senior SDI panel (senior instructors). */
 const PANEL: readonly Role[] = ["owner", "admin", "senior_instructor"];
 const ADMINS: readonly Role[] = ["owner", "admin"];
@@ -49,6 +53,7 @@ export const NAV: NavSection[] = [
       { href: "/students", label: "Students", icon: "students", roles: EVERYONE },
       { href: "/attendance", label: "Attendance", icon: "attendance", roles: EVERYONE },
       { href: "/interactions", label: "Interactions", icon: "interactions", roles: EVERYONE },
+      { href: "/log-interaction", label: "Log interaction", icon: "logany", roles: LOGGERS },
       { href: "/tests", label: "Weekly tests", icon: "tests", roles: EVERYONE },
       { href: "/contests", label: "Contests", icon: "contests", roles: EVERYONE },
     ],
@@ -59,7 +64,8 @@ export const NAV: NavSection[] = [
       { href: "/admin/assignments", label: "Assignments", icon: "assignments", roles: PANEL },
       { href: "/admin/staff", label: "Staff & roles", icon: "staff", roles: PANEL },
       { href: "/admin/change-log", label: "Change log", icon: "changelog", roles: ADMINS },
-      { href: "/admin/curriculum", label: "Curriculum", icon: "curriculum", roles: ADMINS },
+      { href: "/admin/student-access", label: "Student access", icon: "studentkey", roles: ADMINS },
+      { href: "/admin/curriculum", label: "Curriculum", icon: "curriculum", roles: PANEL },
       { href: "/admin/messages", label: "Messages", icon: "messages", roles: ADMINS },
       { href: "/analytics", label: "Analytics", icon: "analytics", roles: ADMINS },
     ],

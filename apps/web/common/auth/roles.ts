@@ -10,7 +10,7 @@ Date : 15 Nov 2026
  * Platform roles. Module-level roles live in core.staff_roles; the UI only needs the
  * platform role to decide menus, panels and route access.
  *
- *   owner              Super admin: Superadmin panel, everything
+ *   owner              Super admin: Superadmin panel, everything; set in the database only
  *   admin              Admin (managers): Admin panel; can add and edit admins, never super admins
  *   senior_instructor  Senior SDI: Senior SDI panel; never sees admins or super admins
  *   instructor         My students only, no panel
@@ -45,10 +45,13 @@ export function visibleRoles(viewer: Role): Role[] {
   return ROLES.filter((r) => ROLE_RANK[r] <= ROLE_RANK[viewer]);
 }
 
-/** Roles this person may give someone (and whose holders they may edit). Admins can make admins. */
+/**
+ * Roles this person may give someone (and whose holders they may edit). Admins can make admins.
+ * Super admin is never given or taken away in NxtOne, not even by another super admin: the
+ * super admins are set in the database only.
+ */
 export function assignableRoles(viewer: Role): Role[] {
-  if (viewer === "owner") return [...ROLES];
-  if (viewer === "admin") return ROLES.filter((r) => r !== "owner");
+  if (viewer === "owner" || viewer === "admin") return ROLES.filter((r) => r !== "owner");
   return [];
 }
 

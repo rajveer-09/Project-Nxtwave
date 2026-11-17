@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS students (
   instructor_id     TEXT REFERENCES instructors(id),
   instructor_match  TEXT NOT NULL DEFAULT 'unmatched'
                     CHECK (instructor_match IN ('matched', 'ambiguous', 'unmatched')),
-  level             SMALLINT NOT NULL DEFAULT 0 CHECK (level BETWEEN 0 AND 7),
+  level             SMALLINT NOT NULL DEFAULT 0 CHECK (level BETWEEN 0 AND 15),
   current_topic     TEXT NOT NULL DEFAULT 'Introduction',
   current_step      TEXT NOT NULL DEFAULT 'Introduction',
   status            TEXT NOT NULL DEFAULT 'Pending Evaluation',
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS interactions (
   taken_by_instructor_id    TEXT REFERENCES instructors(id),
   assigned_instructor_id    TEXT REFERENCES instructors(id),
   assigned_instructor_name  TEXT,                   -- snapshot at log time
-  level                     SMALLINT CHECK (level BETWEEN 0 AND 7), -- student's level at log time
+  level                     SMALLINT CHECK (level BETWEEN 0 AND 15), -- student's level at log time
   current_step              TEXT,                   -- student's step at log time
   topics                    TEXT NOT NULL DEFAULT '',
   status_post_interaction   TEXT NOT NULL,
@@ -190,8 +190,8 @@ LEFT JOIN LATERAL (
 CREATE TABLE IF NOT EXISTS level_changes (
   id           BIGSERIAL PRIMARY KEY,
   student_id   TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-  from_level   SMALLINT NOT NULL CHECK (from_level BETWEEN 0 AND 7),
-  to_level     SMALLINT NOT NULL CHECK (to_level BETWEEN 0 AND 7),
+  from_level   SMALLINT NOT NULL CHECK (from_level BETWEEN 0 AND 15),
+  to_level     SMALLINT NOT NULL CHECK (to_level BETWEEN 0 AND 15),
   change_date  DATE NOT NULL,
   changed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   changed_by   TEXT,                               -- user id (no FK, so removing a login never blocks this)
@@ -282,3 +282,19 @@ CREATE TRIGGER students_instructor_sync
   AFTER UPDATE OF instructor_id ON students
   FOR EACH ROW WHEN (OLD.instructor_id IS DISTINCT FROM NEW.instructor_id)
   EXECUTE FUNCTION sync_instructor_to_core();
+
+-- Levels 0–15: the hub's Curriculum page can add levels after Level 7 (core.curriculum_levels).
+-- Tables created before this allowed 0–7; widen their checks once.
+DO $$
+DECLARE c record;
+BEGIN
+  FOR c IN
+    SELECT conrelid::regclass AS tbl, conname, (regexp_match(pg_get_constraintdef(oid), '\(\(?(\w+) >= 0'))[1] AS col
+    FROM pg_constraint
+    WHERE conrelid IN ('students'::regclass, 'interactions'::regclass, 'level_changes'::regclass)
+      AND contype = 'c' AND pg_get_constraintdef(oid) ~ 'level\w* <= 7'
+  LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', c.tbl, c.conname);
+    EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I CHECK (%I BETWEEN 0 AND 15)', c.tbl, c.conname, c.col);
+  END LOOP;
+END $$;

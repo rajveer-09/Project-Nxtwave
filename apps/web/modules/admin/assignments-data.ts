@@ -7,6 +7,8 @@ Date : 18 Nov 2026
 */
 
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
+import { expire, TAGS } from "@/common/data/cache";
 import { readSheet } from "read-excel-file/node";
 import { authMode } from "@/common/auth/config";
 import { platformRole } from "@/common/auth/core/sessions";
@@ -33,6 +35,13 @@ const fromDb = () => authMode() === "database";
 /** Active staff who can take students: instructors (with an Interactions code) and success coaches. */
 export async function staffOptions(): Promise<Record<Kind, StaffOption[]>> {
   if (!fromDb()) return { instructor: [], coach: [] };
+  return cachedStaffOptions();
+}
+
+async function cachedStaffOptions(): Promise<Record<Kind, StaffOption[]>> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.staff);
   const { rows } = await getDb().query<{ id: string; name: string; email: string; code: string | null; roles: { module: string; role: string }[] }>(
     `SELECT s.id::text, s.name, lower(s.email::text) AS email, s.instructor_code AS code,
             COALESCE((SELECT json_agg(json_build_object('module', r.module, 'role', r.role)) FROM core.staff_roles r WHERE r.staff_id = s.id), '[]') AS roles
@@ -75,7 +84,7 @@ function permissionError(user: SessionUser): string | null {
   return null;
 }
 
-export async function assignStudent(user: SessionUser, niatId: string, kind: Kind, staffId: string | null): Promise<Result> {
+export async function assignStudent(user: SessionUser, niatId: string, kind: Kind, staffId: string | null, detail: string | null = null): Promise<Result> {
   const problem = permissionError(user);
   if (problem) return { ok: false, error: problem };
   const student = (await getRoster()).find((s) => s.niatId === niatId.toUpperCase());
@@ -85,9 +94,131 @@ export async function assignStudent(user: SessionUser, niatId: string, kind: Kin
   if (staffId && !staff) {
     return { ok: false, error: kind === "instructor" ? "Pick an active instructor (with an Interactions instructor code)." : "Pick an active success coach." };
   }
-  const changed = await withChange(user, "ui", null, (db) => applyOne(db, student.niatId, kind, staff));
+  const changed = await withChange(user, "ui", detail, (db) => applyOne(db, student.niatId, kind, staff));
   if (!changed) return { ok: true, message: "No change." };
+  expire(TAGS.staff); // student counts per person
   return { ok: true, message: `${student.name}: ${kind === "coach" ? "coach" : "instructor"} ${staff ? `is now ${staff.name}` : "removed"}.` };
+}
+
+// ---------------------------------------------------------------- history, undo and restore
+
+export type HistoryPeriod = { staffId: string; name: string; from: string; to: string | null; available: boolean };
+export type HistoryEvent = {
+  id: string;
+  at: string;
+  before: { staffId: string | null; name: string | null };
+  after: { staffId: string | null; name: string | null };
+  by: string;
+  source: string;
+  detail: string | null;
+};
+export type KindHistory = {
+  current: { staffId: string | null; name: string | null };
+  events: HistoryEvent[];
+  periods: HistoryPeriod[];
+  /** People who can be set again (active, and for instructors with an Interactions code). */
+  available: string[];
+};
+export type AssignmentHistory = { niatId: string; student: string; instructor: KindHistory; coach: KindHistory };
+
+const SOURCE: Record<string, string> = {
+  ui: "NxtOne",
+  excel: "Excel import",
+  "interactions-api": "Interactions app",
+  "attendance-api": "Attendance app",
+  database: "Database edit",
+  migration: "Data migration",
+};
+
+/**
+ * One student's instructor and coach history: every change (from core.change_log, with who and
+ * from where) and every assignment period (core.student_assignments). Senior instructors see a
+ * change by an admin or super admin as "an admin".
+ */
+export async function assignmentHistory(user: SessionUser, niatId: string): Promise<{ ok: true; history: AssignmentHistory } | { ok: false; error: string }> {
+  const problem = permissionError(user);
+  if (problem) return { ok: false, error: problem };
+  const id = niatId.trim().toUpperCase();
+  const student = (await getRoster()).find((s) => s.niatId === id);
+  if (!student) return { ok: false, error: "That student isn't on the roster." };
+  const db = getDb();
+  const [periods, events] = await Promise.all([
+    db.query<{ kind: Kind; staff_id: string; name: string; active: boolean; deleted: boolean; from_date: string; to_date: string | null }>(
+      `SELECT a.kind, a.staff_id::text, st.name, st.active AND st.left_on IS NULL AS active, st.deleted_at IS NOT NULL AS deleted,
+              a.from_date::text, a.to_date::text
+       FROM core.student_assignments a JOIN core.staff st ON st.id = a.staff_id
+       WHERE a.niat_id = $1 AND a.kind IN ('instructor', 'coach')
+       ORDER BY a.to_date IS NULL DESC, a.from_date DESC`,
+      [id],
+    ),
+    db.query<{ id: string; at: string; txid: string; field: Kind; action: string; staff_id: string | null; old_value: string | null; new_value: string | null; detail: Record<string, unknown>; actor_name: string | null; actor_role: string | null; source: string; source_detail: string | null }>(
+      `SELECT id::text, at, txid::text, field, action, staff_id::text, old_value, new_value, detail, actor_name, actor_role, source, source_detail
+       FROM core.change_log WHERE entity = 'student_assignment' AND niat_id = $1 AND field IN ('instructor', 'coach')
+       ORDER BY at DESC, id DESC LIMIT 200`,
+      [id],
+    ),
+  ]);
+  const options = await staffOptions();
+  const nameOf = new Map<string, string>(periods.rows.map((p) => [p.staff_id, p.name]));
+  const masked = user.role === "senior_instructor";
+
+  const build = (kind: Kind): KindHistory => {
+    const own = events.rows.filter((e) => e.field === kind);
+    const out: HistoryEvent[] = [];
+    const used = new Set<string>();
+    for (const e of own) {
+      if (used.has(e.id)) continue;
+      used.add(e.id);
+      // An "ended" + "assigned" pair in one transaction is one change.
+      const pair = own.find((x) => !used.has(x.id) && x.txid === e.txid && ((e.action === "ended" && x.action === "assigned") || (e.action === "assigned" && x.action === "ended")));
+      if (pair) used.add(pair.id);
+      const ended = e.action === "ended" ? e : pair?.action === "ended" ? pair : null;
+      const assigned = e.action === "assigned" ? e : pair?.action === "assigned" ? pair : null;
+      let before: HistoryEvent["before"] = { staffId: null, name: null };
+      let after: HistoryEvent["after"] = { staffId: null, name: null };
+      if (e.action === "changed") {
+        const prev = e.detail?.previous_staff_id ? String(e.detail.previous_staff_id) : null;
+        before = { staffId: prev, name: e.old_value };
+        after = { staffId: e.staff_id, name: e.new_value };
+      } else if (e.action === "removed") {
+        before = { staffId: e.staff_id, name: e.old_value };
+      } else {
+        if (ended) before = { staffId: ended.staff_id, name: ended.old_value };
+        if (assigned) after = { staffId: assigned.staff_id, name: assigned.new_value };
+      }
+      if (e.action === "dates_changed") continue;
+      const byAdmin = e.actor_role === "owner" || e.actor_role === "admin";
+      out.push({
+        id: e.id,
+        at: new Date(e.at).toISOString(),
+        before,
+        after,
+        by: masked && byAdmin ? "an admin" : (e.actor_name ?? (e.source === "database" ? "Direct database edit" : "System")),
+        source: SOURCE[e.source] ?? e.source,
+        detail: masked && byAdmin ? null : e.source_detail,
+      });
+    }
+    const available = new Set(options[kind].map((o) => o.id));
+    const current = periods.rows.find((p) => p.kind === kind && !p.to_date);
+    return {
+      current: current ? { staffId: current.staff_id, name: current.name } : { staffId: null, name: null },
+      events: out.map((ev) => ({
+        ...ev,
+        before: { ...ev.before, name: ev.before.name ?? (ev.before.staffId ? (nameOf.get(ev.before.staffId) ?? null) : null) },
+      })),
+      periods: periods.rows
+        .filter((p) => p.kind === kind)
+        .map((p) => ({ staffId: p.staff_id, name: p.name, from: p.from_date, to: p.to_date, available: available.has(p.staff_id) && !p.deleted })),
+      available: [...available],
+    };
+  };
+
+  return { ok: true, history: { niatId: id, student: student.name, instructor: build("instructor"), coach: build("coach") } };
+}
+
+/** Undo a change or set a past assignment again; a new, logged change (history is never rewritten). */
+export async function restoreAssignment(user: SessionUser, niatId: string, kind: Kind, staffId: string | null, how: "undo" | "restore"): Promise<Result> {
+  return assignStudent(user, niatId, kind, staffId, how === "undo" ? "undo from history" : "restored from history");
 }
 
 // ---------------------------------------------------------------- Excel / CSV import
@@ -242,5 +373,6 @@ export async function applyAssignmentImport(user: SessionUser, importId: string)
     await db.query("UPDATE core.roster_imports SET status = 'committed' WHERE id = $1 AND status = 'previewed'", [importId]);
     return n;
   });
+  expire(TAGS.staff);
   return { ok: true, message: `Applied ${changed} change${changed === 1 ? "" : "s"} from ${imp.file_name}.` };
 }

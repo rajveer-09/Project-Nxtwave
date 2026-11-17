@@ -16,6 +16,7 @@ Environment (never on the command line):
     SRC_ATTENDANCE_URL, SRC_LOGS_URL, SRC_CONTEST_URL   the old databases (only read)
     TARGET_URL                                          combined database: owner role, direct host
     WEB_PW, ATTENDANCE_PW, CONTEST_PW, INTERACTIONS_PW  passwords for the service roles
+    SUPER_ADMIN_EMAILS                                  optional: the only super admins (comma-separated)
 
 Steps:
   1. core migrations (schemas, extensions, core tables), service roles and grants
@@ -524,6 +525,22 @@ def build_core(owner: psycopg.Connection) -> dict:
                     role_rows.append((staff_id, module, role))
         with owner.cursor() as cur:
             cur.executemany("INSERT INTO core.staff_roles (staff_id, module, role) VALUES (%s, %s, %s)", role_rows)
+
+        # Super admins are fixed: only the emails in SUPER_ADMIN_EMAILS (comma-separated). Anyone who
+        # would be one through an old app's owner role becomes an admin; the listed people get the
+        # role (and a staff row, without a password, if they're new). Passwords are set separately.
+        supers = sorted({e.strip().lower() for e in os.environ.get("SUPER_ADMIN_EMAILS", "").split(",") if e.strip()})
+        if supers:
+            owner.execute(
+                """INSERT INTO core.staff_roles (staff_id, module, role)
+                   SELECT DISTINCT r.staff_id, 'platform', 'admin' FROM core.staff_roles r JOIN core.staff st ON st.id = r.staff_id
+                   WHERE r.role = 'owner' AND NOT (lower(st.email::text) = ANY(%s))
+                   ON CONFLICT (staff_id, module) DO UPDATE SET role = 'admin'""", (supers,))
+            owner.execute("INSERT INTO core.staff (email, name) SELECT e, split_part(e, '@', 1) FROM unnest(%s::text[]) e ON CONFLICT (email) DO NOTHING", (supers,))
+            owner.execute(
+                """INSERT INTO core.staff_roles (staff_id, module, role)
+                   SELECT st.id, 'platform', 'owner' FROM core.staff st WHERE lower(st.email::text) = ANY(%s)
+                   ON CONFLICT (staff_id, module) DO UPDATE SET role = 'owner'""", (supers,))
 
         # ---- instructor assignments from Interactions
         by_code = {p["instructor_code"]: staff_ids[p["email"]] for p in staff.values() if p["instructor_code"]}

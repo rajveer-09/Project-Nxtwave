@@ -8,9 +8,9 @@ Date : 18 Nov 2026
 
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/common/components/confirm";
 import { Button } from "@/common/ui/button";
 import { applyImportAction, assignAction, previewImportAction } from "@/modules/admin/actions";
 import type { ImportPreview, StaffOption } from "@/modules/admin/assignments-data";
@@ -18,41 +18,51 @@ import type { ImportPreview, StaffOption } from "@/modules/admin/assignments-dat
 const select =
   "h-9 w-full min-w-44 rounded-lg border border-input bg-card px-2.5 pr-8 text-[13px] text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60";
 
-/** Instructor or coach picker for one student; saves on change. */
+/** Instructor or coach picker for one student; asks to confirm (with before → after) before saving. */
 export function AssignSelect({ niatId, student, kind, current, options }: { niatId: string; student: string; kind: "instructor" | "coach"; current: string; options: StaffOption[] }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const { ask, dialog } = useConfirm();
   const currentId = options.find((o) => o.name === current)?.id ?? "";
+  const [value, setValue] = useState(currentId);
+  const label = kind === "coach" ? "Success coach" : "Instructor";
+  const none = kind === "coach" ? "No coach" : "Unassigned";
   return (
-    <select
-      aria-label={`${kind === "coach" ? "Success coach" : "Instructor"} for ${student}`}
-      className={select}
-      value={currentId}
-      disabled={pending}
-      onChange={(e) => {
-        const next = e.target.value || null;
-        startTransition(async () => {
-          const result = await assignAction(niatId, kind, next);
-          if (result.ok) {
-            toast.success(result.message);
-            router.refresh();
-          } else toast.error(result.error);
-        });
-      }}
-    >
-      <option value="">{kind === "coach" ? "No coach" : current && current !== "Unassigned" && !currentId ? `${current} (inactive)` : "Unassigned"}</option>
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.name}
-        </option>
-      ))}
-    </select>
+    <>
+      <select
+        aria-label={`${label} for ${student}`}
+        className={select}
+        value={value}
+        onChange={(e) => {
+          const next = e.target.value;
+          setValue(next);
+          const to = options.find((o) => o.id === next)?.name ?? none;
+          ask({
+            title: `Change ${student}'s ${label.toLowerCase()}?`,
+            changes: [
+              { label: "Student", after: `${student} · ${niatId}` },
+              { label, before: current && current !== "Unassigned" ? current : none, after: to },
+            ],
+            description: kind === "instructor" ? "History is kept, the change goes to the change log, and the Interactions app shows the new instructor too." : "History is kept and the change goes to the change log.",
+            confirmLabel: "Save change",
+            action: () => assignAction(niatId, kind, next || null),
+            onCancel: () => setValue(currentId),
+          });
+        }}
+      >
+        <option value="">{kind === "coach" ? "No coach" : current && current !== "Unassigned" && !currentId ? `${current} (inactive)` : "Unassigned"}</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+      {dialog}
+    </>
   );
 }
 
 /** Upload an Excel or CSV file, check the preview, then apply. Logged as "Excel import" with the file name. */
 export function ImportPanel() {
-  const router = useRouter();
+  const { ask, dialog } = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -67,14 +77,22 @@ export function ImportPanel() {
 
   function apply() {
     if (!preview) return;
-    startTransition(async () => {
-      const result = await applyImportAction(preview.id);
-      if (result.ok) {
-        toast.success(result.message);
+    const changes = preview.rows.filter((r) => !r.error && (r.instructor || r.coach));
+    ask({
+      title: `Apply ${preview.changes} change${preview.changes === 1 ? "" : "s"} from ${preview.fileName}?`,
+      description: `${preview.errors ? `${preview.errors} row${preview.errors === 1 ? "" : "s"} with problems will be skipped. ` : ""}Each change keeps history and goes to the change log as an Excel import with the file name.`,
+      items: changes.map(
+        (r) =>
+          `${r.student ?? r.niatId}: ${[r.instructor ? `instructor ${r.instructor.from} → ${r.instructor.to ?? "none"}` : "", r.coach ? `coach ${r.coach.from} → ${r.coach.to ?? "none"}` : ""]
+            .filter(Boolean)
+            .join(", ")}`,
+      ),
+      confirmLabel: `Apply ${preview.changes}`,
+      action: () => applyImportAction(preview.id),
+      onSuccess: () => {
         setPreview(null);
         if (fileRef.current) fileRef.current.value = "";
-        router.refresh();
-      } else toast.error(result.error);
+      },
     });
   }
 
@@ -110,7 +128,7 @@ export function ImportPanel() {
                 Cancel
               </Button>
               <Button onClick={apply} disabled={pending || preview.changes === 0}>
-                {pending ? "Applying…" : `Apply ${preview.changes} change${preview.changes === 1 ? "" : "s"}`}
+                {`Apply ${preview.changes} change${preview.changes === 1 ? "" : "s"}`}
               </Button>
             </div>
           </div>
@@ -144,6 +162,7 @@ export function ImportPanel() {
           ) : null}
         </div>
       ) : null}
+      {dialog}
     </div>
   );
 }

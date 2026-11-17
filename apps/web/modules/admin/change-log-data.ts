@@ -18,7 +18,7 @@ import { getDb } from "@/common/db/pool";
  */
 
 export const SOURCES = ["ui", "excel", "interactions-api", "attendance-api", "contest-api", "database", "migration"] as const;
-export const ENTITIES = ["student_assignment", "student", "attendance_student", "staff_role", "staff"] as const;
+export const ENTITIES = ["student_assignment", "student", "attendance_student", "staff_role", "staff", "student_account", "curriculum"] as const;
 export type Source = (typeof SOURCES)[number];
 export type Entity = (typeof ENTITIES)[number];
 
@@ -37,7 +37,13 @@ export const ENTITY_LABEL: Record<string, string> = {
   attendance_student: "Attendance roster",
   staff_role: "Role",
   staff: "Staff",
+  student_account: "Student sign-in",
+  curriculum: "Curriculum",
 };
+
+// Curriculum rows (db/core/migrations/20261118000005): field = kind of item, action = what happened.
+const CURRICULUM_ACTION: Record<string, string> = { added: "added", renamed: "renamed", archived: "archived", restored: "restored", edited: "changed" };
+const capital = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
 
 export type ChangeFilter = { q?: string; source?: string; entity?: string; from?: string; to?: string; page?: number };
 
@@ -69,6 +75,7 @@ const FIELD_LABEL: Record<string, string> = {
   active: "Sign-in",
   left_on: "Left on",
   password: "Password",
+  "sign-in": "Student sign-in",
   joined_on: "Joined on",
   dropped_on: "Dropped on",
   platform: "NxtOne role",
@@ -76,7 +83,7 @@ const FIELD_LABEL: Record<string, string> = {
   logs: "Interactions role",
   contest: "Contests role",
 };
-const roleLabel = (v: string | null) => (v && v in ROLE_LABEL ? ROLE_LABEL[v as Role] : v);
+const roleLabel = (v: string | null) => (v === "student" ? "Student" : v && v in ROLE_LABEL ? ROLE_LABEL[v as Role] : v);
 
 type Row = {
   id: string;
@@ -95,6 +102,8 @@ type Row = {
   field: string | null;
   old_value: string | null;
   new_value: string | null;
+  place: string | null;
+  item: string | null;
 };
 
 export async function listChanges(viewer: SessionUser, filter: ChangeFilter): Promise<{ entries: ChangeEntry[]; page: number; more: boolean }> {
@@ -103,7 +112,8 @@ export async function listChanges(viewer: SessionUser, filter: ChangeFilter): Pr
   const q = filter.q?.trim() || null;
   const { rows } = await getDb().query<Row>(
     `SELECT c.id::text, c.at, c.txid::text, c.source, c.source_detail, c.actor_name, c.actor_email, c.actor_role,
-            c.entity, c.action, c.niat_id, cs.full_name AS student_name, st.name AS staff_name, c.field, c.old_value, c.new_value
+            c.entity, c.action, c.niat_id, cs.full_name AS student_name, st.name AS staff_name, c.field, c.old_value, c.new_value,
+            c.detail->>'place' AS place, c.detail->>'item' AS item
      FROM core.change_log c
      LEFT JOIN core.students cs ON cs.niat_id = c.niat_id
      LEFT JOIN core.staff st ON st.id = c.staff_id
@@ -161,7 +171,9 @@ function merge(rows: Row[], viewer: SessionUser): ChangeEntry[] {
       at: new Date(r.at).toISOString(),
       entity: r.entity,
       what:
-        r.entity === "staff" && r.action === "added"
+        r.entity === "curriculum"
+          ? `${capital(r.field ?? "item")} ${CURRICULUM_ACTION[r.action] ?? r.action}${r.item ? ` · ${r.item}` : ""}${r.place ? ` · ${r.place}` : ""}`
+          : r.entity === "staff" && r.action === "added"
           ? "Staff added"
           : r.entity === "student" && r.action === "added"
             ? "Added to roster"
@@ -173,7 +185,7 @@ function merge(rows: Row[], viewer: SessionUser): ChangeEntry[] {
         : r.staff_name
           ? { kind: "staff", name: r.staff_name }
           : null,
-      before: isRole ? roleLabel(before) : r.field === "password" ? null : before,
+      before: isRole ? roleLabel(before) : r.field === "password" || (r.entity === "curriculum" && r.action === "archived") ? null : before,
       after: isRole ? roleLabel(after) : r.field === "password" ? "changed" : after,
       by: hideActor ? "Super admin" : (r.actor_name ?? (r.source === "database" ? "Direct database edit" : "System")),
       byRole: hideActor ? null : r.actor_role ? (roleLabel(r.actor_role) ?? r.actor_role) : null,

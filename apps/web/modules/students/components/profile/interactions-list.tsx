@@ -31,7 +31,7 @@ export type InteractionItem = {
 };
 
 /** Expandable interaction rounds; the latest opens by default. */
-export function InteractionsList({ items }: { items: InteractionItem[] }) {
+export function InteractionsList({ items, student = false }: { items: InteractionItem[]; student?: boolean }) {
   const [open, setOpen] = useState<string | null>(items[0]?.id ?? null);
   return (
     <ul className="flex flex-col gap-3">
@@ -75,7 +75,7 @@ export function InteractionsList({ items }: { items: InteractionItem[] }) {
                     <dd className="mt-0.5">{value}</dd>
                   </div>
                 ))}
-                <div>
+                {student ? null : <div>
                   <dt className="text-xs font-bold text-muted-foreground">Recording & transcript</dt>
                   <dd className="mt-0.5 flex flex-wrap gap-x-2">
                     <span className="text-primary">Meet recording</span>·<span className="text-primary">Transcript link</span>
@@ -85,7 +85,7 @@ export function InteractionsList({ items }: { items: InteractionItem[] }) {
                       </>
                     ) : null}
                   </dd>
-                </div>
+                </div>}
               </dl>
             ) : null}
           </li>

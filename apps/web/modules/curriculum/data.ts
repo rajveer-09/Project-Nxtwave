@@ -7,18 +7,24 @@ Date : 17 Nov 2026
 */
 
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
+import { expire, TAGS } from "@/common/data/cache";
 import { createHash, randomUUID } from "node:crypto";
 import { authMode } from "@/common/auth/config";
-import { isAdminRole, type SessionUser } from "@/common/auth/roles";
+import type { SessionUser } from "@/common/auth/roles";
+import type { Db } from "@/common/auth/core/db";
+import { withChange } from "@/common/db/change";
 import { getDb } from "@/common/db/pool";
 import { listOffRoadmapEntries } from "@/modules/interactions/data";
-import { getStepOptionsForTopic, getSubtopicOptions, getTopicOptions, LEVELS, REACHED_STEPS } from "@/modules/interactions/lib/curriculum";
+import { LEVELS } from "@/modules/interactions/lib/curriculum";
 import { bankKey, QUESTION_BANK, type BankQuestion } from "@/modules/interactions/lib/question-bank";
+import { findLevel, findTopic, levelName, subtopicNames, topicSteps } from "./lib/structure";
+import { canEditCurriculum, getStructure } from "./structure";
 
 /**
  * Curriculum and question bank (ARCHITECTURE §4.5). The roadmap structure
- * (levels → topics → subtopics) comes from the Interactions app's curriculum;
- * the questions are editable. With the database: core.curriculum_questions and
+ * (levels → topics → subtopics → steps) is in ./structure.ts; the questions are here.
+ * Senior instructors and admins edit both. With the database: core.curriculum_questions and
  * core.off_roadmap_decisions (the questions imported from the Interactions app are
  * added on first use). Without it, an in-memory sample for development.
  */
@@ -130,6 +136,13 @@ function ensureSeeded(): Promise<void> {
 
 async function dbQuestions(includeArchived: boolean): Promise<Question[]> {
   await ensureSeeded();
+  return cachedQuestions(includeArchived);
+}
+
+async function cachedQuestions(includeArchived: boolean): Promise<Question[]> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.curriculum);
   const { rows } = await getDb().query<QuestionRow>(
     `SELECT id, level, topic, subtopic, step, title, source, url, notes, tweak_of, origin, created_by, archived
      FROM core.curriculum_questions WHERE $1 OR NOT archived ORDER BY level, topic, subtopic NULLS FIRST, step, created_at, title`,
@@ -138,16 +151,17 @@ async function dbQuestions(includeArchived: boolean): Promise<Question[]> {
   return rows.map(toQuestion);
 }
 
-async function insertQuestion(q: Question) {
+async function insertQuestion(q: Question, db?: Db) {
   if (!fromDb()) {
     store().questions.push(q);
     return;
   }
-  await getDb().query(
+  await (db ?? getDb()).query(
     `INSERT INTO core.curriculum_questions (id, level, topic, subtopic, step, title, source, url, notes, tweak_of, origin, created_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [q.id, q.level, q.topic, q.subtopic, q.step, q.title, q.source, q.url, q.notes, q.tweakOf, q.origin, q.createdBy],
   );
+  expire(TAGS.curriculum);
 }
 
 async function getDecision(key: string): Promise<Decision | null> {
@@ -160,19 +174,6 @@ async function getDecision(key: string): Promise<Decision | null> {
   return r ? { status: r.status, by: r.decided_by, at: new Date(r.decided_at).toISOString(), questionId: r.question_id ?? undefined } : null;
 }
 
-/** Roadmap structure for the admin screen: levels → topics → subtopics, plus the steps each topic uses. */
-export function roadmap() {
-  return LEVELS.map((name, level) => ({
-    level,
-    name,
-    topics: getTopicOptions(name).map((topic) => ({
-      topic,
-      subtopics: getSubtopicOptions(name, topic),
-      steps: level === 0 ? [] : REACHED_STEPS.filter((s) => getStepOptionsForTopic(name, topic).some((o) => o.startsWith(s.code))),
-    })),
-  }));
-}
-
 export async function listQuestions(includeArchived = false) {
   if (fromDb()) return dbQuestions(includeArchived);
   return store().questions.filter((q) => includeArchived || !q.archived);
@@ -182,8 +183,8 @@ export async function listQuestions(includeArchived = false) {
 export async function questionBank(): Promise<Record<string, BankQuestion[]>> {
   const bank: Record<string, BankQuestion[]> = {};
   for (const q of await listQuestions()) {
-    const key = bankKey(LEVELS[q.level], q.topic, q.subtopic);
-    (bank[key] ??= []).push({ title: q.title, step: q.step, source: q.source || (q.origin === "promoted" ? "Added from review" : "") });
+    const key = bankKey(levelName(q.level), q.topic, q.subtopic);
+    (bank[key] ??= []).push({ title: q.title, step: q.step, source: q.source || (q.origin === "promoted" ? "Added from review" : ""), url: q.url || undefined });
   }
   return bank;
 }
@@ -192,36 +193,70 @@ type Fail = { ok: false; error: string };
 
 export type QuestionInput = { level: number; topic: string; subtopic: string | null; step: string; title: string; source: string; url: string; notes: string; tweakOf: string | null };
 
-function placementError(input: Pick<QuestionInput, "level" | "topic" | "subtopic" | "step">): string | null {
-  const levelName = LEVELS[input.level];
-  if (!levelName) return "Unknown level.";
-  if (!getTopicOptions(levelName).includes(input.topic)) return "That topic isn't in this level.";
-  const subs = getSubtopicOptions(levelName, input.topic);
+async function placementError(input: Pick<QuestionInput, "level" | "topic" | "subtopic" | "step">): Promise<string | null> {
+  const s = await getStructure();
+  if (!findLevel(s, input.level)) return "Unknown level.";
+  const topic = findTopic(s, input.level, input.topic);
+  if (!topic || topic.archived) return "That topic isn't in this level.";
+  const subs = subtopicNames(s, input.level, input.topic);
   if (subs.length && (!input.subtopic || !subs.includes(input.subtopic))) return "Pick one of this topic's subtopics.";
   if (!subs.length && input.subtopic) return "This topic has no subtopics.";
-  if (input.level > 0 && !REACHED_STEPS.some((s) => s.code === input.step)) return "Pick a step.";
+  if (input.level > 0 && !topicSteps(s, input.level, input.topic).some((x) => x.code === input.step)) return "Pick a step.";
   return null;
 }
 
+const DENIED = "Only senior instructors and admins change the curriculum.";
+const badLink = (url: string) => !!url && !/^https:\/\/\S+$/i.test(url);
+
 export async function addQuestion(user: SessionUser, input: QuestionInput, origin: Question["origin"] = "roadmap"): Promise<{ ok: true; question: Question } | Fail> {
-  if (!isAdminRole(user.role)) return { ok: false, error: "Only admins change the curriculum." };
-  const problem = placementError(input);
+  if (!canEditCurriculum(user)) return { ok: false, error: DENIED };
+  if (!input.title.trim()) return { ok: false, error: "The question name is required." };
+  const problem = await placementError(input);
   if (problem) return { ok: false, error: problem };
-  if (!input.title.trim()) return { ok: false, error: "Give the question a title." };
-  if (input.url && !/^https:\/\/\S+$/i.test(input.url)) return { ok: false, error: "Links must start with https://" };
+  if (badLink(input.url)) return { ok: false, error: "Links must start with https://" };
   const dupe = (await listQuestions()).find(
     (q) => !q.archived && q.level === input.level && q.topic === input.topic && q.subtopic === input.subtopic && q.title.trim().toLowerCase() === input.title.trim().toLowerCase(),
   );
   if (dupe) return { ok: false, error: "That question is already in this place." };
   const question: Question = { ...input, title: input.title.trim(), id: randomUUID().slice(0, 8), origin, createdBy: user.name, archived: false };
-  await insertQuestion(question);
+  if (fromDb()) await withChange(user, "ui", "Curriculum", (db) => insertQuestion(question, db));
+  else await insertQuestion(question);
   return { ok: true, question };
 }
 
+/** Corrects a question's name, link, source or notes (its place stays). */
+export async function updateQuestion(
+  user: SessionUser,
+  id: string,
+  patch: { title: string; url: string; source: string; notes: string },
+): Promise<{ ok: true } | Fail> {
+  if (!canEditCurriculum(user)) return { ok: false, error: DENIED };
+  const title = patch.title.trim();
+  if (!title) return { ok: false, error: "The question name is required." };
+  if (badLink(patch.url)) return { ok: false, error: "Links must start with https://" };
+  const all = await listQuestions(true);
+  const current = all.find((q) => q.id === id);
+  if (!current) return { ok: false, error: "Question not found." };
+  const dupe = all.find(
+    (q) => q.id !== id && !q.archived && q.level === current.level && q.topic === current.topic && q.subtopic === current.subtopic && q.title.trim().toLowerCase() === title.toLowerCase(),
+  );
+  if (dupe) return { ok: false, error: "That question is already in this place." };
+  if (!fromDb()) {
+    Object.assign(current, { title, url: patch.url, source: patch.source, notes: patch.notes });
+    return { ok: true };
+  }
+  await withChange(user, "ui", "Curriculum", (db) =>
+    db.query("UPDATE core.curriculum_questions SET title = $2, url = $3, source = $4, notes = $5 WHERE id = $1", [id, title, patch.url, patch.source, patch.notes]),
+  );
+  expire(TAGS.curriculum);
+  return { ok: true };
+}
+
 export async function setArchived(user: SessionUser, id: string, archived: boolean): Promise<{ ok: true } | Fail> {
-  if (!isAdminRole(user.role)) return { ok: false, error: "Only admins change the curriculum." };
+  if (!canEditCurriculum(user)) return { ok: false, error: DENIED };
   if (fromDb()) {
-    const { rows } = await getDb().query("UPDATE core.curriculum_questions SET archived = $2 WHERE id = $1 RETURNING id", [id, archived]);
+    const { rows } = await withChange(user, "ui", "Curriculum", (db) => db.query("UPDATE core.curriculum_questions SET archived = $2 WHERE id = $1 RETURNING id", [id, archived]));
+    expire(TAGS.curriculum);
     return rows.length ? { ok: true } : { ok: false, error: "Question not found." };
   }
   const q = store().questions.find((x) => x.id === id);
@@ -285,7 +320,7 @@ export async function decide(
   action: "added" | "kept" | "dismissed",
   placement?: { level: number; topic: string; subtopic: string | null; step: string },
 ): Promise<{ ok: true } | Fail> {
-  if (!isAdminRole(user.role)) return { ok: false, error: "Only admins review off-roadmap questions." };
+  if (!canEditCurriculum(user)) return { ok: false, error: "Only senior instructors and admins review off-roadmap questions." };
   const item = (await offRoadmapQueue()).find((q) => q.key === key);
   if (!item) return { ok: false, error: "That question isn't in the queue." };
   if (item.decision) return { ok: false, error: "Already decided. Undo first to change it." };
@@ -301,6 +336,7 @@ export async function decide(
       "INSERT INTO core.off_roadmap_decisions (key, status, decided_by, question_id) VALUES ($1, $2, $3, $4)",
       [key, action, user.name, questionId ?? null],
     );
+    expire(TAGS.curriculum);
   } else {
     store().decisions.set(key, { status: action, by: user.name, at: new Date().toISOString(), questionId });
   }
@@ -308,7 +344,7 @@ export async function decide(
 }
 
 export async function undoDecision(user: SessionUser, key: string): Promise<{ ok: true } | Fail> {
-  if (!isAdminRole(user.role)) return { ok: false, error: "Only admins review off-roadmap questions." };
+  if (!canEditCurriculum(user)) return { ok: false, error: "Only senior instructors and admins review off-roadmap questions." };
   const d = await getDecision(key);
   if (!d) return { ok: false, error: "Nothing to undo." };
   if (fromDb()) {
@@ -317,6 +353,7 @@ export async function undoDecision(user: SessionUser, key: string): Promise<{ ok
        DELETE FROM core.curriculum_questions WHERE id IN (SELECT question_id FROM d) AND origin = 'promoted'`,
       [key],
     );
+    expire(TAGS.curriculum);
     return { ok: true };
   }
   if (d.questionId) store().questions = store().questions.filter((q) => q.id !== d.questionId);

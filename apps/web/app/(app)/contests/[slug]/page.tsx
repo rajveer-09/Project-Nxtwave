@@ -17,8 +17,9 @@ export const metadata = { title: "Contest" };
 async function Content({ params }: { params: Promise<{ slug: string }> }) {
   const user = await requireAccess("/contests");
   const { slug } = await params;
-  // Admins publish or discard held scans; instructors start on "My students".
-  return <ContestView slug={slug} canReview={isAdminRole(user.role)} hasStudents={!isAdminRole(user.role)} />;
+  // Admins publish or discard held scans; instructors start on "My students" (the contest service
+  // only knows instructors' own students; everyone else starts on all students).
+  return <ContestView slug={slug} canReview={isAdminRole(user.role)} hasStudents={user.role === "instructor"} />;
 }
 
 export default function ContestPage({ params }: PageProps<"/contests/[slug]">) {

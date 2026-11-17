@@ -78,7 +78,7 @@ export function FormatBuilder({ formatId, name, current, usedBy }: { formatId: s
         )}
       >
         <div className="flex flex-col">
-          <span className={cn("font-bold", dirty && "text-[#6E3005]")}>
+          <span className={cn("font-bold", dirty && "text-[#6E3005] dark:text-[#F5B98A]")}>
             {dirty ? `Unpublished changes · will become version ${current.version + 1}` : `${name} · version ${current.version} in use`}
           </span>
           <span className="text-[13px] text-sidebar-foreground">

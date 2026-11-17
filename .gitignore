@@ -98,3 +98,6 @@ services/attendance-api/server
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Lighthouse CI reports
+.lighthouseci/
