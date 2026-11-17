@@ -173,3 +173,29 @@ Date : 14 Nov 2026
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* ---- Page transitions (React <ViewTransition default="page"> in the app shell) ---- */
+::view-transition-old(.page) {
+  animation: 110ms ease-out both nx-page-out;
+}
+::view-transition-new(.page) {
+  animation: 200ms cubic-bezier(0.2, 0, 0, 1) both nx-page-in;
+}
+@keyframes nx-page-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes nx-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

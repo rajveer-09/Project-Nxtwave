@@ -9,6 +9,8 @@ Date : 17 Nov 2026
 import "server-only";
 import { connection } from "next/server";
 import { cache } from "react";
+import { cacheLife, cacheTag } from "next/cache";
+import { TAGS } from "@/common/data/cache";
 import type { BarListItem } from "@/common/components/bar-list";
 import { getRoster, usingSampleData } from "@/common/data/roster";
 import { getDb } from "@/common/db/pool";
@@ -40,32 +42,12 @@ export type HomeData = {
 const signed = (n: number, unit = "") => `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}${unit}`;
 const pctOf = (part: number, whole: number) => (whole ? Math.round((part * 1000) / whole) / 10 : null);
 
-/** Cached per request: the header and the body both read it. */
-export const getHomeData = cache(loadHomeData);
-
-async function loadHomeData(): Promise<HomeData> {
-  await connection();
-  const today = todayIst();
-  const dateLabel = new Date(`${today}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-  if (usingSampleData()) {
-    return {
-      sample: true,
-      dateLabel: "Monday, 16 Nov 2026 · Term 5",
-      kpis: sample.homeKpis,
-      atRisk: sample.atRiskStudents,
-      atRiskTotal: 47,
-      students: 964,
-      levels: sample.levelDistribution,
-      halls: sample.hallAttendance,
-      todo: sample.adminTodo,
-      contest: { ...sample.latestContest, date: sample.latestContest.date, state: "Final", bestGlobalRank: sample.latestContest.bestGlobalRank },
-    };
-  }
-
+/** The whole-cohort numbers: the same for everyone, so shared and kept a minute. */
+async function homeQueries(today: string) {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.home, TAGS.roster, TAGS.interactions);
   const db = getDb();
-  // Instructors and success coaches see their own students; everyone else the whole roster.
-  const scope = studentScope(await getSessionUser());
-  const roster = (await getRoster()).filter((s) => inScope(scope, s));
   const [day, interactions, contests, drafts, offRoadmap, term] = await Promise.all([
     // Latest day with marks (today if marking has started), and the same weekday a week earlier
     db.query<{ date: string; present: number; marked: number; halls_marked: number; halls_total: number; prev_present: number; prev_marked: number }>(
@@ -102,6 +84,43 @@ async function loadHomeData(): Promise<HomeData> {
     db.query<{ n: number }>("SELECT count(*)::int AS n FROM logs.interactions WHERE questions_asked ILIKE '%(off-roadmap)%'"),
     db.query<{ name: string }>("SELECT name FROM attendance.terms WHERE $1::date BETWEEN start_date AND end_date ORDER BY is_current DESC LIMIT 1", [today]),
   ]);
+
+  return {
+    day: { rows: day.rows },
+    interactions: { rows: interactions.rows },
+    contests: { rows: contests.rows },
+    drafts: { rows: drafts.rows },
+    offRoadmap: { rows: offRoadmap.rows },
+    term: { rows: term.rows },
+  };
+}
+
+/** Cached per request: the header and the body both read it. */
+export const getHomeData = cache(loadHomeData);
+
+async function loadHomeData(): Promise<HomeData> {
+  await connection();
+  const today = todayIst();
+  const dateLabel = new Date(`${today}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  if (usingSampleData()) {
+    return {
+      sample: true,
+      dateLabel: "Monday, 16 Nov 2026 · Term 5",
+      kpis: sample.homeKpis,
+      atRisk: sample.atRiskStudents,
+      atRiskTotal: 47,
+      students: 964,
+      levels: sample.levelDistribution,
+      halls: sample.hallAttendance,
+      todo: sample.adminTodo,
+      contest: { ...sample.latestContest, date: sample.latestContest.date, state: "Final", bestGlobalRank: sample.latestContest.bestGlobalRank },
+    };
+  }
+
+  // Instructors and success coaches see their own students; everyone else the whole roster.
+  const scope = studentScope(await getSessionUser());
+  const roster = (await getRoster()).filter((s) => inScope(scope, s));
+  const { day, interactions, contests, drafts, offRoadmap, term } = await homeQueries(today);
 
   // ---- attendance
   const d = day.rows[0];

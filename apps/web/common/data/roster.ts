@@ -7,7 +7,9 @@ Date : 17 Nov 2026
 */
 
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
 import { authMode } from "@/common/auth/config";
+import { expire, TAGS } from "@/common/data/cache";
 import { getDb } from "@/common/db/pool";
 import { riskFlags, type RiskInput } from "@/common/domain/risk";
 import { todayIst } from "@/common/lib/dates";
@@ -18,28 +20,26 @@ import { ROSTER, type College, type RosterStudent } from "@/common/sample-data/r
  * with the numbers each module contributes (attendance %, DSA level and progress,
  * interactions, LeetCode). In development without a database it is the sample roster.
  *
- * The database version is one query (web_svc reads every module schema). It is kept
- * for a short time per server process and dropped as soon as anything is written.
+ * The database version is one query (web_svc reads every module schema), kept in the shared
+ * cache: a minute fresh, rebuilt in the background after that, and expired the moment anything
+ * that feeds it is written (interaction logged, assignment or class changed).
  */
 
-const TTL_MS = 60_000;
-const cache = globalThis as unknown as { __roster?: { at: number; rows: Promise<RosterStudent[]> } };
+/** Expire the roster (and what's built from it) after a write. */
+export function invalidateRoster(niatId?: string) {
+  expire(TAGS.roster, TAGS.home, ...(niatId ? [TAGS.student(niatId)] : []));
+}
 
-/** Drop the cached roster after a write (interaction logged, progress changed, …). */
-export function invalidateRoster() {
-  cache.__roster = undefined;
+async function cachedRoster(today: string): Promise<RosterStudent[]> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.roster);
+  return loadRoster(today);
 }
 
 export async function getRoster(): Promise<RosterStudent[]> {
   if (authMode() !== "database") return ROSTER;
-  const hit = cache.__roster;
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.rows;
-  const rows = loadRoster();
-  cache.__roster = { at: Date.now(), rows };
-  rows.catch(() => {
-    if (cache.__roster?.rows === rows) cache.__roster = undefined;
-  });
-  return rows;
+  return cachedRoster(todayIst());
 }
 
 export async function getRosterStudent(niatId: string): Promise<RosterStudent | null> {
@@ -166,8 +166,7 @@ export function daysBetween(fromYmd: string, toYmd: string) {
   return Math.round((Date.parse(`${toYmd}T00:00:00Z`) - Date.parse(`${fromYmd}T00:00:00Z`)) / 86_400_000);
 }
 
-async function loadRoster(): Promise<RosterStudent[]> {
-  const today = todayIst();
+async function loadRoster(today: string): Promise<RosterStudent[]> {
   const { rows } = await getDb().query<Row>(ROSTER_SQL, [today]);
   return rows.map((r) => {
     const attendance30d = pct(r.p30, r.m30);

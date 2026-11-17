@@ -63,7 +63,7 @@ export async function assignAction(niatId: string, kind: string, staffId: string
   if (!k.success) return { ok: false, error: "Unknown assignment." };
   const result = await assignStudent(user, String(niatId), k.data, staffId ? String(staffId) : null);
   if (result.ok) {
-    invalidateRoster();
+    invalidateRoster(String(niatId));
     revalidatePath("/admin/assignments");
   }
   return result;

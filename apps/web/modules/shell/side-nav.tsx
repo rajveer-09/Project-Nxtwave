@@ -8,7 +8,7 @@ Date : 14 Nov 2026
 
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/common/lib/utils";
 import type { NavSection } from "@/common/lib/nav";
@@ -16,6 +16,20 @@ import { NavIcon } from "@/modules/shell/nav-icon";
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+}
+
+/** Shows at once that a click registered, while the next page loads. */
+function PendingDot() {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "ml-auto size-1.5 rounded-full bg-primary transition-opacity duration-150",
+        pending ? "animate-pulse opacity-100 delay-100" : "opacity-0",
+      )}
+    />
+  );
 }
 
 /** Sidebar links. Reads the pathname, so the shell renders it inside <Suspense>. */
@@ -44,6 +58,7 @@ export function SideNavLinks({ sections }: { sections: NavSection[] }) {
               >
                 <NavIcon name={item.icon} className="size-[18px]" />
                 {item.label}
+                <PendingDot />
               </Link>
             );
           })}

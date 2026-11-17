@@ -18,6 +18,19 @@ import type { RosterStudent } from "@/common/sample-data/roster";
 import { authMode } from "@/common/auth/config";
 import { getRoster, getRosterStudent } from "@/common/data/roster";
 import { buildStudentDetailFromDb } from "@/modules/students/detail-db";
+import { TAGS } from "@/common/data/cache";
+import { todayIst } from "@/common/lib/dates";
+import { cacheLife, cacheTag } from "next/cache";
+
+/** One student's page from the database, shared by everyone who opens it; expired by writes about them. */
+async function cachedDetail(niatId: string, today: string) {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.student(niatId), TAGS.roster, TAGS.interactions);
+  void today; // part of the cache key, so "today" never comes from yesterday's copy
+  const student = await getRosterStudent(niatId);
+  return student ? buildStudentDetailFromDb(student) : null;
+}
 import type { FlagKey } from "@/common/domain/risk";
 
 /**
@@ -144,7 +157,8 @@ export const getStudent = cache(async (niatId: string) => {
   const student = await getRosterStudent(niatId);
   if (!student) return null;
   const fromDb = authMode() === "database";
-  const detail = fromDb ? await buildStudentDetailFromDb(student) : buildStudentDetail(student);
+  const detail = fromDb ? await cachedDetail(student.niatId, todayIst()) : buildStudentDetail(student);
+  if (!detail) return null;
 
   // Sample data only: rounds logged through the form go on top of the generated ones.
   const logged = fromDb ? [] : (await listInteractions({ niatId: student.niatId })).filter((it) => !it.id.startsWith(`${student.niatId}-r`));

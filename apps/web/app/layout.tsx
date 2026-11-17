@@ -17,8 +17,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 
 export const metadata: Metadata = {
-  title: { default: "Student Hub", template: "%s · Student Hub" },
-  description: "Attendance, interactions, weekly tests and LeetCode contests in one place.",
+  title: { default: "NxtOne", template: "%s · NxtOne" },
+  description: "NxtOne by NxtWave.",
+  applicationName: "NxtOne",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

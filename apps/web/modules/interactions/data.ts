@@ -12,6 +12,8 @@ import type { SessionUser } from "@/common/auth/roles";
 import { authMode } from "@/common/auth/config";
 import { getDb } from "@/common/db/pool";
 import { getRosterStudent, invalidateRoster } from "@/common/data/roster";
+import { expire, TAGS } from "@/common/data/cache";
+import { cacheLife, cacheTag } from "next/cache";
 import { callService } from "@/common/services/call";
 import { todayIst } from "@/common/lib/dates";
 import { INTERACTIONS_SERVICE } from "@/modules/interactions/service";
@@ -281,6 +283,9 @@ function interactionSelect(withTranscript: boolean) {
 }
 
 async function dbListInteractions(filter: { instructor?: string; niatId?: string; niatIds?: string[]; limit?: number }): Promise<Interaction[]> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  cacheTag(TAGS.interactions, ...(filter.niatId ? [TAGS.student(filter.niatId)] : []));
   const { rows } = await getDb().query<DbRow>(
     `${interactionSelect(!!filter.niatId)}
      WHERE ($1::text IS NULL OR cur.name = $1) AND ($2::text IS NULL OR upper(it.student_id) = $2)
@@ -337,7 +342,8 @@ async function dbCreateInteraction(input: InteractionInput, user: SessionUser): 
     date: input.date,
   });
   if (!result.ok) return { ok: false, error: result.error };
-  invalidateRoster();
+  invalidateRoster(student.niatId);
+  expire(TAGS.interactions);
 
   const saved = await getDb().query<DbRow>(`${interactionSelect(false)} WHERE it.id = $1`, [id]);
   const row = saved.rows[0];

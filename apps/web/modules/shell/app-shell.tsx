@@ -7,9 +7,10 @@ Date : 14 Nov 2026
 */
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, ViewTransition } from "react";
 import { initials, ROLE_LABEL, type SessionUser } from "@/common/auth/roles";
 import { navForRole } from "@/common/lib/nav";
+import { Brand } from "@/common/components/brand";
 import { SideNavLinks, SideNavLinksFallback } from "@/modules/shell/side-nav";
 import { SignOutButton } from "@/modules/shell/sign-out-button";
 import { MessageBell, UrgentBanner } from "@/modules/messages/components/notifications";
@@ -33,14 +34,8 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
         className="flex flex-[1_1_220px] flex-col gap-0.5 border-r border-sidebar-border bg-sidebar px-3.5 py-5 md:max-w-64"
       >
         <div className="mb-4 flex items-center justify-between gap-2">
-          <Link href="/" className="flex min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-1">
-            <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] bg-primary font-heading text-base font-bold text-primary-foreground">
-              N
-            </span>
-            <span className="flex min-w-0 flex-col">
-              <span className="font-heading text-[15px] font-semibold text-foreground">NxtWave Student Hub</span>
-              <span className="text-xs text-muted-foreground">Attendance · Interactions · Contests</span>
-            </span>
+          <Link href="/" aria-label="NxtOne home" className="flex min-w-0 items-center rounded-lg px-2 py-1.5">
+            <Brand size="sm" />
           </Link>
           <MessageBell />
         </div>
@@ -61,7 +56,10 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       </nav>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-6 px-4 py-7 sm:px-8 sm:pb-12">
         <UrgentBanner />
-        {children}
+        {/* Page changes crossfade (styles in globals.css); the sidebar stays put. */}
+        <ViewTransition default="page">
+          <div className="flex min-w-0 flex-col gap-6">{children}</div>
+        </ViewTransition>
       </main>
     </div>
   );

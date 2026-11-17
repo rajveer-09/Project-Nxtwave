@@ -16,7 +16,7 @@ import { devSignIn, passwordSignIn, type SignInState } from "@/modules/login/act
 
 const GOOGLE_ERRORS: Record<string, string> = {
   google_not_configured: "Google sign-in isn't set up on this environment yet.",
-  google_no_account: "That Google account isn't linked to an active staff account. Ask an Owner to add you.",
+  google_no_account: "That Google account doesn't have NxtOne access yet. Ask your admin to add you.",
   google_wrong_domain: "Use your NxtWave work Google account.",
   google_email_not_verified: "Google hasn't verified that email address.",
   google_state: "The sign-in took too long or was opened in another tab. Please try again.",
@@ -34,7 +34,7 @@ export function GoogleError() {
 }
 
 const inputClass =
-  "h-11 rounded-lg border border-input bg-card px-3 text-[15px] text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60";
+  "h-12 rounded-xl border border-input bg-card px-3 text-[15px] text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60";
 
 /** Carries ?next= (set by proxy.ts) into the form so sign-in returns to the page that was asked for. */
 function NextField() {
@@ -50,7 +50,7 @@ export function PasswordForm({ enabled }: { enabled: boolean }) {
         <NextField />
       </Suspense>
       <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-        Work email
+        Email
         <input
           name="email"
           type="email"
@@ -71,8 +71,8 @@ export function PasswordForm({ enabled }: { enabled: boolean }) {
           {state.error}
         </p>
       ) : null}
-      <Button type="submit" size="lg" className="h-12 text-[15px] font-semibold" disabled={!enabled || pending}>
-        {pending ? "Signing in…" : "Sign in"}
+      <Button type="submit" size="lg" className="mt-1 h-12 rounded-xl text-[15px] font-semibold" disabled={!enabled || pending}>
+        {pending ? "Signing in…" : "Continue"}
       </Button>
     </form>
   );
