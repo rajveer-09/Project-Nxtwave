@@ -88,8 +88,8 @@ services/attendance-api/server
 # Logs, local tooling, OS and editor files
 # ---------------------------------------------------------------
 *.log
-logs/
-tmp/
+/logs/
+/tmp/
 .claude/
 .idea/
 .vscode/
