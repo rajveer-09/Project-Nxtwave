@@ -4,21 +4,17 @@
 # @ Nxtwave
 #
 # Who reviews changes to each part of NxtOne. GitHub asks the owners of every folder a pull request
-# touches for a review. Replace each placeholder with the team or people who own that module (for
-# example a GitHub team such as the attendance team), then remove the leading "# " to switch the
-# line on. Later lines win over earlier ones.
+# touches for a review; with "Require review from Code Owners" on the master branch rule, a pull
+# request into master can't merge until they approve.
 #
-# Everything else (platform, CI, docs): the platform team
-# *                          <platform-owners>
-#
-# Attendance: Go service and its screens
-# /modules/attendance/       <attendance-owners>
-#
-# Contests: NxtRank service, scan worker and its screens
-# /modules/contest/          <contest-owners>
-#
-# Interactions: service, log form, curriculum
-# /modules/interactions/     <interactions-owners>
-#
-# Shared database schema and roles: platform, plus every module (all services depend on it)
-# /platform/db/              <platform-owners> <attendance-owners> <contest-owners> <interactions-owners>
+# Rajveer reviews everything that goes to master. Later lines win over earlier ones, so when a
+# module team is added below, keep @rajveer-09 on its line, or Rajveer stops being required there.
+
+*                            @rajveer-09
+
+# Module teams: replace the placeholder with the team or people, keep @rajveer-09, and remove the
+# leading "# " to switch the line on.
+# /modules/attendance/       @rajveer-09 <attendance-owners>
+# /modules/contest/          @rajveer-09 <contest-owners>
+# /modules/interactions/     @rajveer-09 <interactions-owners>
+# /platform/db/              @rajveer-09 <attendance-owners> <contest-owners> <interactions-owners>
