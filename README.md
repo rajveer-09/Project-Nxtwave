@@ -7,7 +7,7 @@ It replaces three separate apps:
 | Old app | Becomes |
 |---|---|
 | Attendance tracker (Go API + Next.js) | **Attendance** module; the Go API keeps running as a service |
-| Student Interaction Logs (Next.js) | **Interactions** module, served directly by the web app |
+| Student Interaction Logs / Instructor Evaluation (Next.js) | **Interactions** module; its backend runs as its own service |
 | NxtRank LeetCode contest tracker (FastAPI + worker) | **Contests** module; the NxtRank API and scan worker keep running as a service |
 
 Each backend is its own microservice: own folder, own Docker image, own CI, deployed independently. They live in one repository so the web app and a service can change together in one commit.
@@ -17,13 +17,15 @@ Each backend is its own microservice: own folder, own Docker image, own CI, depl
 ```
 Browser ──► apps/web (Next.js 16)
               ├─ UI for every module, one sign-in, one session
-              ├─ core + Interactions + Tests + Curriculum + Messages data (direct SQL)
+              ├─ core + Tests + Curriculum + Messages data (direct SQL)
+              ├─ /api/logs/*        ──► services/interactions-api (Node + Hono)
               ├─ /api/attendance/*  ──► services/attendance-api (Go)
               └─ /api/contest/*     ──► services/contest (FastAPI) + scan worker
 
 One Neon Postgres database, one schema per owner:
   core        students, staff, roles, assignments, sessions, audit  (written by the web app)
-  logs        interactions, tests, curriculum, messages             (web app)
+  logs        interactions, student progress, instructors           (interactions service)
+              tests, curriculum, messages                           (web app)
   attendance  halls, sessions, marks, terms, internships            (Go service)
   contest     contests, results, scans                              (NxtRank)
 ```
@@ -36,14 +38,15 @@ One Neon Postgres database, one schema per owner:
 
 | Path | What it is |
 |---|---|
-| `apps/web` | Next.js 16 app: all UI, unified auth, core/Interactions/Tests/Curriculum/Messages data, service proxies |
+| `apps/web` | Next.js 16 app: all UI, unified auth, core/Tests/Curriculum/Messages data, service proxies |
+| `services/interactions-api` | Interactions backend, ported from Instructor_Evaluation at `1012735`: interaction logs (create, edit, delete with reason), student progress, instructors (add, assign, change history), level-conversion analytics |
 | `services/attendance-api` | Go attendance API (from the attendance repo at `1850dce`) |
 | `services/contest` | NxtRank backend (from `rajveer-09/nxtrank` at `6d3cb36`): FastAPI API and LeetCode scan worker, one image, two commands |
 | `db/core/migrations` | dbmate migrations for the shared `core` schema |
 | `db/setup/service_roles.sql` | Creates one Postgres role per service with its grants and `search_path` |
 | `db/local/setup.sh` | Local only: applies the core migrations and service roles inside `docker compose` |
 | `db/migration/roster_dry_run.py` | Read-only preview of the roster and staff merge from the three old databases |
-| `docker-compose.yml` | Whole stack locally: Postgres, both services, the worker (opt-in) and the web app |
+| `docker-compose.yml` | Whole stack locally: Postgres, every service, the worker (opt-in) and the web app |
 | `.github/workflows` | One CI workflow per app or service, each runs only when its folder changes |
 
 ### Services
@@ -51,11 +54,14 @@ One Neon Postgres database, one schema per owner:
 | Service | Port | Runs | Migrations |
 |---|---|---|---|
 | `apps/web` | 3000 | `next start` | `db/core/migrations` (dbmate) |
+| `services/interactions-api` | 8090 | `node dist/server.js` | `db/schema.sql` (idempotent), on start with `MIGRATE_ON_START=true` (`logs` schema) |
 | `services/attendance-api` | 8080 | `/server` | its own, on start with `MIGRATE_ON_START=true` (`attendance` schema) |
 | `services/contest` API | 8000 | Gunicorn + Uvicorn | Alembic, on start (`contest` schema) |
 | `services/contest` worker | — | `python -m app.cli worker`, exactly one replica | — |
 
 Each service connects as its own Postgres role, whose `search_path` puts its tables in its own schema, so the services' existing queries run unchanged.
+
+The interactions service maps the signed-in email to its own `users` table (instructor link, senior flag, admin), as the old app did. A web Owner or Admin with no row there gets read-only access; anyone else without a row is refused.
 
 ### How `apps/web` is organised
 
@@ -79,7 +85,7 @@ apps/web/
     ├── home/         Home dashboard
     ├── students/     Students list and the full Student page
     ├── attendance/   Hall sheet, calendar, terms, internships, imports, analytics
-    ├── interactions/ Log form (incl. Wispr Flow transcript), recent logs, CSV export
+    ├── interactions/ Log form (incl. Wispr Flow transcript), recent logs, CSV export; service.ts → interactions-api
     ├── contests/     Contest list, contest page, results, scan review
     ├── tests/        Weekly test result-format builder, test creation, results entry
     ├── curriculum/   Level question bank and off-roadmap question review
@@ -101,7 +107,7 @@ Rules:
 Requires Docker.
 
 ```bash
-docker compose up --build                     # web :3000, attendance API :8080, contest API :8000, Postgres :5433
+docker compose up --build                     # web :3000, interactions API :8090, attendance API :8080, contest API :8000, Postgres :5433
 docker compose --profile worker up --build    # also the LeetCode scan worker
 ```
 

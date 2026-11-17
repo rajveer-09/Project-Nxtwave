@@ -11,11 +11,12 @@ Date : 14 Nov 2026
 -- as psql variables so they never live in the repo:
 --
 --   psql "$DATABASE_URL_OWNER" \
---     -v web_pw="…" -v attendance_pw="…" -v contest_pw="…" \
+--     -v web_pw="…" -v attendance_pw="…" -v contest_pw="…" -v interactions_pw="…" \
 --     -f db/setup/service_roles.sql
 --
 -- Run AFTER the core migration and AFTER module data has been restored into
--- the attendance / logs / contest schemas.
+-- the attendance / logs / contest schemas. Safe to re-run; re-run it after a service
+-- creates new tables so the read grants below cover them.
 
 \set ON_ERROR_STOP on
 
@@ -25,22 +26,29 @@ SELECT format('CREATE ROLE attendance_svc LOGIN PASSWORD %L', :'attendance_pw')
   WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'attendance_svc') \gexec
 SELECT format('CREATE ROLE contest_svc LOGIN PASSWORD %L', :'contest_pw')
   WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'contest_svc') \gexec
+SELECT format('CREATE ROLE interactions_svc LOGIN PASSWORD %L', :'interactions_pw')
+  WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'interactions_svc') \gexec
 
 -- Each service sees its own schema first, then core. Works with Neon's pooled
 -- connections because role settings apply per (user, database) server connection.
 ALTER ROLE web_svc        SET search_path = logs, core, extensions;
 ALTER ROLE attendance_svc SET search_path = attendance, core, extensions;
 ALTER ROLE contest_svc    SET search_path = contest, core, extensions;
+ALTER ROLE interactions_svc SET search_path = logs, core, extensions;
 
-GRANT USAGE ON SCHEMA extensions TO web_svc, attendance_svc, contest_svc;
-GRANT USAGE ON SCHEMA core TO web_svc, attendance_svc, contest_svc;
+GRANT USAGE ON SCHEMA extensions TO web_svc, attendance_svc, contest_svc, interactions_svc;
+GRANT USAGE ON SCHEMA core TO web_svc, attendance_svc, contest_svc, interactions_svc;
 
 -- core: written by the web app only, read by the services
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA core TO web_svc;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA core TO web_svc;
-GRANT SELECT ON ALL TABLES IN SCHEMA core TO attendance_svc, contest_svc;
+GRANT SELECT ON ALL TABLES IN SCHEMA core TO attendance_svc, contest_svc, interactions_svc;
 
--- Each service owns its module schema
+-- Each service owns its module schema. logs belongs to the interactions service; the web app
+-- keeps access there for Tests, Curriculum and Messages.
+GRANT ALL ON SCHEMA logs TO interactions_svc;
+GRANT ALL ON ALL TABLES IN SCHEMA logs TO interactions_svc;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA logs TO interactions_svc;
 GRANT ALL ON SCHEMA logs TO web_svc;
 GRANT ALL ON ALL TABLES IN SCHEMA logs TO web_svc;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA logs TO web_svc;

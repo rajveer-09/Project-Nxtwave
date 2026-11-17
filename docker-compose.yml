@@ -6,7 +6,7 @@
 # Local development: one Postgres laid out like the combined Neon database
 # (core / attendance / logs / contest schemas, one role per service), plus every service.
 #
-#   docker compose up --build                     web + attendance API + contest API
+#   docker compose up --build                     web + attendance, contest and interactions APIs
 #   docker compose --profile worker up --build    ...plus the LeetCode scan worker
 #
 # The passwords below are for this local stack only. Real values live in each
@@ -44,6 +44,7 @@ services:
       WEB_PW: local-web
       ATTENDANCE_PW: local-attendance
       CONTEST_PW: local-contest
+      INTERACTIONS_PW: local-interactions
     volumes:
       - ./db:/db:ro
     entrypoint: ["sh", "/db/local/setup.sh"]
@@ -80,6 +81,22 @@ services:
       timeout: 3s
       retries: 30
 
+  interactions-api:
+    build: ./services/interactions-api
+    depends_on:
+      db-setup:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://interactions_svc:local-interactions@postgres:5432/studenthub
+      IDENTITY_JWT_SECRET: local-dev-interactions-identity-secret-01
+      MIGRATE_ON_START: "true"
+    ports: ["8090:8090"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
   # Scans LeetCode, so it is opt-in locally (--profile worker). Exactly one replica.
   contest-worker:
     build: ./services/contest
@@ -99,9 +116,13 @@ services:
     depends_on:
       - attendance-api
       - contest-api
+      - interactions-api
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
+      # The interactions service already verifies identity tokens.
+      INTERACTIONS_API_ORIGIN: http://interactions-api:8090
+      INTERACTIONS_JWT_SECRET: local-dev-interactions-identity-secret-01
       # Uncomment once the services verify identity tokens. Until then the web app
       # answers /api/attendance and /api/contest from its built-in sample services.
       # ATTENDANCE_API_ORIGIN: http://attendance-api:8080

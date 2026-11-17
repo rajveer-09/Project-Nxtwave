@@ -28,5 +28,6 @@ done
 
 psql -v ON_ERROR_STOP=1 -q \
   -v web_pw="$WEB_PW" -v attendance_pw="$ATTENDANCE_PW" -v contest_pw="$CONTEST_PW" \
+  -v interactions_pw="$INTERACTIONS_PW" \
   -f /db/setup/service_roles.sql
 echo "database ready"

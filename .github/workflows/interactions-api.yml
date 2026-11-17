@@ -1,0 +1,69 @@
+#
+# Author : Rajveer Sharma
+# Date : 17 Nov 2026
+# @ Nxtwave
+#
+
+name: interactions-api
+
+on:
+  push:
+    branches: [master, staging]
+    paths: ["services/interactions-api/**", ".github/workflows/interactions-api.yml"]
+  pull_request:
+    paths: ["services/interactions-api/**", ".github/workflows/interactions-api.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: interactions_ci
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: services/interactions-api
+    env:
+      DATABASE_URL: postgresql://interactions_svc:ci@localhost:5432/interactions_ci
+      IDENTITY_JWT_SECRET: ci-only-not-a-secret-0123456789abcdef
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: services/interactions-api/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Database role laid out like production (search_path logs, core, extensions)
+        env:
+          PGPASSWORD: ci
+        run: |
+          psql -h localhost -U postgres -d interactions_ci -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA logs; CREATE SCHEMA core; CREATE SCHEMA extensions;
+          CREATE ROLE interactions_svc LOGIN PASSWORD 'ci';
+          ALTER ROLE interactions_svc SET search_path = logs, core, extensions;
+          GRANT ALL ON SCHEMA logs TO interactions_svc;
+          GRANT USAGE ON SCHEMA core, extensions TO interactions_svc;
+          SQL
+      - name: Schema applies into logs, and again (idempotent)
+        run: |
+          node dist/migrate.js | tee migrate.out
+          grep -q "(logs)" migrate.out
+          node dist/migrate.js
+      - name: Starts, answers /health and refuses unsigned requests
+        run: |
+          node dist/server.js &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8090/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:8090/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/api/students)" = 401
+      - name: Docker image builds
+        run: docker build -t interactions-api-ci .
