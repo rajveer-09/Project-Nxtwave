@@ -13,7 +13,18 @@
 db/migration/out/
 *.local.csv
 *.csv
+*.xlsx
+*.xls
 seed-data/
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+backups/
+services/contest/data/
+services/contest/results/
+credentials/
+*service-account*.json
 
 # ---------------------------------------------------------------
 # Documentation: only the root README is published
@@ -58,9 +69,12 @@ yarn-error.log*
 # ---------------------------------------------------------------
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 venv/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # ---------------------------------------------------------------
 # Go

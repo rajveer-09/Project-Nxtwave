@@ -8,7 +8,9 @@ It replaces three separate apps:
 |---|---|
 | Attendance tracker (Go API + Next.js) | **Attendance** module; the Go API keeps running as a service |
 | Student Interaction Logs (Next.js) | **Interactions** module, served directly by the web app |
-| NxtRank LeetCode contest tracker (FastAPI + worker) | **Contests** module; NxtRank stays a separate service in its own repo |
+| NxtRank LeetCode contest tracker (FastAPI + worker) | **Contests** module; the NxtRank API and scan worker keep running as a service |
+
+Each backend is its own microservice: own folder, own Docker image, own CI, deployed independently. They live in one repository so the web app and a service can change together in one commit.
 
 ## Architecture
 
@@ -17,7 +19,7 @@ Browser ──► apps/web (Next.js 16)
               ├─ UI for every module, one sign-in, one session
               ├─ core + Interactions + Tests + Curriculum + Messages data (direct SQL)
               ├─ /api/attendance/*  ──► services/attendance-api (Go)
-              └─ /api/contest/*     ──► NxtRank (FastAPI, separate repo)
+              └─ /api/contest/*     ──► services/contest (FastAPI) + scan worker
 
 One Neon Postgres database, one schema per owner:
   core        students, staff, roles, assignments, sessions, audit  (written by the web app)
@@ -35,11 +37,25 @@ One Neon Postgres database, one schema per owner:
 | Path | What it is |
 |---|---|
 | `apps/web` | Next.js 16 app: all UI, unified auth, core/Interactions/Tests/Curriculum/Messages data, service proxies |
-| `services/attendance-api` | Go attendance API (copied from the attendance repo) |
+| `services/attendance-api` | Go attendance API (from the attendance repo at `1850dce`) |
+| `services/contest` | NxtRank backend (from `rajveer-09/nxtrank` at `6d3cb36`): FastAPI API and LeetCode scan worker, one image, two commands |
 | `db/core/migrations` | dbmate migrations for the shared `core` schema |
 | `db/setup/service_roles.sql` | Creates one Postgres role per service with its grants and `search_path` |
+| `db/local/setup.sh` | Local only: applies the core migrations and service roles inside `docker compose` |
 | `db/migration/roster_dry_run.py` | Read-only preview of the roster and staff merge from the three old databases |
-| `.github/workflows` | CI for the web app and the attendance API |
+| `docker-compose.yml` | Whole stack locally: Postgres, both services, the worker (opt-in) and the web app |
+| `.github/workflows` | One CI workflow per app or service, each runs only when its folder changes |
+
+### Services
+
+| Service | Port | Runs | Migrations |
+|---|---|---|---|
+| `apps/web` | 3000 | `next start` | `db/core/migrations` (dbmate) |
+| `services/attendance-api` | 8080 | `/server` | its own, on start with `MIGRATE_ON_START=true` (`attendance` schema) |
+| `services/contest` API | 8000 | Gunicorn + Uvicorn | Alembic, on start (`contest` schema) |
+| `services/contest` worker | — | `python -m app.cli worker`, exactly one replica | — |
+
+Each service connects as its own Postgres role, whose `search_path` puts its tables in its own schema, so the services' existing queries run unchanged.
 
 ### How `apps/web` is organised
 
@@ -80,7 +96,18 @@ Rules:
 3. Route files stay thin: access check and data loading, then render the module's component.
 4. Server-only code starts with `import "server-only"`.
 
-## Running the web app
+## Running everything locally
+
+Requires Docker.
+
+```bash
+docker compose up --build                     # web :3000, attendance API :8080, contest API :8000, Postgres :5433
+docker compose --profile worker up --build    # also the LeetCode scan worker
+```
+
+The local Postgres has the same layout as the combined database: `core`, `attendance`, `logs` and `contest` schemas with one role per service. The passwords in `docker-compose.yml` are for that local stack only.
+
+## Running the web app on its own
 
 Requires Node 24.
 
