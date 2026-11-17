@@ -9,9 +9,9 @@ name: contest
 on:
   push:
     branches: [master, staging]
-    paths: ["services/contest/**", ".github/workflows/contest.yml"]
+    paths: ["modules/contest/backend/**", ".github/workflows/contest.yml"]
   pull_request:
-    paths: ["services/contest/**", ".github/workflows/contest.yml"]
+    paths: ["modules/contest/backend/**", ".github/workflows/contest.yml"]
 
 permissions:
   contents: read
@@ -29,14 +29,14 @@ jobs:
         options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
-        working-directory: services/contest
+        working-directory: modules/contest/backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: services/contest/pyproject.toml
+          cache-dependency-path: modules/contest/backend/pyproject.toml
       - run: pip install -e ".[dev,prod]"
       - name: Lint (ruff)
         run: ruff check .

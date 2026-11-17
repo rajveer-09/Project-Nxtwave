@@ -9,9 +9,9 @@ name: interactions-api
 on:
   push:
     branches: [master, staging]
-    paths: ["services/interactions-api/**", ".github/workflows/interactions-api.yml"]
+    paths: ["modules/interactions/backend/**", ".github/workflows/interactions-api.yml"]
   pull_request:
-    paths: ["services/interactions-api/**", ".github/workflows/interactions-api.yml"]
+    paths: ["modules/interactions/backend/**", ".github/workflows/interactions-api.yml"]
 
 permissions:
   contents: read
@@ -29,7 +29,7 @@ jobs:
         options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
-        working-directory: services/interactions-api
+        working-directory: modules/interactions/backend
     env:
       DATABASE_URL: postgresql://interactions_svc:ci@localhost:5432/interactions_ci
       IDENTITY_JWT_SECRET: ci-only-not-a-secret-0123456789abcdef
@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: services/interactions-api/package-lock.json
+          cache-dependency-path: modules/interactions/backend/package-lock.json
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build

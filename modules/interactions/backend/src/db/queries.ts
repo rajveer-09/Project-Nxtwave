@@ -1,0 +1,731 @@
+// Ported from Instructor_Evaluation db/queries.ts. Behaviour is unchanged except that the actor
+// comes from the web app's identity token (src/auth.ts) instead of a session cookie.
+
+import type { PoolClient } from 'pg';
+import { getPool } from './pool.ts';
+import type { Actor, CreateInstructorResult, InstructorChange, InstructorListEntry, InstructorMatchStatus, InstructorOption, InteractionLog, LevelConversion, NewInstructorInput, Student } from '../types.ts';
+import { type DirectoryInstructor, matchInstructor, normalizeInstructorName } from '../domain/instructor-directory.ts';
+import { LEVELS, coerceStep, coerceSubtopic, getDefaultTopicForLevel, getKnownStepCodes, getStepOptionsForTopic, getSubtopicOptions, isKnownSubtopic, isKnownTopic } from '../domain/curriculum.ts';
+import { STRICT_RULE_FROM, requiredTopicsByLevelNumber } from '../domain/level-completion.ts';
+import { hashPassword } from '../password.ts';
+
+// Data access for the API routes. Output field names match lib/types.ts.
+
+export class ValidationError extends Error {}
+export class ForbiddenError extends Error {}
+
+// Only the instructor a student is assigned to may change that student or log interactions for them.
+// Admins have read-only access to students.
+function assertCanEdit(student: Student, actor: Actor) {
+  if (actor.role !== 'instructor' || !actor.instructorId || student.instructorId !== actor.instructorId) {
+    throw new ForbiddenError(`Only ${student.instructorFullName ?? 'the assigned instructor'} can update ${student.name}.`);
+  }
+}
+
+// Logging an interaction: the assigned instructor, as above; or anyone else who signs in here (an
+// instructor, a senior or a hub admin) when they took the interaction themselves. The web app's
+// "Log interaction" page sends their own name as "taken by" and shows them nothing else of the student.
+function assertCanLog(student: Student, actor: Actor, log: Pick<InteractionLog, 'instructorName' | 'instructorEmail'>, takenById: string | null) {
+  const assigned = actor.role === 'instructor' && !!actor.instructorId && student.instructorId === actor.instructorId;
+  if (assigned) return;
+  const self = actor.role === 'instructor'
+    ? !!actor.instructorId && takenById === actor.instructorId
+    : (log.instructorEmail ?? '').trim().toLowerCase() === actor.email || (log.instructorName ?? '').trim() === actor.name;
+  if (!self) throw new ForbiddenError(`Only ${student.instructorFullName ?? 'the assigned instructor'} can log for ${student.name} with someone else as "taken by". Log what you took yourself.`);
+}
+
+const levelNumber = (label: string) => Number(label.replace('Level ', ''));
+
+// Tells the database who is making this transaction's changes, for core.change_log
+// (platform/db/core/migrations/20261118000001). Without it a change is logged as a direct database edit.
+async function setChangeContext(client: PoolClient, actor: Actor) {
+  await client.query(
+    `SELECT set_config('app.source', 'interactions-api', true), set_config('app.actor_name', $1, true),
+            set_config('app.actor_email', $2, true), set_config('app.actor_role', $3, true)`,
+    [actor.name, actor.email, actor.role === 'admin' ? 'admin' : actor.isSenior ? 'senior_instructor' : 'instructor']
+  );
+}
+
+const INTERACTION_JSON = `
+  json_build_object(
+    'id', it.id,
+    'studentId', it.student_id,
+    'studentName', it.student_name,
+    'instructorName', it.instructor_name,
+    'instructorEmail', it.instructor_email,
+    'takenByInstructorId', it.taken_by_instructor_id,
+    'assignedInstructorName', it.assigned_instructor_name,
+    'level', CASE WHEN it.level IS NULL THEN NULL ELSE 'Level ' || it.level END,
+    'currentStep', it.current_step,
+    'currentSubtopic', it.current_subtopic,
+    'subtopics', it.subtopics,
+    -- to_jsonb lookup so reads also work on a database not yet migrated (no steps_reached column).
+    'stepsReached', COALESCE(to_jsonb(it)->'steps_reached', '{}'::jsonb),
+    'topics', it.topics,
+    'statusPostInteraction', it.status_post_interaction,
+    'rating', it.rating::float,
+    'questionsAsked', it.questions_asked,
+    'remarks', it.remarks,
+    'performedWell', it.performed_well,
+    'improvementAreas', it.improvement_areas,
+    'tweakedQuestions', it.tweaked_questions,
+    'actionItems', it.action_items,
+    'meetRecording', it.meet_recording,
+    'granolaTranscript', it.granola_transcript,
+    'interactionRound', it.interaction_round,
+    'date', to_char(it.date, 'YYYY-MM-DD'),
+    'createdAt', it.created_at,
+    'createdBy', it.created_by,
+    'updatedAt', it.updated_at
+  )`;
+
+interface StudentOverviewRow {
+  id: string;
+  name: string;
+  degree: string;
+  section: string;
+  hall: string;
+  instructor_raw: string;
+  instructor_id: string | null;
+  instructor_match: InstructorMatchStatus;
+  instructor_first_name: string | null;
+  instructor_full_name: string | null;
+  instructor_email: string | null;
+  level: number;
+  current_topic: string;
+  current_subtopic: string | null;
+  current_step: string;
+  status: string;
+  interaction_count: number;
+  last_interaction_date: string | null;
+  level_status: string;
+  level_interaction_count: number;
+}
+
+// Flat Student shape used by the existing UI components.
+function toStudent(row: StudentOverviewRow): Student {
+  return {
+    id: row.id,
+    name: row.name,
+    degree: row.degree,
+    section: row.section,
+    hall: row.hall,
+    level: `Level ${row.level}`,
+    currentTopic: row.current_topic,
+    currentSubtopic: row.current_subtopic,
+    currentStep: row.current_step,
+    status: row.level_status, // standing at the current level (see student_overview)
+    interactionCount: row.interaction_count,
+    levelInteractionCount: row.level_interaction_count,
+    lastInteractionDate: row.last_interaction_date,
+    instructor: row.instructor_first_name ?? row.instructor_raw,
+    instructorEmail: row.instructor_email ?? undefined,
+    instructorId: row.instructor_id ?? undefined,
+    instructorFullName: row.instructor_full_name ?? undefined,
+    instructorMatch: row.instructor_match,
+  };
+}
+
+export async function getStudents(): Promise<Student[]> {
+  const { rows } = await getPool().query<StudentOverviewRow>('SELECT * FROM student_overview ORDER BY name');
+  return rows.map(toStudent);
+}
+
+async function getStudent(id: string, client?: PoolClient): Promise<Student | null> {
+  const { rows } = await (client ?? getPool()).query<StudentOverviewRow>('SELECT * FROM student_overview WHERE id = $1', [id]);
+  return rows[0] ? toStudent(rows[0]) : null;
+}
+
+// Level / topic / subtopic / step change from the "My Students" page. Invalid combinations are rejected. A level
+// change without an explicit topic resets topic, subtopic and step to that level's defaults; a topic change resets
+// subtopic and step; a subtopic change restarts the step (each subtopic has its own run of steps).
+export async function updateStudentProgress(
+  id: string,
+  patch: { level?: string; currentTopic?: string; currentSubtopic?: string | null; currentStep?: string },
+  actor: Actor
+): Promise<Student | null> {
+  const current = await getStudent(id);
+  if (!current) return null;
+  assertCanEdit(current, actor);
+
+  const level = patch.level ?? current.level;
+  if (!LEVELS.includes(level)) throw new ValidationError(`Unknown level "${level}".`);
+  const levelChanged = level !== current.level;
+
+  const topic = patch.currentTopic ?? (levelChanged ? getDefaultTopicForLevel(level) : current.currentTopic ?? getDefaultTopicForLevel(level));
+  if (!topic || !isKnownTopic(level, topic)) throw new ValidationError(`Topic "${topic ?? ''}" is not part of ${level}.`);
+  const topicChanged = topic !== current.currentTopic;
+
+  const subtopicOptions = getSubtopicOptions(level, topic);
+  const subtopic = patch.currentSubtopic !== undefined
+    ? patch.currentSubtopic || null
+    : coerceSubtopic(level, topic, levelChanged || topicChanged ? undefined : current.currentSubtopic);
+  if (subtopic ? !isKnownSubtopic(level, topic, subtopic) : subtopicOptions.length > 0) {
+    throw new ValidationError(subtopic ? `Subtopic "${subtopic}" is not part of ${topic}.` : `Choose a subtopic for ${topic}.`);
+  }
+  const subtopicChanged = subtopic !== (current.currentSubtopic ?? null);
+
+  const step = patch.currentStep ?? (levelChanged || topicChanged || subtopicChanged ? coerceStep(level, topic, undefined) : coerceStep(level, topic, current.currentStep));
+  if (!getStepOptionsForTopic(level, topic).includes(step)) throw new ValidationError(`Step "${step}" is not valid for ${topic}.`);
+
+  // A level change is recorded in level_changes by a DB trigger; app.user_id tells it who made the change.
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await setChangeContext(client, actor);
+    await client.query("SELECT set_config('app.user_id', $1, true)", [actor.id]);
+    await client.query(
+      'UPDATE students SET level = $2, current_topic = $3, current_subtopic = $4, current_step = $5, updated_at = now() WHERE id = $1',
+      [id, levelNumber(level), topic, subtopic, step]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return getStudent(id);
+}
+
+// Level conversions for Analytics: one entry per student per level boundary N→N+1 they are still above.
+//  - Undone promotions count nothing, whatever day they were undone: only students currently above Level N
+//    count for N→N+1 (demotions only happen as corrections). A jump N→M counts each boundary in between.
+//  - Which rule applies depends on when the student FIRST moved past Level N (so a later correction doesn't
+//    switch rules); see lib/levelCompletion.ts:
+//      before STRICT_RULE_FROM (everything tracked until then, kept exactly as it was): counted, dated by the
+//        latest-dated interaction logged at Level N before the (latest) promotion, else the day of the level change;
+//      from STRICT_RULE_FROM: counted only when every required topic of Level N has its own Cleared interaction at
+//        Level N, dated by the Cleared date of the topic cleared last (each topic's first Cleared date, any order).
+//        A topic with subtopics counts once each of its subtopics has a Cleared interaction listing it (the
+//        interaction's `subtopics`). Topic and subtopic names match loosely (topicKeySql below).
+//        Otherwise `incomplete`: the card lists it as not counted.
+//  - `estimated` marks changes rebuilt from interaction history (before tracking started).
+// Topic names are compared loosely (case, spaces, punctuation and a plural "s" ignored), because older interactions
+// were typed by hand: "If Else", "If-else" and "if else" all mean "If else", "Traversals" means "Traversal".
+const topicKeySql = (expr: string) => `regexp_replace(regexp_replace(lower(${expr}), '[^a-z0-9&]', '', 'g'), 's$', '')`;
+
+export async function getLevelConversions(): Promise<LevelConversion[]> {
+  const { rows } = await getPool().query<LevelConversion>(
+    `WITH required AS (
+       -- one row per required topic, or per subtopic for a topic that has subtopics (sub is NULL otherwise)
+       SELECT e.key::int AS lvl, ${topicKeySql("x->>'topic'")} AS topic, ${topicKeySql('s.sub')} AS sub
+       FROM jsonb_each($1::jsonb) AS e
+       CROSS JOIN LATERAL jsonb_array_elements(e.value) AS x
+       LEFT JOIN LATERAL jsonb_array_elements_text(x->'subtopics') AS s(sub) ON true
+     ), first_cleared_sub AS (
+       SELECT it.student_id, COALESCE(it.level, 0) AS lvl, ${topicKeySql('t')} AS topic, ${topicKeySql('st')} AS sub,
+              min(it.date) AS cleared_on
+       FROM interactions it
+       CROSS JOIN LATERAL unnest(string_to_array(it.topics, ',')) AS t
+       CROSS JOIN LATERAL unnest(string_to_array(it.subtopics, ',')) AS st
+       WHERE it.status_post_interaction = 'Cleared' AND it.subtopics <> ''
+       GROUP BY 1, 2, 3, 4
+     ), first_cleared AS (
+       SELECT it.student_id, COALESCE(it.level, 0) AS lvl, ${topicKeySql('t')} AS topic, min(it.date) AS cleared_on
+       FROM interactions it CROSS JOIN LATERAL unnest(string_to_array(it.topics, ',')) AS t
+       WHERE it.status_post_interaction = 'Cleared'
+       GROUP BY 1, 2, 3
+     ), ups AS (
+       SELECT lc.id, lc.student_id, lc.changed_at, lc.source, b AS boundary,
+              CASE WHEN lc.source = 'backfill' THEN lc.change_date ELSE COALESCE((
+                SELECT max(it.date) FROM interactions it
+                WHERE it.student_id = lc.student_id AND COALESCE(it.level, 0) = lc.from_level AND it.created_at <= lc.changed_at
+              ), lc.change_date) END AS fallback_on
+       FROM level_changes lc
+       CROSS JOIN LATERAL generate_series(lc.from_level, lc.to_level - 1) AS b
+       WHERE lc.to_level > lc.from_level
+     ), latest AS (
+       SELECT DISTINCT ON (u.student_id, u.boundary) u.*,
+              min(u.changed_at) OVER (PARTITION BY u.student_id, u.boundary) AS first_crossed_at
+       FROM ups u ORDER BY u.student_id, u.boundary, u.changed_at DESC, u.id DESC
+     ), strict AS (
+       SELECT l.student_id, l.boundary,
+              CASE WHEN bool_and(COALESCE(fc.cleared_on, fs.cleared_on) IS NOT NULL)
+                   THEN max(COALESCE(fc.cleared_on, fs.cleared_on)) END AS completed_on
+       FROM latest l
+       JOIN required r ON r.lvl = l.boundary
+       LEFT JOIN first_cleared fc ON r.sub IS NULL AND fc.student_id = l.student_id AND fc.lvl = r.lvl AND fc.topic = r.topic
+       LEFT JOIN first_cleared_sub fs ON r.sub IS NOT NULL AND fs.student_id = l.student_id AND fs.lvl = r.lvl
+         AND fs.topic = r.topic AND fs.sub = r.sub
+       GROUP BY l.student_id, l.boundary
+     ), dated AS (
+       SELECT l.*,
+              CASE WHEN l.first_crossed_at < $2::timestamptz THEN l.fallback_on ELSE st.completed_on END AS on_date,
+              l.first_crossed_at >= $2::timestamptz AND st.completed_on IS NULL AS incomplete
+       FROM latest l LEFT JOIN strict st USING (student_id, boundary)
+     )
+     SELECT to_char(COALESCE(d.on_date, d.fallback_on), 'YYYY-MM-DD') AS "date", d.student_id AS "studentId",
+            'Level ' || d.boundary AS "fromLevel", 'Level ' || (d.boundary + 1) AS "toLevel",
+            d.source = 'backfill' AS estimated, d.incomplete
+     FROM dated d
+     JOIN students s ON s.id = d.student_id
+     WHERE s.level > d.boundary
+     ORDER BY COALESCE(d.on_date, d.fallback_on) DESC, d.boundary, d.student_id`,
+    [JSON.stringify(requiredTopicsByLevelNumber()), STRICT_RULE_FROM]
+  );
+  return rows;
+}
+
+export async function getInteractions(): Promise<InteractionLog[]> {
+  const { rows } = await getPool().query<{ log: InteractionLog }>(
+    `SELECT ${INTERACTION_JSON} AS log FROM interactions it ORDER BY it.date DESC, it.created_at DESC`
+  );
+  return rows.map((row) => row.log);
+}
+
+// Instructor directory as stored in the DB (the source of truth at run time).
+async function loadDirectory(client: PoolClient): Promise<DirectoryInstructor[]> {
+  const { rows } = await client.query<{ id: string; first_name: string; full_name: string; email: string; aliases: string[] }>(
+    'SELECT id, first_name, full_name, email, aliases FROM instructors'
+  );
+  return rows.map((r) => ({ id: r.id, firstName: r.first_name, name: r.full_name, email: r.email, aliases: r.aliases }));
+}
+
+// Inserts one interaction row.
+export async function insertInteraction(
+  client: PoolClient,
+  log: InteractionLog,
+  student: { instructorId?: string | null; level?: string; currentSubtopic?: string | null; currentStep?: string },
+  options: { skipExisting?: boolean; createdBy?: string } = {}
+): Promise<boolean> {
+  const directory = await loadDirectory(client);
+  // Picked from the instructor dropdown (id); name/email matching is the fallback for older clients.
+  const takenBy = directory.find((i) => i.id === log.takenByInstructorId)
+    ?? matchInstructor(directory, log.instructorName, log.instructorEmail).instructor;
+  const snapshotLevel = log.level ?? student.level;
+  const result = await client.query(
+    `INSERT INTO interactions (id, student_id, student_name, instructor_name, instructor_email, taken_by_instructor_id,
+       assigned_instructor_id, assigned_instructor_name, level, current_step, topics, status_post_interaction, rating,
+       questions_asked, remarks, performed_well, improvement_areas, tweaked_questions, action_items, meet_recording,
+       granola_transcript, interaction_round, date, created_at, created_by, current_subtopic, subtopics, steps_reached)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+     ${options.skipExisting ? 'ON CONFLICT (id) DO NOTHING' : ''}`,
+    [
+      log.id, log.studentId, log.studentName, log.instructorName || '', log.instructorEmail ?? null, takenBy?.id ?? null,
+      student.instructorId ?? null, log.assignedInstructorName ?? null,
+      snapshotLevel && LEVELS.includes(snapshotLevel) ? levelNumber(snapshotLevel) : null,
+      log.currentStep ?? student.currentStep ?? null,
+      log.topics || '', log.statusPostInteraction, log.rating ?? 0, log.questionsAsked || '', log.remarks || '',
+      log.performedWell || '', log.improvementAreas || '', log.tweakedQuestions || '', log.actionItems || '',
+      log.meetRecording || '', log.granolaTranscript || '', log.interactionRound || 1, log.date, log.createdAt,
+      options.createdBy ?? null,
+      // Snapshot like level/step: the form sends it; older clients don't, so fall back to the student's.
+      (log.currentSubtopic !== undefined ? log.currentSubtopic : student.currentSubtopic) ?? null,
+      cleanSubtopics(log.subtopics),
+      JSON.stringify(log.stepsReached ?? {}),
+    ]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+// Student status text written after an interaction is logged (from lib/storage.ts). The UI filters on the
+// words "Revisit" and "Cleared".
+function statusAfterInteraction(log: Pick<InteractionLog, 'statusPostInteraction'>): string {
+  if (log.statusPostInteraction === 'Need to Revisit') return 'Needs Revisit';
+  if (log.statusPostInteraction === 'Cleared') return 'Cleared';
+  return 'In Progress';
+}
+
+// Saves an interaction and updates the student's status in one transaction.
+const STATUSES = ['Need to Revisit', 'Cleared', 'In Progress'];
+
+// Field checks shared by creating and editing an interaction.
+// Feedback an interaction must carry (same rule as the Log Interaction form). Questions asked and remarks: always.
+// Performed well, improvement areas and action items (required from 2026-11-13): always for a new interaction; on an
+// edit only if the interaction already had that text, so older logs saved without them can still be corrected.
+type FeedbackKey = 'questionsAsked' | 'remarks' | 'performedWell' | 'improvementAreas' | 'actionItems';
+const FEEDBACK_LABELS: Record<FeedbackKey, string> = {
+  questionsAsked: 'Questions asked', remarks: 'Remarks', performedWell: 'Performed well',
+  improvementAreas: 'Improvement areas', actionItems: 'Action items',
+};
+const hasText = (value: string | undefined | null) => !!(value ?? '').trim();
+
+function validateFeedback(log: Pick<InteractionLog, FeedbackKey>, previous?: Pick<InteractionLog, FeedbackKey>) {
+  const keys = (Object.keys(FEEDBACK_LABELS) as FeedbackKey[]).filter(
+    (key) => key === 'questionsAsked' || key === 'remarks' || !previous || hasText(previous[key])
+  );
+  const blank = keys.filter((key) => !hasText(log[key])).map((key) => FEEDBACK_LABELS[key]);
+  if (blank.length) throw new ValidationError(`Fill in: ${blank.join(', ')}.`);
+}
+
+function validateInteractionFields(log: Pick<InteractionLog, 'date' | 'rating' | 'statusPostInteraction'>) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(log.date || '')) throw new ValidationError('Interaction date must be YYYY-MM-DD.');
+  // No future-dated interactions. The server runs in UTC; +14h covers every user timezone's "today".
+  if (log.date > new Date(Date.now() + 14 * 3600 * 1000).toISOString().slice(0, 10)) {
+    throw new ValidationError('Interaction date cannot be in the future.');
+  }
+  if (!(Number(log.rating) >= 0 && Number(log.rating) <= 5)) throw new ValidationError('Rating must be between 0 and 5.');
+  if (!STATUSES.includes(log.statusPostInteraction)) throw new ValidationError('Choose a valid status.');
+}
+
+// Topics and subtopics are stored as comma-joined text.
+const splitList = (value: string | undefined | null) => (value ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+const cleanSubtopics = (value: string | undefined) => Array.from(new Set(splitList(value))).join(', ');
+
+// An interaction with subtopics covers exactly one topic of its level, and every subtopic must belong to it.
+function validateSubtopics(level: string | undefined, topics: string | undefined, subtopics: string | undefined) {
+  const chosen = splitList(subtopics);
+  if (!chosen.length) return;
+  const topicList = splitList(topics);
+  if (topicList.length !== 1) throw new ValidationError('Pick one topic when choosing subtopics.');
+  const unknown = chosen.filter((s) => !isKnownSubtopic(level ?? 'Level 0', topicList[0], s));
+  if (unknown.length) throw new ValidationError(`Not subtopics of ${topicList[0]}: ${unknown.join(', ')}.`);
+}
+
+// Steps reached: one valid step code per subtopic covered (or per topic when the interaction has no subtopics).
+// Entries for anything not covered are dropped. Level 0 has no steps.
+function cleanStepsReached(level: string | undefined, topics: string | undefined, subtopics: string | undefined, steps: unknown): Record<string, string> {
+  const codes = getKnownStepCodes(level);
+  if (!codes.length || !steps || typeof steps !== 'object') return {};
+  const covered = splitList(subtopics).length ? splitList(subtopics) : splitList(topics);
+  const cleaned: Record<string, string> = {};
+  for (const [name, code] of Object.entries(steps as Record<string, unknown>)) {
+    if (!covered.includes(name)) continue;
+    if (typeof code !== 'string' || !codes.includes(code)) throw new ValidationError(`Choose a valid step for ${name}.`);
+    cleaned[name] = code;
+  }
+  return cleaned;
+}
+
+async function getInteraction(id: string): Promise<InteractionLog | null> {
+  const { rows } = await getPool().query<{ log: InteractionLog }>(`SELECT ${INTERACTION_JSON} AS log FROM interactions it WHERE it.id = $1`, [id]);
+  return rows[0]?.log ?? null;
+}
+
+// Editing or deleting an interaction: the student's assigned instructor or whoever logged it. Admins: 403.
+function assertCanChangeInteraction(log: InteractionLog, student: Student, actor: Actor, action: 'edit' | 'delete') {
+  const isAssigned = actor.role === 'instructor' && !!actor.instructorId && student.instructorId === actor.instructorId;
+  const isAuthor = actor.role === 'instructor' && log.createdBy === actor.id;
+  if (!isAssigned && !isAuthor) {
+    throw new ForbiddenError(`Only the assigned instructor or the person who logged this interaction can ${action} it.`);
+  }
+}
+
+// Delete an interaction (duplicate or wrong details). The row moves to deleted_interactions together with
+// the reason, who deleted it and when; the student's status and counts follow because they are derived.
+export async function deleteInteraction(id: string, reason: string, actor: Actor): Promise<{ student: Student }> {
+  const why = (reason ?? '').trim();
+  if (why.length < 5) throw new ValidationError('Give a reason for deleting this interaction (at least 5 characters).');
+  if (why.length > 1000) throw new ValidationError('The reason is too long (max 1000 characters).');
+
+  const current = await getInteraction(id);
+  if (!current) throw new ValidationError('Interaction not found. It may already have been deleted.');
+  const student = await getStudent(current.studentId);
+  if (!student) throw new ValidationError('Student not found.');
+  assertCanChangeInteraction(current, student, actor, 'delete');
+
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await setChangeContext(client, actor);
+    await client.query(
+      `INSERT INTO deleted_interactions (id, student_id, data, delete_reason, deleted_by)
+       SELECT it.id, it.student_id, to_jsonb(it), $2, $3 FROM interactions it WHERE it.id = $1`,
+      [id, why, actor.id]
+    );
+    const { rowCount } = await client.query('DELETE FROM interactions WHERE id = $1', [id]);
+    if (rowCount !== 1) throw new ValidationError('Interaction not found. It may already have been deleted.');
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return { student: (await getStudent(current.studentId))! };
+}
+
+// Edit a logged interaction. Allowed for the student's assigned instructor or whoever logged it.
+// Student, level/step snapshot and creation time are fixed; the rest can be corrected.
+export async function updateInteraction(
+  id: string,
+  patch: Partial<InteractionLog>,
+  actor: Actor
+): Promise<{ student: Student; interaction: InteractionLog }> {
+  const current = await getInteraction(id);
+  if (!current) throw new ValidationError('Interaction not found.');
+  const student = await getStudent(current.studentId);
+  if (!student) throw new ValidationError('Student not found.');
+  assertCanChangeInteraction(current, student, actor, 'edit');
+
+  const next = { ...current, ...patch };
+  validateInteractionFields(next);
+  validateFeedback(next, current);
+  validateSubtopics(current.level, next.topics, next.subtopics);
+
+  const client = await getPool().connect();
+  try {
+    const directory = await loadDirectory(client);
+    const takenBy = directory.find((i) => i.id === next.takenByInstructorId);
+    if (!takenBy) throw new ValidationError('Select who took this interaction.');
+
+    await client.query(
+      `UPDATE interactions SET date = $2, instructor_name = $3, taken_by_instructor_id = $4, topics = $5,
+         status_post_interaction = $6, rating = $7, questions_asked = $8, remarks = $9, performed_well = $10,
+         improvement_areas = $11, tweaked_questions = $12, action_items = $13, meet_recording = $14,
+         updated_at = now(), updated_by = $15, subtopics = $16, steps_reached = $17
+       WHERE id = $1`,
+      [
+        id, next.date, takenBy.name, takenBy.id, next.topics || '', next.statusPostInteraction, Number(next.rating),
+        next.questionsAsked || '', next.remarks || '', next.performedWell || '', next.improvementAreas || '',
+        next.tweakedQuestions || '', next.actionItems || '', next.meetRecording || '', actor.id,
+        cleanSubtopics(next.subtopics),
+        JSON.stringify(cleanStepsReached(current.level, next.topics, next.subtopics, next.stepsReached)),
+      ]
+    );
+  } finally {
+    client.release();
+  }
+  // The student's status is derived from their interactions, so re-read it too.
+  return { student: (await getStudent(current.studentId))!, interaction: (await getInteraction(id))! };
+}
+
+export async function addInteraction(log: InteractionLog, actor: Actor): Promise<{ student: Student; interaction: InteractionLog }> {
+  validateInteractionFields(log);
+  validateFeedback(log);
+
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await setChangeContext(client, actor);
+    const student = await getStudent(log.studentId, client);
+    if (!student) throw new ValidationError(`Unknown student "${log.studentId}".`);
+    const directory = await loadDirectory(client);
+    const takenBy = directory.find((i) => i.id === log.takenByInstructorId) ?? matchInstructor(directory, log.instructorName, log.instructorEmail).instructor;
+    assertCanLog(student, actor, log, takenBy?.id ?? null);
+
+    validateSubtopics(log.level ?? student.level, log.topics, log.subtopics);
+    const stepsReached = cleanStepsReached(log.level ?? student.level, log.topics, log.subtopics, log.stepsReached);
+    await insertInteraction(client, { ...log, stepsReached }, student, { createdBy: actor.id });
+    await client.query('UPDATE students SET status = $2, updated_at = now() WHERE id = $1', [log.studentId, statusAfterInteraction(log)]);
+    await client.query('COMMIT');
+
+    const { rows } = await getPool().query<{ log: InteractionLog }>(`SELECT ${INTERACTION_JSON} AS log FROM interactions it WHERE it.id = $1`, [log.id]);
+    return { student: (await getStudent(log.studentId))!, interaction: rows[0].log };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+interface InstructorRow {
+  id: string;
+  first_name: string;
+  full_name: string;
+  email: string;
+  students: InstructorListEntry['students'];
+}
+
+// Instructor List: full names, each with their assigned students.
+export const MIN_PASSWORD_LENGTH = 8;
+
+// Only admins and senior instructors may add instructors or assign students.
+function assertCanManageInstructors(actor: Actor) {
+  if (actor.role !== 'admin' && !actor.isSenior) throw new ForbiddenError('Only admins and senior instructors can do this.');
+}
+
+// Records who added an instructor or moved students, inside the caller's transaction.
+async function recordInstructorChange(
+  client: PoolClient,
+  actor: Actor,
+  action: InstructorChange['action'],
+  instructor: { id: string; name: string },
+  students: CreateInstructorResult['assigned']
+) {
+  await client.query(
+    `INSERT INTO instructor_changes (action, actor_id, actor_name, actor_role, instructor_id, instructor_name, students)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      action, actor.id, actor.name, actor.role === 'admin' ? 'admin' : 'senior', instructor.id, instructor.name,
+      JSON.stringify(students.map((st) => ({ id: st.id, name: st.name, fromId: st.previousInstructorId ?? null, fromName: st.previousInstructor }))),
+    ]
+  );
+}
+
+// Admin: every add/assign, newest first.
+export async function getInstructorChanges(): Promise<InstructorChange[]> {
+  const { rows } = await getPool().query<{
+    id: string; action: InstructorChange['action']; actor_id: string; actor_name: string; actor_role: InstructorChange['actorRole'];
+    instructor_id: string; instructor_name: string; students: InstructorChange['students']; created_at: Date;
+  }>('SELECT * FROM instructor_changes ORDER BY created_at DESC, id DESC');
+  return rows.map((r) => ({
+    id: String(r.id),
+    action: r.action,
+    actorId: r.actor_id,
+    actorName: r.actor_name,
+    actorRole: r.actor_role,
+    instructorId: r.instructor_id,
+    instructorName: r.instructor_name,
+    students: r.students,
+    createdAt: r.created_at.toISOString(),
+  }));
+}
+
+// Admin or senior: create an instructor + login and assign students, all in one transaction. Assigning moves a
+// student from whoever had them (a student has exactly one instructor), so every count updates.
+export async function createInstructor(input: NewInstructorInput, actor: Actor): Promise<CreateInstructorResult> {
+  assertCanManageInstructors(actor);
+  const name = (input.name || '').trim().replace(/\s+/g, ' ');
+  const firstName = (input.firstName || '').trim().replace(/\s+/g, ' ');
+  const email = (input.email || '').trim().toLowerCase();
+  const password = input.password || '';
+  const studentIds = cleanRollNumbers(input.studentIds);
+
+  if (name.length < 2) throw new ValidationError("Enter the instructor's full name.");
+  if (!firstName) throw new ValidationError('Enter the name to show in the Student List.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ValidationError('Enter a valid email address.');
+  if (password.length < MIN_PASSWORD_LENGTH) throw new ValidationError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await setChangeContext(client, actor);
+    // Serialise instructor creation so two admins can't take the same new id.
+    await client.query('LOCK TABLE instructors IN SHARE ROW EXCLUSIVE MODE');
+
+    const existing = await client.query<{ full_name: string }>('SELECT full_name FROM instructors WHERE email = $1', [email]);
+    if (existing.rowCount) {
+      throw new ValidationError(`${existing.rows[0].full_name} already has an account (${email}). To give them students, use "Assign students" on their row.`);
+    }
+    const clash = await client.query<{ email: string }>('SELECT email FROM users WHERE email = $1', [email]);
+    if (clash.rowCount) throw new ValidationError(`${email} is already used by another account.`);
+
+    const directory = await loadDirectory(client);
+    const sameName = directory.find((i) => normalizeInstructorName(i.firstName) === normalizeInstructorName(firstName));
+    if (sameName) {
+      throw new ValidationError(`"${firstName}" is already shown for ${sameName.name}. Use a distinct Student List name (e.g. "${firstName}-2").`);
+    }
+
+    const found = await findStudentsToAssign(client, studentIds);
+
+    const { rows: [{ next }] } = await client.query<{ next: number }>(
+      "SELECT COALESCE(MAX(substring(id from '^INS([0-9]+)$')::int), 0) + 1 AS next FROM instructors"
+    );
+    const id = `INS${String(next).padStart(3, '0')}`;
+
+    await client.query(
+      "INSERT INTO instructors (id, first_name, full_name, email, aliases) VALUES ($1, $2, $3, $4, '{}')",
+      [id, firstName, name, email]
+    );
+    await client.query(
+      "INSERT INTO users (id, instructor_id, name, email, role, password_hash) VALUES ($1, $1, $2, $3, 'instructor', $4)",
+      [id, name, email, await hashPassword(password)]
+    );
+    await moveStudents(client, id, firstName, studentIds);
+    await recordInstructorChange(client, actor, 'add_instructor', { id, name }, found);
+    await client.query('COMMIT');
+
+    return { instructor: { id, name, firstName, email }, assigned: found };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Roll numbers → students with their current instructor (full name). Any unknown roll number is an error.
+async function findStudentsToAssign(client: PoolClient, studentIds: string[]): Promise<CreateInstructorResult['assigned']> {
+  const { rows } = await client.query<{ id: string; name: string; previous: string | null; previous_id: string | null }>(
+    `SELECT s.id, s.name, i.full_name AS previous, i.id AS previous_id
+     FROM students s LEFT JOIN instructors i ON i.id = s.instructor_id
+     WHERE s.id = ANY($1::text[])`,
+    [studentIds]
+  );
+  const missing = studentIds.filter((id) => !rows.some((r) => r.id === id));
+  if (missing.length) throw new ValidationError(`These roll numbers are not in the database: ${missing.join(', ')}`);
+  return rows
+    .map((r) => ({ id: r.id, name: r.name, previousInstructor: r.previous, previousInstructorId: r.previous_id }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// A student has exactly one instructor, so assigning moves them from whoever had them.
+async function moveStudents(client: PoolClient, instructorId: string, firstName: string, studentIds: string[]) {
+  if (!studentIds.length) return;
+  await client.query(
+    `UPDATE students SET instructor_id = $1, instructor_match = 'matched', instructor_raw = $2, updated_at = now()
+     WHERE id = ANY($3::text[])`,
+    [instructorId, firstName, studentIds]
+  );
+}
+
+const cleanRollNumbers = (ids: string[] | undefined) =>
+  Array.from(new Set((ids || []).map((id) => String(id).trim().toUpperCase()).filter(Boolean)));
+
+// Admin or senior: assign students to an existing instructor, moving them from their current instructor, in one
+// transaction. Students who already belong to this instructor are left as they are (and are not logged).
+export async function assignStudentsToInstructor(instructorId: string, rollNumbers: string[], actor: Actor): Promise<CreateInstructorResult> {
+  assertCanManageInstructors(actor);
+  const studentIds = cleanRollNumbers(rollNumbers);
+  if (!studentIds.length) throw new ValidationError('Enter at least one roll number.');
+
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await setChangeContext(client, actor);
+    const { rows: [instructor] } = await client.query<{ id: string; first_name: string; full_name: string; email: string }>(
+      'SELECT id, first_name, full_name, email FROM instructors WHERE id = $1 AND left_on IS NULL FOR UPDATE',
+      [instructorId]
+    );
+    if (!instructor) throw new ValidationError('Instructor not found.');
+
+    const found = await findStudentsToAssign(client, studentIds);
+    const toMove = found.filter((s) => s.previousInstructorId !== instructor.id);
+    await moveStudents(client, instructor.id, instructor.first_name, toMove.map((s) => s.id));
+    if (toMove.length) await recordInstructorChange(client, actor, 'assign_students', { id: instructor.id, name: instructor.full_name }, toMove);
+    await client.query('COMMIT');
+
+    return {
+      instructor: { id: instructor.id, name: instructor.full_name, firstName: instructor.first_name, email: instructor.email },
+      assigned: toMove,
+      alreadyAssigned: found.length - toMove.length,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Names and ids only, for the "Interaction Taken By" dropdown (any signed-in user). Instructors who have left are hidden.
+export async function getInstructorOptions(): Promise<InstructorOption[]> {
+  const { rows } = await getPool().query<{ id: string; first_name: string; full_name: string }>(
+    'SELECT id, first_name, full_name FROM instructors WHERE left_on IS NULL ORDER BY full_name'
+  );
+  return rows.map((r) => ({ id: r.id, name: r.full_name, firstName: r.first_name }));
+}
+
+export async function getInstructorList(): Promise<InstructorListEntry[]> {
+  const { rows } = await getPool().query<InstructorRow>(
+    `SELECT i.id, i.first_name, i.full_name, i.email,
+            COALESCE(
+              json_agg(json_build_object(
+                'id', o.id,
+                'name', o.name,
+                'level', 'Level ' || o.level,
+                'currentTopic', o.current_topic,
+                'currentSubtopic', o.current_subtopic,
+                'currentStep', o.current_step,
+                'lastInteractionDate', to_char(o.last_interaction_date, 'YYYY-MM-DD')
+              ) ORDER BY o.name) FILTER (WHERE o.id IS NOT NULL),
+              '[]'::json
+            ) AS students
+     FROM instructors i
+     LEFT JOIN student_overview o ON o.instructor_id = i.id
+     WHERE i.left_on IS NULL
+     GROUP BY i.id
+     ORDER BY i.full_name`
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    firstName: row.first_name,
+    name: row.full_name,
+    email: row.email,
+    students: row.students,
+  }));
+}

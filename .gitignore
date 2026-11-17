@@ -10,7 +10,7 @@
 # ---------------------------------------------------------------
 # Personal data: migration review output and roster files
 # ---------------------------------------------------------------
-db/migration/out/
+platform/db/migration/out/
 *.local.csv
 *.csv
 *.xlsx
@@ -21,8 +21,8 @@ seed-data/
 *.sqlite3
 *.dump
 backups/
-services/contest/data/
-services/contest/results/
+modules/contest/backend/data/
+modules/contest/backend/results/
 credentials/
 *service-account*.json
 
@@ -41,9 +41,9 @@ docs/
 *.spec.ts
 *.spec.tsx
 *_test.go
-apps/web/test/
-apps/web/vitest.config.*
-services/attendance-api/internal/testdb/
+platform/web/test/
+platform/web/vitest.config.*
+modules/attendance/backend/internal/testdb/
 coverage/
 
 # ---------------------------------------------------------------
@@ -80,8 +80,8 @@ venv/
 # ---------------------------------------------------------------
 # Go
 # ---------------------------------------------------------------
-services/attendance-api/bin/
-services/attendance-api/server
+modules/attendance/backend/bin/
+modules/attendance/backend/server
 *.exe
 *.out
 

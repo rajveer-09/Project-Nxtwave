@@ -1,0 +1,19 @@
+{
+  "name": "nxtone",
+  "private": true,
+  "description": "NxtOne monorepo: one web app (platform/web) built from the module frontends; each module's backend installs on its own.",
+  "workspaces": [
+    "platform/web",
+    "modules/attendance/frontend",
+    "modules/contest/frontend",
+    "modules/interactions/frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w platform/web",
+    "build": "npm run build -w platform/web",
+    "start": "npm run start -w platform/web",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck -w platform/web",
+    "test": "npm run test -w platform/web"
+  }
+}

@@ -9,9 +9,9 @@ name: web
 on:
   push:
     branches: [master, staging]
-    paths: ["apps/web/**", ".github/workflows/web.yml"]
+    paths: ["platform/web/**", "modules/*/frontend/**", "package.json", "package-lock.json", ".github/workflows/web.yml"]
   pull_request:
-    paths: ["apps/web/**", ".github/workflows/web.yml"]
+    paths: ["platform/web/**", "modules/*/frontend/**", "package.json", "package-lock.json", ".github/workflows/web.yml"]
 
 permissions:
   contents: read
@@ -21,16 +21,20 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/web
+        working-directory: platform/web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: apps/web/package-lock.json
+          cache-dependency-path: package-lock.json
+      # One npm workspace at the repo root: the web app and the module frontends.
       - run: npm ci
+        working-directory: .
+      # Lints the web app and every module frontend.
       - run: npm run lint
+        working-directory: .
       - run: npm run typecheck
       - run: npm run build
         env:

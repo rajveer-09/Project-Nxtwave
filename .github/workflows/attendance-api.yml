@@ -9,9 +9,9 @@ name: attendance-api
 on:
   push:
     branches: [master, staging]
-    paths: ["services/attendance-api/**", ".github/workflows/attendance-api.yml"]
+    paths: ["modules/attendance/backend/**", ".github/workflows/attendance-api.yml"]
   pull_request:
-    paths: ["services/attendance-api/**", ".github/workflows/attendance-api.yml"]
+    paths: ["modules/attendance/backend/**", ".github/workflows/attendance-api.yml"]
 
 permissions:
   contents: read
@@ -21,13 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: services/attendance-api
+        working-directory: modules/attendance/backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: services/attendance-api/go.mod
-          cache-dependency-path: services/attendance-api/go.sum
+          go-version-file: modules/attendance/backend/go.mod
+          cache-dependency-path: modules/attendance/backend/go.sum
       - name: Every migration has a down file
         run: |
           for up in migrations/*.up.sql; do

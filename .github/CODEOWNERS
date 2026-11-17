@@ -1,0 +1,24 @@
+#
+# Author : Rajveer Sharma
+# Date : 18 Nov 2026
+# @ Nxtwave
+#
+# Who reviews changes to each part of NxtOne. GitHub asks the owners of every folder a pull request
+# touches for a review. Replace each placeholder with the team or people who own that module (for
+# example a GitHub team such as the attendance team), then remove the leading "# " to switch the
+# line on. Later lines win over earlier ones.
+#
+# Everything else (platform, CI, docs): the platform team
+# *                          <platform-owners>
+#
+# Attendance: Go service and its screens
+# /modules/attendance/       <attendance-owners>
+#
+# Contests: NxtRank service, scan worker and its screens
+# /modules/contest/          <contest-owners>
+#
+# Interactions: service, log form, curriculum
+# /modules/interactions/     <interactions-owners>
+#
+# Shared database schema and roles: platform, plus every module (all services depend on it)
+# /platform/db/              <platform-owners> <attendance-owners> <contest-owners> <interactions-owners>

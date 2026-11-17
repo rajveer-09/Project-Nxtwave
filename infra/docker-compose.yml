@@ -1,0 +1,146 @@
+#
+# Author : Rajveer Sharma
+# Date : 17 Nov 2026
+# @ Nxtwave
+#
+# Local development: one Postgres laid out like the combined Neon database
+# (core / attendance / logs / contest schemas, one role per service), plus every service.
+#
+# From the repo root (paths below are relative to this file, infra/):
+#   docker compose -f infra/docker-compose.yml up --build                    web + the three module APIs
+#   docker compose -f infra/docker-compose.yml --profile worker up --build   ...plus the LeetCode scan worker
+# or simply infra/scripts/start.sh --docker
+#
+# The passwords below are for this local stack only. Real values live in each
+# environment's secret store, never in the repo.
+
+name: student-hub
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: owner
+      POSTGRES_PASSWORD: local-owner
+      POSTGRES_DB: studenthub
+    ports: ["5433:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U owner -d studenthub"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Core schema + service roles; exits when done
+  db-setup:
+    image: postgres:17-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: owner
+      PGPASSWORD: local-owner
+      PGDATABASE: studenthub
+      WEB_PW: local-web
+      ATTENDANCE_PW: local-attendance
+      CONTEST_PW: local-contest
+      INTERACTIONS_PW: local-interactions
+    volumes:
+      - ../platform/db:/db:ro
+    entrypoint: ["sh", "/db/local/setup.sh"]
+    restart: "no"
+
+  attendance-api:
+    build: ../modules/attendance/backend
+    depends_on:
+      db-setup:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: development
+      MIGRATE_ON_START: "true"
+      DATABASE_URL: postgres://attendance_svc:local-attendance@postgres:5432/studenthub?sslmode=disable
+      PORT: "8080"
+      APP_BASE_URL: http://localhost:3000
+    ports: ["8080:8080"]
+
+  contest-api:
+    build: ../modules/contest/backend
+    depends_on:
+      db-setup:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://contest_svc:local-contest@postgres:5432/studenthub
+      SECRET_KEY: local-dev-only-not-a-secret
+      FORWARDED_ALLOW_IPS: "*"
+      WEB_CONCURRENCY: "2"
+    ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  interactions-api:
+    build: ../modules/interactions/backend
+    depends_on:
+      db-setup:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://interactions_svc:local-interactions@postgres:5432/studenthub
+      IDENTITY_JWT_SECRET: local-dev-interactions-identity-secret-01
+      MIGRATE_ON_START: "true"
+    ports: ["8090:8090"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Scans LeetCode, so it is opt-in locally (--profile worker). Exactly one replica.
+  contest-worker:
+    build: ../modules/contest/backend
+    profiles: ["worker"]
+    command: ["python", "-m", "app.cli", "worker"]
+    depends_on:
+      contest-api:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://contest_svc:local-contest@postgres:5432/studenthub
+
+  web:
+    image: node:24-bookworm-slim
+    # The web app is an npm workspace with the module frontends: install at the repo root, run in platform/web.
+    working_dir: /repo/platform/web
+    command: ["sh", "-c", "cd /repo && npm ci && cd platform/web && npx next dev -H 0.0.0.0 -p 3000"]
+    depends_on:
+      - attendance-api
+      - contest-api
+      - interactions-api
+    environment:
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+      # The interactions service already verifies identity tokens.
+      INTERACTIONS_API_ORIGIN: http://interactions-api:8090
+      INTERACTIONS_JWT_SECRET: local-dev-interactions-identity-secret-01
+      # Uncomment once the services verify identity tokens. Until then the web app
+      # answers /api/attendance and /api/contest from its built-in sample services.
+      # ATTENDANCE_API_ORIGIN: http://attendance-api:8080
+      # ATTENDANCE_JWT_SECRET: local-dev-attendance-identity-secret-0001
+      # CONTEST_API_ORIGIN: http://contest-api:8000
+      # CONTEST_JWT_SECRET: local-dev-contest-identity-secret-00000001
+      # Real sign-in against core.staff (create a user with `npm run create-staff`):
+      # WEB_DATABASE_URL: postgres://web_svc:local-web@postgres:5432/studenthub
+    ports: ["3000:3000"]
+    volumes:
+      - ..:/repo
+      - web_node_modules:/repo/node_modules
+      - web_next:/repo/platform/web/.next
+
+volumes:
+  pgdata:
+  web_node_modules:
+  web_next:
