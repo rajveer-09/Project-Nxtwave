@@ -102,16 +102,33 @@ Rules:
 3. Route files stay thin: access check and data loading, then render the module's component.
 4. Server-only code starts with `import "server-only"`.
 
-## Running everything locally
+## Quick start
 
-Requires Docker.
+**Clone** (every branch, then installs dependencies). The repository is private, so sign in with `gh auth login` first, or let Git ask for your GitHub credentials:
 
 ```bash
-docker compose up --build                     # web :3000, interactions API :8090, attendance API :8080, contest API :8000, Postgres :5433
-docker compose --profile worker up --build    # also the LeetCode scan worker
+# macOS / Linux / Git Bash
+gh api repos/lakshayysinghh/Project-Nxtwave/contents/scripts/clone.sh -H "Accept: application/vnd.github.raw" > clone.sh
+bash clone.sh                       # options: [folder] --branch staging --no-install
 ```
 
-The local Postgres has the same layout as the combined database: `core`, `attendance`, `logs` and `contest` schemas with one role per service. The passwords in `docker-compose.yml` are for that local stack only.
+```powershell
+# Windows PowerShell
+gh api repos/lakshayysinghh/Project-Nxtwave/contents/scripts/clone.cmd -H "Accept: application/vnd.github.raw" | Set-Content -Encoding ascii clone.cmd
+.\clone.cmd                         # options: [folder] [branch]
+```
+
+**Start everything** from the repository folder:
+
+```bash
+scripts/start.sh            # Windows: scripts\start.cmd
+scripts/start.sh --worker   # also the LeetCode scan worker
+```
+
+- **With Docker running**, it starts the whole stack in Docker: Postgres :5433, web :3000, interactions API :8090, attendance API :8080, contest API :8000. The local Postgres has the same layout as the combined database (`core`, `attendance`, `logs`, `contest` schemas, one role per service); the passwords in `docker-compose.yml` are for that local stack only.
+- **Without Docker** (or with `--local`), it starts the web app (sample data unless `apps/web/.env.local` says otherwise), plus each service whose tools and `.env` file are present: `services/interactions-api/.env` (Node 24+), `services/contest/.env` (Python 3.12+, SQLite by default), `services/attendance-api/.env` (Go). Copy each `.env.example` to start.
+- Output from every process is prefixed with its name; **Ctrl+C stops everything**.
+- `--docker` / `--local` force a mode; `--install-only` installs dependencies and exits.
 
 ## Running the web app on its own
 
