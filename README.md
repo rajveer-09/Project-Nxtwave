@@ -46,6 +46,7 @@ One Neon Postgres database, one schema per owner:
 | `db/setup/service_roles.sql` | Creates one Postgres role per service with its grants and `search_path` |
 | `db/local/setup.sh` | Local only: applies the core migrations and service roles inside `docker compose` |
 | `db/migration/roster_dry_run.py` | Read-only preview of the roster and staff merge from the three old databases |
+| `db/migration/migrate.py` | Copies the three old databases into the combined one, builds `core`, verifies every table |
 | `docker-compose.yml` | Whole stack locally: Postgres, every service, the worker (opt-in) and the web app |
 | `.github/workflows` | One CI workflow per app or service, each runs only when its folder changes |
 
@@ -165,7 +166,28 @@ Checks: `npm run lint`, `npm run typecheck`, `npm run build`.
    python -m venv .venv && .venv/Scripts/pip install -r db/migration/requirements.txt
    .venv/Scripts/python -I db/migration/roster_dry_run.py
    ```
-3. Apply `db/core/migrations` and run `db/setup/service_roles.sql` on a Neon branch first, then on main.
+3. Copy the three old databases into the combined one and build `core` (needs only psycopg, plus `services/contest/.venv` for Alembic):
+   ```bash
+   # SRC_ATTENDANCE_URL, SRC_LOGS_URL, SRC_CONTEST_URL, TARGET_URL (owner, direct host)
+   # and WEB_PW, ATTENDANCE_PW, CONTEST_PW, INTERACTIONS_PW come from the environment
+   .venv/Scripts/python -I db/migration/migrate.py            # target must be empty
+   .venv/Scripts/python -I db/migration/migrate.py --rebuild  # replace everything (cutover)
+   ```
+   Each module's schema is created by that service's own migrations under its own role, compared with the source, then filled with `COPY` from one read-only snapshot per source; every table's row count and checksum must match. The old apps keep running, so run `--rebuild` again during the cutover write freeze.
+
+## Roles and the change log
+
+| Role | Sees | Never sees |
+|---|---|---|
+| Super admin (`owner`) | Superadmin panel (`/superadmin`) and everything else; the only role that adds or edits super admins | — |
+| Admin | Admin panel: assignments, staff & roles (can add and edit admins), change log, curriculum, messages | Super admins, the Superadmin panel |
+| Senior instructor | Senior SDI panel: assignments and their team (read-only) | Admins, super admins, the change log |
+| Instructor | My students (assigned to them), no panel | Any panel |
+| Success coach | My students (the students they coach), no panel | Any panel |
+
+The menu (`apps/web/common/lib/nav.ts`) and the rank rules (`apps/web/common/auth/roles.ts`) are checked on the server for every page and action, not only hidden in the menu.
+
+Every change to who teaches or coaches a student, to a student's class (college, section, hall, status) and to staff and roles is written to `core.change_log` by database triggers, so nothing can skip it. Each entry records who made it and where from: NxtOne, an Excel import (with the file name), the Interactions or Attendance service, or a direct database edit (with the database user). Writers say who they are with `set_config('app.*', …, true)` in their transaction (`apps/web/common/db/change.ts`). The log is append-only for every app role. Admins and super admins read it at `/admin/change-log` and on each student's page; admins see a super admin's edits as "Super admin".
 
 ## Branches
 

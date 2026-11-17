@@ -47,7 +47,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     if not secret:
         log.warning("SECRET_KEY not set: using a random key, logins reset when the API restarts")
         secret = secrets.token_urlsafe(32)
-    app.add_middleware(OriginCheck, allowed=settings.allowed_origins)
+    app.add_middleware(OriginCheck, allowed=settings.allowed_origins, bearer=bool(settings.identity_jwt_secret))
     app.add_middleware(
         SessionMiddleware, secret_key=secret, session_cookie="lcdash_session",
         max_age=SESSION_MAX_AGE, same_site="lax", https_only=settings.cookie_secure,

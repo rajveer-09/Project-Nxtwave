@@ -18,7 +18,7 @@ export type Audience =
 
 export type DirectoryEntry = { id: string; name: string; role: Role; active: boolean; colleges: string[]; halls: string[] };
 
-const TEACHING: Role[] = ["instructor", "senior_instructor"];
+const TEACHING: Role[] = ["instructor", "senior_instructor", "success_coach"];
 
 /**
  * Active staff matching the audience, never including the sender.
@@ -38,10 +38,11 @@ export function resolveAudience(audience: Audience, directory: DirectoryEntry[],
 }
 
 export const ROLE_PLURAL: Record<Role, string> = {
-  owner: "Owners",
+  owner: "Super admins",
   admin: "Admins",
   senior_instructor: "Senior instructors",
   instructor: "Instructors",
+  success_coach: "Success coaches",
 };
 
 export function describeAudience(audience: Audience, directory: DirectoryEntry[]): string {

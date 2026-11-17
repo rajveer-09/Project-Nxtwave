@@ -265,3 +265,20 @@ CREATE TABLE IF NOT EXISTS instructor_changes (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS instructor_changes_created_idx ON instructor_changes (created_at DESC);
+
+-- Keeps the hub's assignments (core.student_assignments) in step when a student is moved to another
+-- instructor here, and logs who did it (core.change_log). Skipped where the hub's core schema isn't
+-- set up (e.g. this service's own CI database).
+CREATE OR REPLACE FUNCTION sync_instructor_to_core() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF to_regprocedure('core.sync_instructor_from_logs(text,text)') IS NOT NULL THEN
+    EXECUTE 'SELECT core.sync_instructor_from_logs($1, $2)' USING NEW.id, NEW.instructor_id;
+  END IF;
+  RETURN NULL;
+END $$;
+
+DROP TRIGGER IF EXISTS students_instructor_sync ON students;
+CREATE TRIGGER students_instructor_sync
+  AFTER UPDATE OF instructor_id ON students
+  FOR EACH ROW WHEN (OLD.instructor_id IS DISTINCT FROM NEW.instructor_id)
+  EXECUTE FUNCTION sync_instructor_to_core();

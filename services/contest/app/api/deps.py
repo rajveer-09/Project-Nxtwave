@@ -7,8 +7,10 @@ import time
 from collections.abc import Iterator
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api import identity
 from app.api.errors import ApiError
 from app.config import Settings
 from app.db.models import User
@@ -47,7 +49,30 @@ def acting_admin(request: Request, db: Session) -> User | None:
     return admin if admin is not None and admin.role == "admin" else None
 
 
+def hub_user(request: Request, db: Session, token: str, secret: str) -> User:
+    """The user behind the hub web app's identity token (see app/api/identity.py)."""
+    try:
+        who = identity.verify(token, secret)
+    except identity.InvalidToken as e:
+        log.warning("refused identity token for %s %s: %s", request.method, request.url.path, e)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not logged in") from None
+    request.state.via_hub = True
+    user = db.scalars(select(User).where(func.lower(User.username) == who.email, User.active.is_(True))
+                      .order_by(User.id).limit(1)).first()
+    if user is not None:
+        return user
+    stand_in = identity.stand_in(who)
+    if stand_in is None:
+        log.info("hub %s %s has no NxtRank login", who.role, who.email)
+        raise ApiError(403, f"{who.email} has no NxtRank login. Ask a NxtRank admin to add you.", "no_account")
+    return stand_in
+
+
 def current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    secret = get_settings(request).identity_jwt_secret
+    token = identity.bearer_token(request.headers.get("authorization")) if secret else None
+    if token is not None:  # the hub web app: the token alone decides, never a session cookie
+        return hub_user(request, db, token, secret)
     store = request.session
     admin = None
     if "acting_admin" in store:

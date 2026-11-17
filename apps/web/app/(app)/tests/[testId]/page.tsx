@@ -48,7 +48,7 @@ async function Content({ params }: { params: Promise<{ testId: string }> }) {
 
   if (admin) {
     // Admins see progress per instructor and can unlock; instructors enter results.
-    const students = studentsFor(test);
+    const students = await studentsFor(test);
     const results = await getResults(test.id, students.map((s) => s.niatId));
     const subs = await listSubmissions(test.id);
     const byInstructor = [...new Set(students.map((s) => s.instructor))].sort().map((instructor) => {
@@ -100,7 +100,7 @@ async function Content({ params }: { params: Promise<{ testId: string }> }) {
     );
   }
 
-  const students = studentsFor(test, user.name);
+  const students = await studentsFor(test, user.name);
   if (!students.length) {
     return (
       <>

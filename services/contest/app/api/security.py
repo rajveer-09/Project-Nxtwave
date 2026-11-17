@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from starlette.datastructures import Headers, MutableHeaders
 
 from app.api.errors import body
+from app.api.identity import bearer_token
 
 log = logging.getLogger(__name__)
 
@@ -94,16 +95,23 @@ class OriginCheck:
     The session cookie is SameSite=Lax, which already stops most cross-site posts; this
     is the second lock. Browsers send Origin (or at least Referer) on such requests, so
     one that names a different site is refused. Requests with neither come from scripts
-    and tools, not from a page in a browser, and are left to the usual login check."""
+    and tools, not from a page in a browser, and are left to the usual login check.
 
-    def __init__(self, app, *, allowed: tuple[str, ...] = ()):
+    With `bearer` on (IDENTITY_JWT_SECRET set), a request carrying the hub web app's
+    `Authorization: Bearer` token skips the check: it is signed in by that token alone,
+    never by the cookie (deps.current_user), and no browser adds that header for another site."""
+
+    def __init__(self, app, *, allowed: tuple[str, ...] = (), bearer: bool = False):
         self.app = app
         self.allowed = {o.rstrip("/").lower() for o in allowed}
+        self.bearer = bearer
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope["method"] not in UNSAFE or not scope["path"].startswith("/api/"):
             return await self.app(scope, receive, send)
         headers = Headers(scope=scope)
+        if self.bearer and bearer_token(headers.get("authorization")) is not None:
+            return await self.app(scope, receive, send)
         claimed = headers.get("origin")
         source = _origin_of(claimed) if claimed and claimed != "null" else None
         if source is None and not claimed:

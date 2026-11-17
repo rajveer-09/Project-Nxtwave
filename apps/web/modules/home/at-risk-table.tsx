@@ -42,7 +42,8 @@ const columns: ColumnDef<AtRiskStudent>[] = [
     accessorKey: "attendance30d",
     header: "Attendance · 30d",
     cell: ({ getValue }) => {
-      const value = getValue<number>();
+      const value = getValue<number | null>();
+      if (value === null) return <span className="text-muted-foreground">—</span>;
       const low = value < 75;
       return (
         <div className="flex items-center gap-2">
@@ -57,12 +58,15 @@ const columns: ColumnDef<AtRiskStudent>[] = [
   {
     accessorKey: "lastInteractionDays",
     header: "Last interaction",
-    cell: ({ getValue }) => <span className="text-sidebar-foreground">{getValue<number>()} days ago</span>,
+    cell: ({ getValue }) => {
+      const days = getValue<number | null>();
+      return <span className="text-sidebar-foreground">{days === null ? "Never" : days === 0 ? "Today" : `${days} days ago`}</span>;
+    },
   },
   {
     accessorKey: "contestsAttended",
-    header: "Contests · last 4",
-    cell: ({ getValue }) => <span className="text-sidebar-foreground tabular">{getValue<number>()} of 4</span>,
+    header: "Contests attended",
+    cell: ({ getValue }) => <span className="text-sidebar-foreground tabular">{getValue<number>()}</span>,
   },
   {
     id: "flags",

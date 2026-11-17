@@ -15,12 +15,13 @@ import { InteractionForm, type FormStudent } from "@/modules/interactions/compon
 import { RecentLogs } from "@/modules/interactions/components/recent-logs";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
-import { instructorScope } from "@/common/auth/student-access";
+import { inScope, studentScope } from "@/common/auth/student-access";
 import { addDays, todayIst } from "@/common/lib/dates";
 import { listInteractions } from "@/modules/interactions/data";
 import { canLogInteractions } from "@/modules/interactions/lib/permissions";
 import { buildStudentDetail } from "@/common/sample-data/student-detail";
-import { ROSTER } from "@/common/sample-data/roster";
+import { getRoster, usingSampleData } from "@/common/data/roster";
+import { latestTestTotals } from "@/modules/tests/data";
 import { RISK_THRESHOLDS } from "@/common/domain/risk";
 import type { SearchParamsRecord } from "@/common/lib/url";
 import { questionBank as loadQuestionBank } from "@/modules/curriculum/data";
@@ -37,11 +38,15 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   await connection();
   const user = await requireAccess("/interactions");
   const params = await searchParams;
-  const scope = instructorScope(user) ?? (user.role === "senior_instructor" ? user.name : undefined);
+  // Instructors and senior instructors log for their own students; coaches read their coached students' logs.
+  const scope = studentScope(user) ?? (user.role === "senior_instructor" ? { instructor: user.name } : undefined);
   const logging = canLogInteractions(user);
 
-  const myStudents = ROSTER.filter((s) => !scope || s.instructor === scope).sort((a, b) => a.name.localeCompare(b.name));
-  const [all, questionBank] = await Promise.all([listInteractions({ instructor: scope }), loadQuestionBank()]);
+  const roster = await getRoster();
+  const sample = usingSampleData();
+  const myStudents = roster.filter((s) => inScope(scope, s)).sort((a, b) => a.name.localeCompare(b.name));
+  const latestTests = sample ? null : await latestTestTotals(myStudents.map((s) => s.niatId));
+  const [all, questionBank] = await Promise.all([listInteractions(scope?.coach !== undefined ? { niatIds: myStudents.map((s) => s.niatId) } : { instructor: scope?.instructor }), loadQuestionBank()]);
   const overdue = myStudents.filter((s) => s.lastInteractionDays === null || s.lastInteractionDays >= RISK_THRESHOLDS.interactionGapDays);
   const today = todayIst();
   const weekAgo = addDays(today, -7);
@@ -58,9 +63,9 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
     lastInteractionDays: s.lastInteractionDays,
     lastInteractionLabel: lastLabel(s.lastInteractionDays),
     contestAbsentStreak: s.risk.contestAbsentStreak,
-    latestTest: buildStudentDetail(s).tests.list.at(-1)?.total ?? null,
+    latestTest: latestTests ? (latestTests.get(s.niatId) ?? null) : (buildStudentDetail(s).tests.list.at(-1)?.total ?? null),
   }));
-  const instructors = [...new Set(ROSTER.map((s) => s.instructor))].sort();
+  const instructors = [...new Set(roster.map((s) => s.instructor).filter((name) => name !== "Unassigned"))].sort();
   const student = typeof params.student === "string" ? params.student.toUpperCase() : undefined;
 
   return (
@@ -74,7 +79,7 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
               {overdue.length} {logging ? "of my students" : "students"} overdue ({RISK_THRESHOLDS.interactionGapDays}d+)
             </StatusPill>
             <StatusPill tone="accent">{thisWeek} logged this week</StatusPill>
-            <StatusPill>Sample data</StatusPill>
+            {sample ? <StatusPill>Sample data</StatusPill> : null}
           </div>
         }
       />

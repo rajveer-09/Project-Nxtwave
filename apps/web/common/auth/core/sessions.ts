@@ -23,7 +23,7 @@ const EXTEND_WHEN_REMAINING_HOURS = SESSION_TTL_HOURS - 1;
 
 export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
-const PLATFORM_ROLE_ORDER: Role[] = ["owner", "admin", "senior_instructor", "instructor"];
+const PLATFORM_ROLE_ORDER: Role[] = ["owner", "admin", "senior_instructor", "instructor", "success_coach"];
 
 type StaffRow = {
   id: string;

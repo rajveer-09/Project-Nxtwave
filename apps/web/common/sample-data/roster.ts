@@ -21,13 +21,16 @@ export type RosterStudent = {
   section: string;
   hall: string;
   instructor: string;
+  /** Current success coach's name, "" when none. */
+  coach: string;
   poc: string;
   level: number;
   topic: string;
   subtopic: string | null;
   step: string;
-  attendance30d: number;
-  attendanceTerm: number;
+  /** Null when nothing is marked (e.g. not on the attendance roster). */
+  attendance30d: number | null;
+  attendanceTerm: number | null;
   lcHandle: string | null;
   lcRating: number | null;
   contestsAttended: number;
@@ -88,7 +91,7 @@ function build(): RosterStudent[] {
   const used = new Set(FIXED.map((s) => s.niatId));
   const rows: RosterStudent[] = FIXED.map((s) => {
     const base = s as RosterStudent;
-    return { ...base, poc: "Ravi V.", joinedOn: "2026-08-12", flags: riskFlags(base.risk) };
+    return { ...base, coach: "", poc: "Ravi V.", joinedOn: "2026-08-12", flags: riskFlags(base.risk) };
   });
 
   let serial = 30;
@@ -116,6 +119,7 @@ function build(): RosterStudent[] {
       section: pick(college === "BITS" ? BITS_SECTIONS : CDU_SECTIONS),
       hall: pick(college === "BITS" ? BITS_HALLS : CDU_HALLS),
       instructor: pick(INSTRUCTORS),
+      coach: "",
       poc: pick(POCS),
       level,
       topic,

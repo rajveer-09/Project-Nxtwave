@@ -8,15 +8,20 @@ Date : 17 Nov 2026
 
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { authMode } from "@/common/auth/config";
 import type { SessionUser } from "@/common/auth/roles";
+import { getRoster } from "@/common/data/roster";
+import { getDb } from "@/common/db/pool";
 import { addDays } from "@/common/lib/dates";
 import { buildStudentDetail } from "@/common/sample-data/student-detail";
 import { ROSTER } from "@/common/sample-data/roster";
 import {
   bandOf,
   resultProblems,
+  totalOf,
   type Band,
   type FormatField,
+  type FormatVersion,
   type ResultFormat,
   type ResultValue,
   type Submission,
@@ -25,10 +30,15 @@ import {
 } from "@/modules/tests/types";
 
 /**
- * Weekly tests data access (UI-6). In memory for development; with the database
- * this is logs.result_formats / result_format_versions / result_format_fields,
- * logs.tests, logs.test_results / test_result_values (ARCHITECTURE §4.7).
+ * Weekly tests data access (ARCHITECTURE §4.7). With the database: core.test_formats,
+ * core.test_format_versions, core.weekly_tests, core.test_results, core.test_submissions
+ * (db/core/migrations/20261117000002). Without it, an in-memory sample for development.
+ * Validation and permissions are the same in both; only reads and writes differ.
  */
+
+const fromDb = () => authMode() === "database";
+
+// ---------------------------------------------------------------- sample store
 
 const AREAS = ["Prefix sums", "Hash maps", "Two pointers", "Edge cases", "Time complexity", "Dry run / tracing", "Recursion base cases", "Index boundaries"];
 const NEXT_STEPS = ["None", "Extra practice set", "Discuss in next interaction", "Re-test next week", "Escalate to senior instructor"];
@@ -121,57 +131,130 @@ function store(): Store {
   return g.__testStore;
 }
 
-// ---------- reads
+// ---------------------------------------------------------------- database rows
 
-export async function listFormats() {
-  return store().formats;
+type TestRow = { id: string; name: string; band: Band; held_on: string; due_at: string; format_id: string; version: number; created_by: string };
+const TEST_COLUMNS = "id, name, band, held_on::text, due_at, format_id, version, created_by";
+const toTest = (r: TestRow): WeeklyTest => ({
+  id: r.id,
+  name: r.name,
+  band: r.band,
+  heldOn: r.held_on,
+  dueAt: new Date(r.due_at).toISOString(),
+  formatId: r.format_id,
+  version: r.version,
+  createdBy: r.created_by,
+});
+
+type ResultRow = { test_id: string; niat_id: string; present: boolean; values: Record<string, ResultValue>; entered_by: string; updated_at: string };
+const toResult = (r: ResultRow): TestResult => ({
+  testId: r.test_id,
+  niatId: r.niat_id,
+  present: r.present,
+  values: r.values,
+  enteredBy: r.entered_by,
+  updatedAt: new Date(r.updated_at).toISOString(),
+});
+
+// ---------------------------------------------------------------- reads
+
+export async function listFormats(): Promise<ResultFormat[]> {
+  if (!fromDb()) return store().formats;
+  const { rows } = await getDb().query<{ id: string; name: string; versions: (Omit<FormatVersion, "publishedAt"> & { publishedAt: string })[] }>(
+    `SELECT f.id, f.name,
+            json_agg(json_build_object('version', v.version, 'passMark', v.pass_mark, 'fields', v.fields,
+                                       'publishedBy', v.published_by, 'publishedAt', v.published_at) ORDER BY v.version) AS versions
+     FROM core.test_formats f JOIN core.test_format_versions v ON v.format_id = f.id
+     GROUP BY f.id ORDER BY f.name`,
+  );
+  return rows.map((r) => ({ ...r, versions: r.versions.map((v) => ({ ...v, publishedAt: new Date(v.publishedAt).toISOString() })) }));
 }
 
 export async function getFormatVersion(formatId: string, version?: number) {
-  const format = store().formats.find((f) => f.id === formatId);
+  const format = (await listFormats()).find((f) => f.id === formatId);
   if (!format) return null;
   return (version === undefined ? format.versions.at(-1) : format.versions.find((v) => v.version === version)) ?? null;
 }
 
-export async function listTests() {
-  return [...store().tests].sort((a, b) => b.heldOn.localeCompare(a.heldOn) || a.band.localeCompare(b.band));
+export async function listTests(): Promise<WeeklyTest[]> {
+  if (!fromDb()) return [...store().tests].sort((a, b) => b.heldOn.localeCompare(a.heldOn) || a.band.localeCompare(b.band));
+  const { rows } = await getDb().query<TestRow>(`SELECT ${TEST_COLUMNS} FROM core.weekly_tests ORDER BY held_on DESC, band`);
+  return rows.map(toTest);
 }
 
-export async function getTest(testId: string) {
-  return store().tests.find((t) => t.id === testId) ?? null;
+export async function getTest(testId: string): Promise<WeeklyTest | null> {
+  if (!fromDb()) return store().tests.find((t) => t.id === testId) ?? null;
+  const { rows } = await getDb().query<TestRow>(`SELECT ${TEST_COLUMNS} FROM core.weekly_tests WHERE id = $1`, [testId]);
+  return rows[0] ? toTest(rows[0]) : null;
 }
 
 /** Students who sit a test: its band, limited to one instructor when given. */
-export function studentsFor(test: WeeklyTest, instructor?: string) {
-  return ROSTER.filter((s) => bandOf(s.level) === test.band && (!instructor || s.instructor === instructor)).sort((a, b) => a.name.localeCompare(b.name));
+export async function studentsFor(test: WeeklyTest, instructor?: string) {
+  return (await getRoster())
+    .filter((s) => bandOf(s.level) === test.band && (!instructor || s.instructor === instructor))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function getResults(testId: string, niatIds: string[]) {
-  const s = store();
-  return niatIds.map((id) => s.results.get(key(testId, id)) ?? null);
+export async function getResults(testId: string, niatIds: string[]): Promise<(TestResult | null)[]> {
+  if (!fromDb()) {
+    const s = store();
+    return niatIds.map((id) => s.results.get(key(testId, id)) ?? null);
+  }
+  if (!niatIds.length) return [];
+  const { rows } = await getDb().query<ResultRow>(
+    `SELECT test_id, niat_id, present, "values", entered_by, updated_at FROM core.test_results WHERE test_id = $1 AND niat_id = ANY($2::text[])`,
+    [testId, niatIds],
+  );
+  const byId = new Map(rows.map((r) => [r.niat_id, toResult(r)]));
+  return niatIds.map((id) => byId.get(id) ?? null);
+}
+
+export async function listSubmissions(testId: string): Promise<Submission[]> {
+  if (!fromDb()) return store().submissions.filter((x) => x.testId === testId);
+  const { rows } = await getDb().query<{ test_id: string; instructor: string; submitted_at: string }>(
+    "SELECT test_id, instructor, submitted_at FROM core.test_submissions WHERE test_id = $1",
+    [testId],
+  );
+  return rows.map((r) => ({ testId: r.test_id, instructor: r.instructor, submittedAt: new Date(r.submitted_at).toISOString() }));
 }
 
 export async function getSubmission(testId: string, instructor: string) {
-  return store().submissions.find((x) => x.testId === testId && x.instructor === instructor) ?? null;
+  return (await listSubmissions(testId)).find((x) => x.instructor === instructor) ?? null;
 }
 
-export async function listSubmissions(testId: string) {
-  return store().submissions.filter((x) => x.testId === testId);
-}
-
-/** A student's results across tests, newest last (for the Student page). */
+/** A student's results across tests of their band, oldest first (for the Student page). */
 export async function studentTestHistory(niatId: string) {
-  const s = store();
+  const student = (await getRoster()).find((x) => x.niatId === niatId);
+  if (!student) return [];
+  const band = bandOf(student.level);
+  const tests = (await listTests()).filter((t) => t.band === band);
   const out: { test: WeeklyTest; result: TestResult | null }[] = [];
-  for (const test of s.tests) {
-    const result = s.results.get(key(test.id, niatId)) ?? null;
-    const student = ROSTER.find((x) => x.niatId === niatId);
-    if (student && bandOf(student.level) === test.band) out.push({ test, result });
-  }
+  for (const test of tests) out.push({ test, result: (await getResults(test.id, [niatId]))[0] });
   return out.sort((a, b) => a.test.heldOn.localeCompare(b.test.heldOn));
 }
 
-// ---------- writes
+/** Each student's latest total (present results only), for the interaction form. */
+export async function latestTestTotals(niatIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!niatIds.length) return out;
+  if (!fromDb()) return out;
+  const { rows } = await getDb().query<{ niat_id: string; values: Record<string, ResultValue>; fields: FormatField[] }>(
+    `SELECT DISTINCT ON (r.niat_id) r.niat_id, r."values", v.fields
+     FROM core.test_results r
+     JOIN core.weekly_tests t ON t.id = r.test_id
+     JOIN core.test_format_versions v ON v.format_id = t.format_id AND v.version = t.version
+     WHERE r.niat_id = ANY($1::text[]) AND r.present
+     ORDER BY r.niat_id, t.held_on DESC`,
+    [niatIds],
+  );
+  for (const r of rows) {
+    const total = totalOf(r.fields, r.values);
+    if (total !== null) out.set(r.niat_id, total);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- writes
 
 type Fail = { ok: false; error: string; problems?: Record<string, string[]> };
 
@@ -191,7 +274,7 @@ export async function saveResults(
   if (!(user.role === "instructor" || user.role === "senior_instructor")) return { ok: false, error: "Results are entered by instructors." };
   if (await getSubmission(testId, user.name)) return { ok: false, error: "You've already submitted. Ask an admin to unlock." };
 
-  const mine = new Set(studentsFor(test, user.name).map((s) => s.niatId));
+  const mine = new Set((await studentsFor(test, user.name)).map((s) => s.niatId));
   const problems: Record<string, string[]> = {};
   for (const row of rows) {
     if (!mine.has(row.niatId)) return { ok: false, error: "You can only enter results for your own students." };
@@ -201,11 +284,24 @@ export async function saveResults(
   }
   if (Object.keys(problems).length) return { ok: false, error: "Some marks are out of range. Nothing was saved.", problems };
 
-  const s = store();
-  const now = new Date().toISOString();
-  for (const row of rows) {
-    const values = Object.fromEntries(version.fields.map((f) => [f.id, row.present ? (row.values[f.id] ?? null) : null]));
-    s.results.set(key(testId, row.niatId), { testId, niatId: row.niatId, present: row.present, values, enteredBy: user.name, updatedAt: now });
+  const clean = rows.map((row) => ({
+    niatId: row.niatId,
+    present: row.present,
+    values: Object.fromEntries(version.fields.map((f) => [f.id, row.present ? (row.values[f.id] ?? null) : null])),
+  }));
+  if (fromDb()) {
+    // One statement, so either every row is saved or none is.
+    await getDb().query(
+      `INSERT INTO core.test_results (test_id, niat_id, present, "values", entered_by)
+       SELECT $1, x.niat_id, x.present, x."values", $3 FROM jsonb_to_recordset($2::jsonb) AS x(niat_id text, present boolean, "values" jsonb)
+       ON CONFLICT (test_id, niat_id) DO UPDATE
+         SET present = EXCLUDED.present, "values" = EXCLUDED."values", entered_by = EXCLUDED.entered_by, updated_at = now()`,
+      [testId, JSON.stringify(clean.map((r) => ({ niat_id: r.niatId, present: r.present, values: r.values }))), user.name],
+    );
+  } else {
+    const s = store();
+    const now = new Date().toISOString();
+    for (const row of clean) s.results.set(key(testId, row.niatId), { testId, niatId: row.niatId, present: row.present, values: row.values, enteredBy: user.name, updatedAt: now });
   }
   return { ok: true, saved: rows.length };
 }
@@ -215,7 +311,7 @@ export async function submitResults(user: SessionUser, testId: string): Promise<
   if (!test) return { ok: false, error: "Test not found." };
   if (!canEnter(user, user.name) || (await getSubmission(testId, user.name))) return { ok: false, error: "Nothing to submit." };
   const version = (await getFormatVersion(test.formatId, test.version))!;
-  const students = studentsFor(test, user.name);
+  const students = await studentsFor(test, user.name);
   const results = await getResults(testId, students.map((s) => s.niatId));
   const problems: Record<string, string[]> = {};
   students.forEach((s, i) => {
@@ -227,16 +323,27 @@ export async function submitResults(user: SessionUser, testId: string): Promise<
     }
   });
   if (Object.keys(problems).length) return { ok: false, error: `${Object.keys(problems).length} students still need results.`, problems };
-  store().submissions.push({ testId, instructor: user.name, submittedAt: new Date().toISOString() });
+  if (fromDb()) {
+    await getDb().query("INSERT INTO core.test_submissions (test_id, instructor) VALUES ($1, $2) ON CONFLICT DO NOTHING", [testId, user.name]);
+  } else {
+    store().submissions.push({ testId, instructor: user.name, submittedAt: new Date().toISOString() });
+  }
   return { ok: true };
 }
 
 export async function unlockResults(user: SessionUser, testId: string, instructor: string): Promise<{ ok: true } | Fail> {
   if (user.role !== "owner" && user.role !== "admin") return { ok: false, error: "Only admins can unlock results." };
-  const s = store();
-  const before = s.submissions.length;
-  s.submissions = s.submissions.filter((x) => !(x.testId === testId && x.instructor === instructor));
-  return before === s.submissions.length ? { ok: false, error: "Those results aren't submitted." } : { ok: true };
+  let removed: boolean;
+  if (fromDb()) {
+    const { rows } = await getDb().query("DELETE FROM core.test_submissions WHERE test_id = $1 AND instructor = $2 RETURNING test_id", [testId, instructor]);
+    removed = rows.length > 0;
+  } else {
+    const s = store();
+    const before = s.submissions.length;
+    s.submissions = s.submissions.filter((x) => !(x.testId === testId && x.instructor === instructor));
+    removed = before !== s.submissions.length;
+  }
+  return removed ? { ok: true } : { ok: false, error: "Those results aren't submitted." };
 }
 
 export async function createTest(
@@ -247,17 +354,29 @@ export async function createTest(
   const version = await getFormatVersion(input.formatId);
   if (!version) return { ok: false, error: "Pick a format." };
   if (!input.name.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(input.heldOn)) return { ok: false, error: "Give the test a name and a date." };
-  if (store().tests.some((t) => t.name.trim().toLowerCase() === input.name.trim().toLowerCase() && t.band === input.band)) {
+  if ((await listTests()).some((t) => t.name.trim().toLowerCase() === input.name.trim().toLowerCase() && t.band === input.band)) {
     return { ok: false, error: `${input.band} already has a test called "${input.name.trim()}".` };
   }
   const test: WeeklyTest = { id: randomUUID().slice(0, 8), name: input.name.trim(), band: input.band, heldOn: input.heldOn, dueAt: input.dueAt, formatId: input.formatId, version: version.version, createdBy: user.name };
-  store().tests.push(test);
+  if (fromDb()) {
+    try {
+      await getDb().query(
+        "INSERT INTO core.weekly_tests (id, name, band, held_on, due_at, format_id, version, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        [test.id, test.name, test.band, test.heldOn, test.dueAt, test.formatId, test.version, test.createdBy],
+      );
+    } catch (err) {
+      if ((err as { code?: string }).code === "23505") return { ok: false, error: `${input.band} already has a test called "${test.name}".` };
+      throw err;
+    }
+  } else {
+    store().tests.push(test);
+  }
   return { ok: true, test };
 }
 
 export async function publishFormat(user: SessionUser, formatId: string, input: { passMark: number; fields: FormatField[] }): Promise<{ ok: true; version: number } | Fail> {
   if (user.role !== "owner" && user.role !== "admin") return { ok: false, error: "Only admins change the result format." };
-  const format = store().formats.find((f) => f.id === formatId);
+  const format = (await listFormats()).find((f) => f.id === formatId);
   if (!format) return { ok: false, error: "Format not found." };
   if (!input.fields.length) return { ok: false, error: "Add at least one field." };
   if (input.fields.some((f) => !f.label.trim())) return { ok: false, error: "Every field needs a name." };
@@ -265,6 +384,15 @@ export async function publishFormat(user: SessionUser, formatId: string, input: 
   if (input.fields.some((f) => (f.type === "single" || f.type === "multi") && !(f.options ?? []).length)) return { ok: false, error: "Choice fields need at least one option." };
   const total = input.fields.filter((f) => f.type === "marks").reduce((n, f) => n + (f.max ?? 0), 0);
   if (input.passMark < 0 || input.passMark > total) return { ok: false, error: `Pass mark must be between 0 and ${total}.` };
+  if (fromDb()) {
+    const { rows } = await getDb().query<{ version: number }>(
+      `INSERT INTO core.test_format_versions (format_id, version, pass_mark, fields, published_by)
+       SELECT $1, COALESCE(max(version), 0) + 1, $2, $3::jsonb, $4 FROM core.test_format_versions WHERE format_id = $1
+       RETURNING version`,
+      [formatId, input.passMark, JSON.stringify(input.fields), user.name],
+    );
+    return { ok: true, version: rows[0].version };
+  }
   const version = (format.versions.at(-1)?.version ?? 0) + 1;
   format.versions.push({ version, passMark: input.passMark, fields: input.fields, publishedBy: user.name, publishedAt: new Date().toISOString() });
   return { ok: true, version };

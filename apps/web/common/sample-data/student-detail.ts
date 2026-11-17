@@ -64,25 +64,27 @@ export function buildStudentDetail(s: RosterStudent) {
   const rand = seeded(s.niatId);
   const isAarav = s.niatId === "N99H01A0142";
   const r = s.risk;
+  const att30 = s.attendance30d ?? 0;
+  const attTerm = s.attendanceTerm ?? 0;
 
   // ---- Attendance
   const workingDaysToDate = [2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 16];
-  const absentCount = Math.round(workingDaysToDate.length * (1 - s.attendance30d / 100));
+  const absentCount = Math.round(workingDaysToDate.length * (1 - att30 / 100));
   const absentDays = isAarav
     ? [3, 4, 9, 10, 13]
     : workingDaysToDate.filter((d) => d !== 16).sort(() => rand() - 0.5).slice(0, absentCount).sort((a, b) => a - b);
   const novPresent = workingDaysToDate.length - absentDays.length;
   const novPct = Math.round((novPresent / workingDaysToDate.length) * 100);
   const months = [
-    { month: "Aug 2026", workingDays: 17, pct: Math.min(100, s.attendanceTerm + 12), remark: null as string | null },
-    { month: "Sep 2026", workingDays: 26, pct: Math.min(100, s.attendanceTerm + 6), remark: null as string | null },
-    { month: "Oct 2026", workingDays: 26, pct: Math.max(40, s.attendance30d + 4), remark: isAarav ? "Away 12–16 Oct, family function (informed POC)" : null },
+    { month: "Aug 2026", workingDays: 17, pct: Math.min(100, attTerm + 12), remark: null as string | null },
+    { month: "Sep 2026", workingDays: 26, pct: Math.min(100, attTerm + 6), remark: null as string | null },
+    { month: "Oct 2026", workingDays: 26, pct: Math.max(40, att30 + 4), remark: isAarav ? "Away 12–16 Oct, family function (informed POC)" : null },
     { month: "Nov (to date)", workingDays: workingDaysToDate.length, pct: novPct, remark: isAarav ? "Follow-up call scheduled" : null },
   ].map((m) => {
     const present = Math.round((m.workingDays * m.pct) / 100);
     return { ...m, present, absent: m.workingDays - present };
   });
-  const daysTo75 = s.attendance30d >= RISK_THRESHOLDS.attendancePct ? 0 : Math.ceil((0.75 * 30 - (s.attendance30d / 100) * 30) / 0.25);
+  const daysTo75 = att30 >= RISK_THRESHOLDS.attendancePct ? 0 : Math.ceil((0.75 * 30 - (att30 / 100) * 30) / 0.25);
 
   // ---- DSA progress
   const topics = LEVEL_TOPICS[s.level] ?? LEVEL_TOPICS[1];
@@ -271,10 +273,12 @@ export function buildStudentDetail(s: RosterStudent) {
   return {
     student: s,
     profile: {
-      instructorSince: "22 Sep",
+      instructorSince: "22 Sep" as string | null,
       coach: null as string | null,
       levelBand: `L${Math.min(s.level, 3)}${s.level >= 3 ? "+" : ""}`,
       lastActivity: "Present today, 16 Nov",
+      termLabel: "Term 5",
+      joinedLabel: "12 Aug 2026" as string | null,
     },
     flags,
     snapshot: {
@@ -285,9 +289,9 @@ export function buildStudentDetail(s: RosterStudent) {
       weeksAtLevel: r.weeksAtLevel,
       interactions: s.interactions,
       lastInteraction: interactions[0]?.date ?? null,
-      avgRating: Math.round((interactions.reduce((n, it) => n + it.rating, 0) / interactions.length) * 10) / 10,
-      latestTest: tests[4].total,
-      testAvg: Math.round((tests.reduce((n, t) => n + t.total, 0) / tests.length) * 10) / 10,
+      avgRating: (Math.round((interactions.reduce((n, it) => n + it.rating, 0) / interactions.length) * 10) / 10) as number | null,
+      latestTest: tests[4].total as number | null,
+      testAvg: (Math.round((tests.reduce((n, t) => n + t.total, 0) / tests.length) * 10) / 10) as number | null,
       rating: s.lcRating,
       contestsAttended: s.contestsAttended,
     },
@@ -299,7 +303,7 @@ export function buildStudentDetail(s: RosterStudent) {
       pct: novPct,
       months,
       daysTo75,
-      placementReachable: s.attendanceTerm >= 90,
+      placementReachable: attTerm >= 90,
       periods: [] as { kind: string; from: string; to: string }[],
     },
     progress,

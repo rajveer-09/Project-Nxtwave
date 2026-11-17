@@ -17,7 +17,7 @@ import { requireAccess } from "@/common/auth/guard";
 import { isAdminRole } from "@/common/auth/roles";
 import { formatDate, todayIst } from "@/common/lib/dates";
 import { getResults, listFormats, listSubmissions, listTests, studentsFor } from "@/modules/tests/data";
-import { ROSTER } from "@/common/sample-data/roster";
+import { getRoster, usingSampleData } from "@/common/data/roster";
 import { bandOf } from "@/modules/tests/types";
 
 export const metadata = { title: "Weekly tests" };
@@ -30,13 +30,13 @@ async function Content() {
   const user = await requireAccess("/tests");
   const admin = isAdminRole(user.role);
   const tests = await listTests();
-  const myBands = new Set(ROSTER.filter((s) => s.instructor === user.name).map((s) => bandOf(s.level)));
+  const myBands = new Set((await getRoster()).filter((s) => s.instructor === user.name).map((s) => bandOf(s.level)));
   const visible = admin ? tests : tests.filter((t) => myBands.has(t.band));
   const now = new Date().toISOString();
 
   const rows = await Promise.all(
     visible.map(async (t) => {
-      const students = studentsFor(t, admin ? undefined : user.name);
+      const students = await studentsFor(t, admin ? undefined : user.name);
       const results = await getResults(t.id, students.map((s) => s.niatId));
       const subs = await listSubmissions(t.id);
       const instructors = new Set(students.map((s) => s.instructor));
@@ -65,7 +65,7 @@ async function Content() {
                 Result format
               </Link>
             ) : null}
-            <StatusPill>Sample data</StatusPill>
+            {usingSampleData() ? <StatusPill>Sample data</StatusPill> : null}
           </>
         }
       />

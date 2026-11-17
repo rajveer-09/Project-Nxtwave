@@ -17,7 +17,7 @@ import { maxTotal, resultProblems, totalOf, type FormatVersion, type ResultValue
 import { cn } from "@/common/lib/utils";
 import { FieldInput } from "@/modules/tests/components/field-input";
 
-export type EntryStudent = { niatId: string; name: string; section: string; attendance30d: number };
+export type EntryStudent = { niatId: string; name: string; section: string; attendance30d: number | null };
 type Row = { present: boolean; values: Record<string, ResultValue> };
 
 /**
@@ -254,7 +254,7 @@ export function ResultsEntry({
               </span>
             </div>
             <p className="rounded-lg bg-background px-3 py-2 text-xs text-sidebar-foreground">
-              Last test: <b>{lastScores[selected.niatId] ?? "—"}</b> · Attendance 30d: <b>{selected.attendance30d}%</b>
+              Last test: <b>{lastScores[selected.niatId] ?? "—"}</b> · Attendance 30d: <b>{selected.attendance30d === null ? "—" : `${selected.attendance30d}%`}</b>
             </p>
             {panel.map((f) => (
               <div key={f.id} className="flex flex-col gap-1.5">

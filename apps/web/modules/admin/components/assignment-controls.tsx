@@ -1,0 +1,149 @@
+/*
+
+Author : Rajveer Sharma
+Date : 18 Nov 2026
+@ Nxtwave
+
+*/
+
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
+import { Button } from "@/common/ui/button";
+import { applyImportAction, assignAction, previewImportAction } from "@/modules/admin/actions";
+import type { ImportPreview, StaffOption } from "@/modules/admin/assignments-data";
+
+const select =
+  "h-9 w-full min-w-44 rounded-lg border border-input bg-card px-2.5 pr-8 text-[13px] text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60";
+
+/** Instructor or coach picker for one student; saves on change. */
+export function AssignSelect({ niatId, student, kind, current, options }: { niatId: string; student: string; kind: "instructor" | "coach"; current: string; options: StaffOption[] }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const currentId = options.find((o) => o.name === current)?.id ?? "";
+  return (
+    <select
+      aria-label={`${kind === "coach" ? "Success coach" : "Instructor"} for ${student}`}
+      className={select}
+      value={currentId}
+      disabled={pending}
+      onChange={(e) => {
+        const next = e.target.value || null;
+        startTransition(async () => {
+          const result = await assignAction(niatId, kind, next);
+          if (result.ok) {
+            toast.success(result.message);
+            router.refresh();
+          } else toast.error(result.error);
+        });
+      }}
+    >
+      <option value="">{kind === "coach" ? "No coach" : current && current !== "Unassigned" && !currentId ? `${current} (inactive)` : "Unassigned"}</option>
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>
+          {o.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Upload an Excel or CSV file, check the preview, then apply. Logged as "Excel import" with the file name. */
+export function ImportPanel() {
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pending, startTransition] = useTransition();
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+
+  function check(form: FormData) {
+    startTransition(async () => {
+      const result = await previewImportAction(form);
+      if (result.ok) setPreview(result.preview);
+      else toast.error(result.error);
+    });
+  }
+
+  function apply() {
+    if (!preview) return;
+    startTransition(async () => {
+      const result = await applyImportAction(preview.id);
+      if (result.ok) {
+        toast.success(result.message);
+        setPreview(null);
+        if (fileRef.current) fileRef.current.value = "";
+        router.refresh();
+      } else toast.error(result.error);
+    });
+  }
+
+  const shown = preview?.rows.filter((r) => r.error || r.instructor || r.coach) ?? [];
+  return (
+    <div className="flex flex-col gap-3">
+      <form action={check} className="flex flex-wrap items-center gap-3">
+        <input
+          ref={fileRef}
+          type="file"
+          name="file"
+          accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+          required
+          className="text-sm file:mr-3 file:h-9 file:rounded-lg file:border file:border-input file:bg-card file:px-3 file:text-sm file:font-semibold hover:file:bg-muted"
+          onChange={() => setPreview(null)}
+        />
+        <Button type="submit" variant="outline" disabled={pending}>
+          {pending && !preview ? "Checking…" : "Check file"}
+        </Button>
+      </form>
+      <p className="text-xs text-muted-foreground">
+        Columns: <b>NIAT ID</b>, and <b>Instructor</b> and/or <b>Coach</b> (email, instructor code such as INS012, or full name). Blank cells are left as
+        they are; &quot;none&quot; removes the person. Nothing changes until you apply.
+      </p>
+      {preview ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-background p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm">
+              <b>{preview.fileName}</b> · {preview.changes} to change · {preview.unchanged} already so · {preview.errors ? <b className="text-warning">{preview.errors} with problems (skipped)</b> : "no problems"}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setPreview(null)} disabled={pending}>
+                Cancel
+              </Button>
+              <Button onClick={apply} disabled={pending || preview.changes === 0}>
+                {pending ? "Applying…" : `Apply ${preview.changes} change${preview.changes === 1 ? "" : "s"}`}
+              </Button>
+            </div>
+          </div>
+          {shown.length ? (
+            <div className="max-h-80 overflow-auto rounded-lg border border-border bg-card">
+              <table className="w-full border-collapse text-[13px]">
+                <thead className="sticky top-0 bg-surface-subtle text-left text-xs text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="px-3 py-2">Row</th>
+                    <th scope="col" className="px-3 py-2">Student</th>
+                    <th scope="col" className="px-3 py-2">Instructor</th>
+                    <th scope="col" className="px-3 py-2">Coach</th>
+                    <th scope="col" className="px-3 py-2">Problem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.slice(0, 300).map((r) => (
+                    <tr key={r.line} className="border-t border-muted">
+                      <td className="px-3 py-1.5 tabular text-muted-foreground">{r.line}</td>
+                      <td className="px-3 py-1.5">
+                        {r.student ?? "—"} <span className="text-xs text-muted-foreground tabular">{r.niatId}</span>
+                      </td>
+                      <td className="px-3 py-1.5">{r.instructor ? `${r.instructor.from} → ${r.instructor.to ?? "none"}` : "—"}</td>
+                      <td className="px-3 py-1.5">{r.coach ? `${r.coach.from} → ${r.coach.to ?? "none"}` : "—"}</td>
+                      <td className="px-3 py-1.5 text-warning">{r.error ?? ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}

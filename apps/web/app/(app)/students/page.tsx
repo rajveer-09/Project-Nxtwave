@@ -15,9 +15,9 @@ import { StudentsFilters, StudentsFiltersFallback } from "@/modules/students/com
 import { StudentsTable } from "@/modules/students/components/students-table";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
-import { instructorScope } from "@/common/auth/student-access";
+import { studentScope } from "@/common/auth/student-access";
 import { listStudents, parseStudentQuery, type FlagFilter } from "@/modules/students/data";
-import { ROSTER_TOTAL_IN_PRODUCTION } from "@/common/sample-data/roster";
+import { usingSampleData } from "@/common/data/roster";
 import { withParams, type SearchParamsRecord } from "@/common/lib/url";
 import { cn } from "@/common/lib/utils";
 
@@ -36,10 +36,10 @@ const CHIPS: { key: FlagFilter | "all"; label: string }[] = [
 async function StudentsResults({ searchParams }: { searchParams: Promise<SearchParamsRecord> }) {
   const user = await requireAccess("/students");
   const params = await searchParams;
-  const scope = instructorScope(user);
-  const query = { ...parseStudentQuery(params), ...(scope ? { instructor: scope } : {}) };
+  const scope = studentScope(user);
+  const query = { ...parseStudentQuery(params), ...(scope ?? {}) };
   const result = await listStudents(query);
-  if (scope) result.options.instructors = [scope];
+  if (scope?.instructor) result.options.instructors = [scope.instructor];
   const activeChip = query.flag ?? "all";
 
   return (
@@ -122,7 +122,7 @@ export default function StudentsPage({ searchParams }: PageProps<"/students">) {
       <PageHeader
         eyebrow="One roster for every module · keyed by NIAT ID"
         title="Students"
-        actions={<StatusPill>Sample data · {ROSTER_TOTAL_IN_PRODUCTION} in the real roster</StatusPill>}
+        actions={usingSampleData() ? <StatusPill>Sample data · no database connected</StatusPill> : null}
       />
       <Suspense fallback={<ResultsSkeleton />}>
         <StudentsResults searchParams={searchParams} />

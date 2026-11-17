@@ -42,7 +42,7 @@ function marks() {
       for (let d = addDays(today, -40); d < today; d = addDays(d, 1)) {
         if (!resolve(d, s.college, today).counted) continue;
         seed = (seed * 1103515245 + 12345) >>> 0;
-        m.set(`${s.niatId}|${d}`, (seed % 100) < s.attendance30d ? "P" : "A");
+        m.set(`${s.niatId}|${d}`, (seed % 100) < (s.attendance30d ?? 0) ? "P" : "A");
       }
     }
     store.__attendanceMarks = m;

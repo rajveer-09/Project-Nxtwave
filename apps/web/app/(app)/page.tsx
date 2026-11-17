@@ -17,7 +17,8 @@ import { StatCard } from "@/common/components/stat-card";
 import { AtRiskTable } from "@/modules/home/at-risk-table";
 import { isAdminRole } from "@/common/auth/roles";
 import { getSessionUser } from "@/common/auth/session";
-import { adminTodo, atRiskStudents, hallAttendance, homeKpis, latestContest, levelDistribution } from "@/modules/home/sample-data";
+import { getHomeData, type HomeData } from "@/modules/home/data";
+import { Skeleton } from "@/common/ui/skeleton";
 import { cn } from "@/common/lib/utils";
 
 export const metadata = { title: "Home" };
@@ -27,13 +28,14 @@ async function Greeting() {
   return <>Good morning, {user.name.split(" ")[0]}</>;
 }
 
-async function AdminTodo() {
+async function AdminTodo({ items }: { items: HomeData["todo"] }) {
   const user = await getSessionUser();
   if (!isAdminRole(user.role)) return null;
   return (
     <SectionCard title="Admin to-do">
+      {items.length ? null : <p className="text-[13px] text-muted-foreground">Nothing waiting.</p>}
       <ul className="flex flex-col gap-2.5">
-        {adminTodo.map((item) => (
+        {items.map((item) => (
           <li key={item.href}>
             <Link
               href={item.href}
@@ -52,28 +54,22 @@ async function AdminTodo() {
   );
 }
 
-export default function HomePage() {
+async function HomeEyebrow() {
+  const data = await getHomeData();
+  return <>{data.dateLabel}</>;
+}
+
+async function SampleBadge() {
+  const data = await getHomeData();
+  return data.sample ? <StatusPill>Sample data</StatusPill> : null;
+}
+
+async function HomeContent() {
+  const data = await getHomeData();
   return (
     <>
-      <PageHeader
-        eyebrow="Monday, 16 Nov 2026 · Term 5"
-        title={
-          <Suspense fallback="Good morning">
-            <Greeting />
-          </Suspense>
-        }
-        actions={
-          <>
-            <Suspense fallback={<GlobalFiltersFallback />}>
-              <GlobalFilters />
-            </Suspense>
-            <StatusPill>Sample data</StatusPill>
-          </>
-        }
-      />
-
       <section aria-label="Key numbers" className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
-        {homeKpis.map((kpi) => (
+        {data.kpis.map((kpi) => (
           <StatCard key={kpi.label} {...kpi} />
         ))}
       </section>
@@ -83,22 +79,22 @@ export default function HomePage() {
           className="flex-[2_1_600px]"
           bodyClassName="px-0 pb-2"
           title="Students who need attention"
-          description="Flags combine attendance, interactions and contests · 47 students"
+          description={`Flags combine attendance, interactions and contests · ${data.atRiskTotal} students`}
           action={
             <Link href="/students?flag=any" className="text-[13px] font-semibold text-primary hover:text-accent-strong">
               View all at-risk →
             </Link>
           }
         >
-          <AtRiskTable rows={atRiskStudents} />
+          <AtRiskTable rows={data.atRisk} />
         </SectionCard>
 
         <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-5">
           <Suspense fallback={null}>
-            <AdminTodo />
+            <AdminTodo items={data.todo} />
           </Suspense>
-          <SectionCard title="DSA level distribution" action={<span className="text-xs text-muted-foreground">964 students</span>}>
-            <BarList items={levelDistribution} labelWidth="2.25rem" />
+          <SectionCard title="DSA level distribution" action={<span className="text-xs text-muted-foreground">{data.students} students</span>}>
+            <BarList items={data.levels} labelWidth="2.25rem" />
           </SectionCard>
           <SectionCard
             title="Attendance by hall · 30 days"
@@ -108,7 +104,7 @@ export default function HomePage() {
               </Link>
             }
           >
-            <BarList items={hallAttendance} max={100} labelWidth="3.75rem" />
+            <BarList items={data.halls} max={100} labelWidth="3.75rem" />
             <div className="mt-3.5 flex gap-3.5 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <span className="size-2.5 rounded-sm bg-primary" />
@@ -120,29 +116,75 @@ export default function HomePage() {
               </span>
             </div>
           </SectionCard>
-          <SectionCard
-            title={latestContest.name}
-            description={latestContest.date}
-            action={<StatusPill tone="accent">Final</StatusPill>}
-          >
-            <dl className="grid grid-cols-3 gap-2">
-              {[
-                [String(latestContest.tookPart), "took part"],
-                [latestContest.medianSolved, "median solved"],
-                [latestContest.bestGlobalRank, "best global rank"],
-              ].map(([value, label]) => (
-                <div key={label} className="flex flex-col-reverse">
-                  <dt className="text-xs text-muted-foreground">{label}</dt>
-                  <dd className="font-heading text-[22px] font-semibold tabular">{value}</dd>
-                </div>
-              ))}
-            </dl>
-            <Link href="/contests" className="mt-3 flex min-h-11 items-center text-[13px] font-semibold text-primary hover:text-accent-strong">
-              Open contest results →
-            </Link>
-          </SectionCard>
+          {data.contest ? (
+            <SectionCard title={data.contest.name} description={data.contest.date} action={<StatusPill tone="accent">{data.contest.state}</StatusPill>}>
+              <dl className="grid grid-cols-3 gap-2">
+                {[
+                  [String(data.contest.tookPart), "took part"],
+                  [data.contest.medianSolved, "median solved"],
+                  [data.contest.bestGlobalRank, "best global rank"],
+                ].map(([value, label]) => (
+                  <div key={label} className="flex flex-col-reverse">
+                    <dt className="text-xs text-muted-foreground">{label}</dt>
+                    <dd className="font-heading text-[22px] font-semibold tabular">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <Link href="/contests" className="mt-3 flex min-h-11 items-center text-[13px] font-semibold text-primary hover:text-accent-strong">
+                Open contest results →
+              </Link>
+            </SectionCard>
+          ) : null}
         </div>
       </div>
+    </>
+  );
+}
+
+function HomeSkeleton() {
+  return (
+    <div className="flex flex-col gap-5" aria-busy="true" aria-label="Loading home">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-36 rounded-xl" />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-5">
+        <Skeleton className="h-[420px] flex-[2_1_600px] rounded-xl" />
+        <Skeleton className="h-[420px] flex-[1_1_320px] rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <>
+      <PageHeader
+        eyebrow={
+          <Suspense fallback="Today">
+            <HomeEyebrow />
+          </Suspense>
+        }
+        title={
+          <Suspense fallback="Good morning">
+            <Greeting />
+          </Suspense>
+        }
+        actions={
+          <>
+            <Suspense fallback={<GlobalFiltersFallback />}>
+              <GlobalFilters />
+            </Suspense>
+            <Suspense fallback={null}>
+              <SampleBadge />
+            </Suspense>
+          </>
+        }
+      />
+      <Suspense fallback={<HomeSkeleton />}>
+        <HomeContent />
+      </Suspense>
     </>
   );
 }

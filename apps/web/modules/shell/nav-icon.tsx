@@ -11,10 +11,13 @@ import {
   CalendarCheck,
   ChartColumn,
   ClipboardList,
+  History,
   House,
   IdCard,
   Megaphone,
   MessageCircle,
+  ShieldCheck,
+  Shuffle,
   Trophy,
   Users,
   type LucideProps,
@@ -32,6 +35,9 @@ const ICONS = {
   messages: Megaphone,
   staff: IdCard,
   analytics: ChartColumn,
+  assignments: Shuffle,
+  changelog: History,
+  shield: ShieldCheck,
 } satisfies Record<NavIconName, React.ComponentType<LucideProps>>;
 
 export function NavIcon({ name, ...props }: { name: NavIconName } & LucideProps) {

@@ -16,7 +16,7 @@ import { cn } from "@/common/lib/utils";
 export function ProfileHeader({ d }: { d: StudentDetail }) {
   const s = d.student;
   const facts: [string, string][] = [
-    ["Instructor", `${s.instructor} · since ${d.profile.instructorSince}`],
+    ["Instructor", d.profile.instructorSince ? `${s.instructor} · since ${d.profile.instructorSince}` : s.instructor],
     ["POC", s.poc],
     ["Coach", d.profile.coach ?? "Not assigned"],
     ["LeetCode", s.lcHandle ? `${s.lcHandle} · verified` : "No handle"],
@@ -37,7 +37,7 @@ export function ProfileHeader({ d }: { d: StudentDetail }) {
               <StatusPill tone="accent">Active</StatusPill>
             </div>
             <span className="text-[13px] text-sidebar-foreground">
-              {s.college} · Section {s.section} · {s.hall} · Term 5 · joined 12 Aug 2026
+              {[s.college, `Section ${s.section}`, s.hall, d.profile.termLabel, d.profile.joinedLabel ? `joined ${d.profile.joinedLabel}` : null].filter(Boolean).join(" · ")}
             </span>
           </div>
         </div>
@@ -93,11 +93,26 @@ export function FlagsBanner({ d }: { d: StudentDetail }) {
 export function Snapshot({ d }: { d: StudentDetail }) {
   const s = d.snapshot;
   const tiles = [
-    { label: "Attendance", value: `${s.attendance30d}%`, sub: `Last 30 days · term ${s.attendanceTerm}%`, warn: s.attendance30d < 75 },
+    {
+      label: "Attendance",
+      value: s.attendance30d === null ? "—" : `${s.attendance30d}%`,
+      sub: s.attendance30d === null ? "Nothing marked in 30 days" : `Last 30 days · term ${s.attendanceTerm ?? "—"}%`,
+      warn: s.attendance30d !== null && s.attendance30d < 75,
+    },
     { label: "DSA level", value: `L${s.level}`, sub: `Step ${s.step} · ${s.weeksAtLevel} weeks at this level`, warn: false },
-    { label: "Interactions", value: String(s.interactions), sub: s.lastInteraction ? `Last ${s.lastInteraction} · avg ${s.avgRating} / 5` : "None yet", warn: false },
-    { label: "Weekly tests", value: `${s.latestTest} / ${d.tests.max}`, sub: `Latest · avg ${s.testAvg} over ${d.tests.list.length} tests`, warn: s.latestTest < d.tests.passMark },
-    { label: "LeetCode", value: s.rating ? s.rating.toLocaleString("en-IN") : "—", sub: s.rating ? `Rating · ${s.contestsAttended} of 12 contests` : "No handle on file", warn: false },
+    { label: "Interactions", value: String(s.interactions), sub: s.lastInteraction ? `Last ${s.lastInteraction}${s.avgRating !== null ? ` · avg ${s.avgRating} / 5` : ""}` : "None yet", warn: false },
+    {
+      label: "Weekly tests",
+      value: s.latestTest === null ? "—" : `${s.latestTest} / ${d.tests.max}`,
+      sub: s.latestTest === null ? "No results recorded yet" : `Latest · avg ${s.testAvg} over ${d.tests.list.length} tests`,
+      warn: s.latestTest !== null && s.latestTest < d.tests.passMark,
+    },
+    {
+      label: "LeetCode",
+      value: s.rating ? s.rating.toLocaleString("en-IN") : "—",
+      sub: d.contests.handle ? `${s.rating ? "Rating · " : ""}${s.contestsAttended} of ${d.contests.of} contests` : "No handle on file",
+      warn: false,
+    },
   ];
   return (
     <section aria-label="Snapshot" className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3.5">

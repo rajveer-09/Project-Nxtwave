@@ -30,7 +30,8 @@ export const FLAG_LABEL: Record<FlagKey, string> = {
 };
 
 export type RiskInput = {
-  attendance30d: number;
+  /** Null when nothing is marked in the last 30 days. */
+  attendance30d: number | null;
   daysSinceInteraction: number | null;
   contestAbsentStreak: number;
   weeksAtLevel: number;
@@ -39,7 +40,7 @@ export type RiskInput = {
 
 export function riskFlags(input: RiskInput): FlagKey[] {
   const flags: FlagKey[] = [];
-  if (input.attendance30d < RISK_THRESHOLDS.attendancePct) flags.push("attendance");
+  if (input.attendance30d !== null && input.attendance30d < RISK_THRESHOLDS.attendancePct) flags.push("attendance");
   if (input.daysSinceInteraction === null || input.daysSinceInteraction >= RISK_THRESHOLDS.interactionGapDays) flags.push("interaction");
   if (input.contestAbsentStreak >= RISK_THRESHOLDS.missedContestsInARow) flags.push("contests");
   if (input.weeksAtLevel >= RISK_THRESHOLDS.weeksAtLevel) flags.push("level");

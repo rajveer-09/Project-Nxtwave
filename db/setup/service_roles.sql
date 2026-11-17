@@ -62,3 +62,15 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA contest TO contest_svc;
 -- The web app reads the other modules for the Student page and analytics
 GRANT USAGE ON SCHEMA attendance, contest TO web_svc;
 GRANT SELECT ON ALL TABLES IN SCHEMA attendance, contest TO web_svc;
+
+-- Change log (db/core/migrations/20261118000001): append-only. Rows are written only by
+-- core.write_change() and the core triggers, which run as the owner; no app role may edit the log.
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON core.change_log FROM web_svc, attendance_svc, contest_svc, interactions_svc;
+GRANT SELECT ON core.change_log TO web_svc;
+-- The web app changes assignments only through core.assign_staff (history + log in one place).
+GRANT EXECUTE ON FUNCTION core.assign_staff(text, text, bigint) TO web_svc;
+-- Interactions keeps core in step when it moves a student (trigger in its db/schema.sql); the web
+-- app also updates logs.students, which fires the same trigger.
+GRANT EXECUTE ON FUNCTION core.sync_instructor_from_logs(text, text) TO interactions_svc, web_svc;
+-- Attendance logs class changes on its own student list (services/attendance-api migration 000014).
+GRANT EXECUTE ON FUNCTION core.write_change(text, text, text, bigint, text, text, text, jsonb) TO attendance_svc;

@@ -20,6 +20,7 @@ const DEV_USERS: Record<SessionUser["role"], SessionUser> = {
   admin: { id: "dev-admin", name: "Ravi V.", email: "admin@example.com", role: "admin" },
   senior_instructor: { id: "dev-senior", name: "Neha P.", email: "senior@example.com", role: "senior_instructor" },
   instructor: { id: "dev-instructor", name: "Karthik S.", email: "instructor@example.com", role: "instructor" },
+  success_coach: { id: "dev-coach", name: "Farhan A.", email: "coach@example.com", role: "success_coach" },
 };
 
 /** The signed-in user, or null. Use in route handlers that answer with 401 themselves. */

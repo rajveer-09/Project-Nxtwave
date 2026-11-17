@@ -7,7 +7,8 @@ Date : 16 Nov 2026
 */
 
 import { getOptionalSessionUser } from "@/common/auth/session";
-import { instructorScope } from "@/common/auth/student-access";
+import { inScope, studentScope } from "@/common/auth/student-access";
+import { getRoster } from "@/common/data/roster";
 import { toCsv } from "@/common/lib/csv";
 import { todayIst } from "@/common/lib/dates";
 import { listInteractions } from "@/modules/interactions/data";
@@ -18,7 +19,10 @@ export async function GET() {
   const user = await getOptionalSessionUser();
   if (!user) return Response.json({ error: "Not signed in" }, { status: 401 });
 
-  const rows = await listInteractions({ instructor: instructorScope(user) });
+  const scope = studentScope(user);
+  const rows = scope?.coach !== undefined
+    ? await listInteractions({ niatIds: (await getRoster()).filter((s) => inScope(scope, s)).map((s) => s.niatId) })
+    : await listInteractions({ instructor: scope?.instructor });
   const csv = toCsv(
     ["Date", "NIAT ID", "Student", "Round", "Taken by", "Assigned instructor", "Level", "Topics", "Subtopics", "Steps reached", "Outcome", "Rating", "Questions asked", "Off-roadmap questions", "Tweaked questions", "Remarks", "Performed well", "Improvement areas", "Action items", "Meet recording", "Transcript link"],
     rows.map((it) => [

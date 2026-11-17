@@ -8,6 +8,7 @@ Date : 17 Nov 2026
 
 import { Suspense } from "react";
 import { StatusPill } from "@/common/components/chips";
+import { usingSampleData } from "@/common/data/roster";
 import { PageHeader } from "@/common/components/page-header";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
@@ -29,7 +30,7 @@ export default function CurriculumPage() {
         eyebrow="Admin"
         title="Curriculum & question bank"
         description="The roadmap instructors follow when they log interactions. Changes apply to new interactions; past logs keep what was asked."
-        actions={<StatusPill>Sample data</StatusPill>}
+        actions={usingSampleData() ? <StatusPill>Sample data</StatusPill> : null}
       />
       <Suspense fallback={<Skeleton className="h-[560px] rounded-xl" />}>
         <Content />

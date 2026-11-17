@@ -76,7 +76,7 @@ export function StudentsTable({ rows, query, params }: { rows: RosterStudent[]; 
         </thead>
         <tbody>
           {rows.map((s) => {
-            const low = s.attendance30d < 75;
+            const low = s.attendance30d !== null && s.attendance30d < 75;
             return (
               <tr key={s.niatId} className="hover:bg-surface-subtle">
                 <td className="border-b border-muted py-2.5 pr-3 pl-5">
@@ -93,9 +93,9 @@ export function StudentsTable({ rows, query, params }: { rows: RosterStudent[]; 
                 <td className="border-b border-muted px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <span className="h-1.5 w-14 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-                      <span className={cn("block h-full", low ? "bg-warning-strong" : "bg-primary")} style={{ width: `${s.attendance30d}%` }} />
+                      <span className={cn("block h-full", low ? "bg-warning-strong" : "bg-primary")} style={{ width: `${s.attendance30d ?? 0}%` }} />
                     </span>
-                    <span className={cn("font-semibold tabular", low && "text-warning")}>{s.attendance30d}%</span>
+                    <span className={cn("font-semibold tabular", low && "text-warning")}>{s.attendance30d === null ? "—" : `${s.attendance30d}%`}</span>
                   </div>
                 </td>
                 <td className="border-b border-muted px-3 py-2.5">

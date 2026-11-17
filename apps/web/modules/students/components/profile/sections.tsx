@@ -20,7 +20,7 @@ export function InteractionsSection({ d }: { d: StudentDetail }) {
       <SectionHeading
         id="interactions"
         title="Interactions"
-        extra={`· ${d.snapshot.interactions} rounds · avg rating ${d.snapshot.avgRating}`}
+        extra={`· ${d.snapshot.interactions} rounds${d.snapshot.avgRating !== null ? ` · avg rating ${d.snapshot.avgRating}` : ""}`}
         link={{ href: `/interactions?student=${d.student.niatId}`, label: "Log a new one" }}
       />
       <InteractionsList items={d.interactions} />
@@ -34,6 +34,10 @@ export function TestsSection({ d }: { d: StudentDetail }) {
   return (
     <section id="tests" aria-labelledby="tests-h" className="flex scroll-mt-6 flex-col gap-3.5">
       <SectionHeading id="tests" title="Weekly tests" link={{ href: "/tests", label: "Weekly tests" }} />
+      {!t.list.length ? (
+        <p className="rounded-xl border border-border bg-card px-4 py-3.5 text-sm text-muted-foreground">No weekly test results recorded for this student yet.</p>
+      ) : (
+      <>
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-[1_1_380px] rounded-xl border border-border bg-card p-4">
           <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -98,6 +102,8 @@ export function TestsSection({ d }: { d: StudentDetail }) {
           </table>
         </div>
       </div>
+      </>
+      )}
     </section>
   );
 }
@@ -159,6 +165,7 @@ export function ContestsSection({ d }: { d: StudentDetail }) {
         <div className="min-w-0 flex-[1_1_280px] rounded-xl border border-border bg-card p-4">
           <h3 className="text-[15px] font-bold">Topics in contest problems</h3>
           <p className="mb-3 text-xs text-muted-foreground">Solved / attempted, from LeetCode tags</p>
+          {!c.tags.length ? <p className="text-sm text-muted-foreground">No contest problems attempted yet.</p> : null}
           <BarList
             items={c.tags.map((tag) => ({
               label: tag.name,

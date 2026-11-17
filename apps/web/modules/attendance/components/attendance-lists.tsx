@@ -42,7 +42,7 @@ export function TermsList() {
                 <td className={`${td} font-semibold`}>{t.name}</td>
                 <td className={td}>{formatDate(t.start)}</td>
                 <td className={td}>{formatDate(t.end)}</td>
-                <td className={td}>{t.is_current ? <StatusPill tone="accent">Current</StatusPill> : <StatusPill>Past</StatusPill>}</td>
+                <td className={td}>{t.is_current ? <StatusPill tone="accent">Current</StatusPill> : <StatusPill>{q.data && t.start > q.data.today ? "Upcoming" : "Past"}</StatusPill>}</td>
               </tr>
             ))}
           </tbody>
@@ -91,7 +91,7 @@ export function InternshipsList({ today }: { today: string }) {
                     <div className="text-xs text-muted-foreground">{p.niat_id}</div>
                   </td>
                   <td className={td}>
-                    {p.degree} · {p.section} · {p.hall_no}
+                    {p.degree} · {p.section} · {p.hall_no || "No hall"}
                   </td>
                   <td className={td}>{p.kind === "INTERNSHIP" ? "Internship (counts as present)" : "Registration pending (counts as absent)"}</td>
                   <td className={td}>

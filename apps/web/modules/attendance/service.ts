@@ -7,7 +7,9 @@ Date : 17 Nov 2026
 */
 
 import "server-only";
+import { authMode } from "@/common/auth/config";
 import type { ServiceConfig } from "@/common/services/forward";
+import { attendanceDb } from "./db-service";
 import { attendanceSample } from "./sample-service";
 
 /** The Go attendance API (services/attendance-api), reached through /api/attendance/*. */
@@ -17,5 +19,7 @@ export const ATTENDANCE_SERVICE: ServiceConfig = {
   originEnv: "ATTENDANCE_API_ORIGIN",
   secretEnv: "ATTENDANCE_JWT_SECRET",
   upstreamPrefix: "/api",
-  sample: attendanceSample,
+  // Without the Go service: read the attendance schema when there's a database
+  // (read-only; saving needs the service), otherwise the in-memory sample.
+  sample: (request, path, user) => (authMode() === "database" ? attendanceDb : attendanceSample)(request, path, user),
 };

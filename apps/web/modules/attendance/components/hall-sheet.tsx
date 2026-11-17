@@ -28,10 +28,12 @@ const control =
  * Hall attendance sheet (ported from the attendance dashboard's MarkAttendance).
  * Keyboard: ↑/↓ move between students, P / A mark and move down, Delete clears.
  * Only changed rows are sent; the service saves all of them or none.
+ * savingNeedsService: marks are read from the database but saving needs the Go service.
  */
-export function HallSheet({ canMark, today }: { canMark: boolean; today: string }) {
+export function HallSheet({ canMark, savingNeedsService = false, today }: { canMark: boolean; savingNeedsService?: boolean; today: string }) {
   const queryClient = useQueryClient();
-  const [hall, setHall] = useState<string>("");
+  // null until a hall is picked; "" is the students with no hall.
+  const [hall, setHall] = useState<string | null>(null);
   const [date, setDate] = useState(today);
   const [search, setSearch] = useState("");
   const [edits, setEdits] = useState<Record<string, Mark>>({});
@@ -39,11 +41,12 @@ export function HallSheet({ canMark, today }: { canMark: boolean; today: string 
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
 
   const halls = useQuery({ queryKey: ["attendance", "halls"], queryFn: attendanceApi.halls });
-  const selectedHall = hall || halls.data?.halls[0]?.hall || "";
+  const selectedHall = hall ?? halls.data?.halls[0]?.hall ?? null;
+  const hallName = selectedHall === null ? "…" : selectedHall || "No hall";
   const sheet = useQuery({
     queryKey: ["attendance", "sheet", date, selectedHall],
-    queryFn: () => attendanceApi.sheet(date, selectedHall),
-    enabled: !!selectedHall,
+    queryFn: () => attendanceApi.sheet(date, selectedHall ?? ""),
+    enabled: selectedHall !== null,
   });
 
   const rows = (sheet.data?.students ?? []).filter(
@@ -67,7 +70,7 @@ export function HallSheet({ canMark, today }: { canMark: boolean; today: string 
   const save = useMutation({
     mutationFn: () => attendanceApi.saveMarks(changed.map((r) => ({ niat_id: r.niat_id, date, status: edits[r.niat_id] }))),
     onSuccess: async (result) => {
-      toast.success(`Saved ${result.saved} mark${result.saved === 1 ? "" : "s"}${result.cleared ? `, cleared ${result.cleared}` : ""} for ${selectedHall} on ${formatDate(date)}.`);
+      toast.success(`Saved ${result.saved} mark${result.saved === 1 ? "" : "s"}${result.cleared ? `, cleared ${result.cleared}` : ""} for ${hallName} on ${formatDate(date)}.`);
       setEdits({});
       await queryClient.invalidateQueries({ queryKey: ["attendance", "sheet", date, selectedHall] });
     },
@@ -121,10 +124,10 @@ export function HallSheet({ canMark, today }: { canMark: boolean; today: string 
         <div className="flex flex-wrap items-end gap-2.5">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Hall
-            <select value={selectedHall} onChange={(e) => switchTo({ hall: e.target.value })} className={cn(control, "min-w-36")} disabled={halls.isLoading}>
+            <select value={selectedHall ?? ""} onChange={(e) => switchTo({ hall: e.target.value })} className={cn(control, "min-w-36")} disabled={halls.isLoading}>
               {(halls.data?.halls ?? []).map((h) => (
                 <option key={h.hall} value={h.hall}>
-                  {h.hall} · {h.students}
+                  {h.hall || "No hall"} · {h.students}
                 </option>
               ))}
             </select>
@@ -156,12 +159,17 @@ export function HallSheet({ canMark, today }: { canMark: boolean; today: string 
         <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
           Read only: marking attendance is done by admins. You can see your hall&apos;s marks here.
         </p>
+      ) : savingNeedsService ? (
+        <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
+          Read only on this environment: these are the saved marks, but saving new ones needs the attendance service (services/attendance-api), which isn&apos;t
+          running here.
+        </p>
       ) : null}
 
-      <section aria-label={`${selectedHall} attendance sheet`} className="overflow-hidden rounded-xl border border-border bg-card">
+      <section aria-label={`${hallName} attendance sheet`} className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <span className="text-sm font-semibold">
-            {selectedHall || "…"} · {formatDate(date)} · {sheet.data?.students.length ?? 0} students
+            {hallName} · {formatDate(date)} · {sheet.data?.students.length ?? 0} students
           </span>
           {canMark ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -199,7 +207,7 @@ export function HallSheet({ canMark, today }: { canMark: boolean; today: string 
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-[13px]">
-              <caption className="sr-only">Attendance for {selectedHall}. Use the arrow keys to move between students and P or A to mark.</caption>
+              <caption className="sr-only">Attendance for {hallName}. Use the arrow keys to move between students and P or A to mark.</caption>
               <thead>
                 <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
                   <th scope="col" className="border-b border-border py-2.5 pr-3 pl-4">Student</th>

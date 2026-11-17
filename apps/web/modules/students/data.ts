@@ -14,13 +14,15 @@ import { maxTotal, totalOf } from "@/modules/tests/types";
 import { formatDate } from "@/common/lib/dates";
 import { STATUS_LABEL } from "@/modules/interactions/lib/types";
 import { buildStudentDetail } from "@/common/sample-data/student-detail";
-import { ROSTER, type RosterStudent } from "@/common/sample-data/roster";
+import type { RosterStudent } from "@/common/sample-data/roster";
+import { authMode } from "@/common/auth/config";
+import { getRoster, getRosterStudent } from "@/common/data/roster";
+import { buildStudentDetailFromDb } from "@/modules/students/detail-db";
 import type { FlagKey } from "@/common/domain/risk";
 
 /**
- * Students data access (UI-2). Runs on the generated sample roster today; the
- * function signatures are what the core roster API / SQL will implement, so the
- * pages don't change when real data is connected.
+ * Students data access. Reads the combined roster (common/data/roster.ts): the
+ * database when WEB_DATABASE_URL is set, otherwise the generated sample roster.
  */
 
 export const PAGE_SIZE = 25;
@@ -35,6 +37,7 @@ export type StudentQuery = {
   section?: string;
   hall?: string;
   instructor?: string;
+  coach?: string;
   level?: string;
   flag?: FlagFilter;
   sort?: SortKey;
@@ -75,6 +78,7 @@ function matches(s: RosterStudent, q: StudentQuery, ignoreFlag = false) {
   if (q.section && s.section !== q.section) return false;
   if (q.hall && s.hall !== q.hall) return false;
   if (q.instructor && s.instructor !== q.instructor) return false;
+  if (q.coach && s.coach !== q.coach) return false;
   if (q.level && String(s.level) !== q.level) return false;
   if (!ignoreFlag && q.flag) {
     if (q.flag === "any" ? s.flags.length === 0 : !s.flags.includes(q.flag as FlagKey)) return false;
@@ -84,7 +88,7 @@ function matches(s: RosterStudent, q: StudentQuery, ignoreFlag = false) {
 
 const SORTERS: Record<SortKey, (a: RosterStudent, b: RosterStudent) => number> = {
   name: (a, b) => a.name.localeCompare(b.name),
-  attendance: (a, b) => a.attendance30d - b.attendance30d,
+  attendance: (a, b) => (a.attendance30d ?? -1) - (b.attendance30d ?? -1),
   level: (a, b) => a.level - b.level,
   rating: (a, b) => (a.lcRating ?? -1) - (b.lcRating ?? -1),
   interaction: (a, b) => (a.lastInteractionDays ?? 999) - (b.lastInteractionDays ?? 999),
@@ -100,8 +104,11 @@ export type StudentListResult = {
   options: { sections: string[]; halls: string[]; instructors: string[] };
 };
 
+const hallNumber = (hall: string) => Number(hall.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
+
 export async function listStudents(query: StudentQuery): Promise<StudentListResult> {
-  const base = ROSTER.filter((s) => matches(s, query, true));
+  const roster = await getRoster();
+  const base = roster.filter((s) => matches(s, query, true));
   const flagCounts = {
     all: base.length,
     any: base.filter((s) => s.flags.length > 0).length,
@@ -125,21 +132,22 @@ export async function listStudents(query: StudentQuery): Promise<StudentListResu
     pageCount,
     flagCounts,
     options: {
-      sections: uniq(ROSTER.map((s) => s.section)),
-      halls: uniq(ROSTER.map((s) => s.hall)).sort((a, b) => Number(a.split(" ")[1]) - Number(b.split(" ")[1])),
-      instructors: uniq(ROSTER.map((s) => s.instructor)),
+      sections: uniq(roster.map((s) => s.section)),
+      halls: uniq(roster.map((s) => s.hall)).sort((a, b) => hallNumber(a) - hallNumber(b) || a.localeCompare(b)),
+      instructors: uniq(roster.map((s) => s.instructor)),
     },
   };
 }
 
 /** One student's full record; cached per request so every section can call it. */
 export const getStudent = cache(async (niatId: string) => {
-  const student = ROSTER.find((s) => s.niatId === niatId.toUpperCase());
+  const student = await getRosterStudent(niatId);
   if (!student) return null;
-  const detail = buildStudentDetail(student);
+  const fromDb = authMode() === "database";
+  const detail = fromDb ? await buildStudentDetailFromDb(student) : buildStudentDetail(student);
 
-  // Rounds logged through the form (not part of the generated sample) go on top.
-  const logged = (await listInteractions({ niatId: student.niatId })).filter((it) => !it.id.startsWith(`${student.niatId}-r`));
+  // Sample data only: rounds logged through the form go on top of the generated ones.
+  const logged = fromDb ? [] : (await listInteractions({ niatId: student.niatId })).filter((it) => !it.id.startsWith(`${student.niatId}-r`));
   if (logged.length) {
     detail.interactions.unshift(
       ...logged.map((it) => ({
@@ -173,7 +181,7 @@ export const getStudent = cache(async (niatId: string) => {
       if (!format || !result) continue;
       const marksFields = format.fields.filter((f) => f.type === "marks");
       labels = marksFields.map((f) => `${f.label} /${f.max}`);
-      const peers = await getResults(test.id, studentsFor(test).map((s) => s.niatId));
+      const peers = await getResults(test.id, (await studentsFor(test)).map((s) => s.niatId));
       const peerTotals = peers.map((p) => (p?.present ? totalOf(format.fields, p.values) : null)).filter((t): t is number => t !== null);
       const total = result.present ? totalOf(format.fields, result.values) : null;
       const firstOf = (type: string) => format.fields.find((f) => f.type === type);

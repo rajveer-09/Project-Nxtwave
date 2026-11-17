@@ -15,6 +15,9 @@ import { ContestsSection, InteractionsSection, RecordsSection, TestsSection, Tim
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
 import { canViewStudent } from "@/common/auth/student-access";
+import { isAdminRole, type SessionUser } from "@/common/auth/roles";
+import { studentChanges } from "@/modules/admin/change-log-data";
+import { ChangeTable } from "@/modules/admin/components/change-table";
 import { getStudent, type StudentDetail } from "@/modules/students/data";
 
 export const metadata = { title: "Student" };
@@ -50,6 +53,22 @@ const SECTIONS: { key: string; component: SectionComponent; tall?: boolean }[] =
   { key: "timeline", component: TimelineSection },
 ];
 
+/** Admins and super admins: who changed this student's instructor, coach or class, and from where. */
+async function ChangeHistory({ user, niatId }: { user: SessionUser; niatId: string }) {
+  const entries = await studentChanges(user, niatId);
+  return (
+    <section id="changes" aria-labelledby="changes-h" className="flex scroll-mt-6 flex-col gap-3">
+      <h2 id="changes-h" className="text-[22px] font-semibold">
+        Change history
+        <span className="ml-2 text-[15px] font-medium text-muted-foreground">· admins only</span>
+      </h2>
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <ChangeTable entries={entries} showSubject={false} />
+      </div>
+    </section>
+  );
+}
+
 async function StudentContent({ params }: { params: Promise<{ niatId: string }> }) {
   const user = await requireAccess("/students");
   const { niatId } = await params;
@@ -71,6 +90,11 @@ async function StudentContent({ params }: { params: Promise<{ niatId: string }> 
           <Section niatId={d.student.niatId} component={component} />
         </Suspense>
       ))}
+      {isAdminRole(user.role) ? (
+        <Suspense fallback={<SectionSkeleton />}>
+          <ChangeHistory user={user} niatId={d.student.niatId} />
+        </Suspense>
+      ) : null}
     </>
   );
 }

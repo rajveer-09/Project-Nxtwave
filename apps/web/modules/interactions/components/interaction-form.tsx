@@ -29,7 +29,7 @@ export type FormStudent = {
   level: number;
   topic: string;
   subtopic: string | null;
-  attendance30d: number;
+  attendance30d: number | null;
   lastInteractionDays: number | null;
   lastInteractionLabel: string | null;
   contestAbsentStreak: number;
@@ -353,7 +353,7 @@ export function InteractionForm({
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 rounded-lg bg-background px-3.5 py-3 text-[13px] text-sidebar-foreground">
             <span className="w-full font-semibold text-foreground">From other modules · {student.group}</span>
             <span>
-              Attendance 30d: <b className={cn(student.attendance30d < 75 && "text-warning")}>{student.attendance30d}%</b>
+              Attendance 30d: <b className={cn(student.attendance30d !== null && student.attendance30d < 75 && "text-warning")}>{student.attendance30d === null ? "—" : `${student.attendance30d}%`}</b>
             </span>
             <span>Last interaction: {student.lastInteractionLabel ?? "none yet"}</span>
             <span>Latest weekly test: {student.latestTest !== null ? `${student.latestTest} / 50` : "—"}</span>

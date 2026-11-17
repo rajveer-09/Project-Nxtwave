@@ -1,7 +1,7 @@
 /*
 
 Author : Rajveer Sharma
-Date : 15 Nov 2026
+Date : 18 Nov 2026
 @ Nxtwave
 
 */
@@ -9,16 +9,29 @@ Date : 15 Nov 2026
 import type { SessionUser } from "@/common/auth/roles";
 
 /**
- * Who can see a student's full page (UI plan §6, decision 6 — recommended rule):
- * owners, admins and senior instructors see every student; instructors only the
- * students currently assigned to them.
- *
- * Sample data matches by instructor name; with the core roster this becomes a
- * lookup in core.student_assignments by staff id.
+ * Who sees which students:
+ * - super admins, admins and senior instructors: every student
+ * - instructors: the students currently assigned to them (My students)
+ * - success coaches: the students they currently coach (My students)
+ * Assignments come from core.student_assignments (the roster's instructor / coach).
  */
-export function canViewStudent(user: SessionUser, student: { instructor: string }): boolean {
-  if (user.role !== "instructor") return true;
-  return student.instructor === user.name;
+export type StudentScope = { instructor?: string; coach?: string };
+
+export function studentScope(user: SessionUser): StudentScope | undefined {
+  if (user.role === "instructor") return { instructor: user.name };
+  if (user.role === "success_coach") return { coach: user.name };
+  return undefined;
+}
+
+export function inScope(scope: StudentScope | undefined, student: { instructor: string; coach: string }): boolean {
+  if (!scope) return true;
+  if (scope.instructor !== undefined && student.instructor !== scope.instructor) return false;
+  if (scope.coach !== undefined && student.coach !== scope.coach) return false;
+  return true;
+}
+
+export function canViewStudent(user: SessionUser, student: { instructor: string; coach: string }): boolean {
+  return inScope(studentScope(user), student);
 }
 
 /** Instructors' student lists are limited to their own students. */

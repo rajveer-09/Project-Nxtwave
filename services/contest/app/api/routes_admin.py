@@ -296,6 +296,8 @@ def remove_instructor(user_id: int, db: Session = Depends(get_db)) -> dict:
 def start_view_as(user_id: int, request: Request, db: Session = Depends(get_db),
                   admin: User = Depends(require_admin), settings: Settings = Depends(get_settings)) -> dict:
     """See the dashboard as this instructor does (read-only, for up to an hour)."""
+    if getattr(request.state, "via_hub", False):  # it lives in the session cookie, which the hub never sends
+        raise ApiError(409, "View as instructor works only when signed in to NxtRank itself.", "view_as_unavailable")
     target = get_instructor(db, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no such instructor")

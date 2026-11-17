@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BACKEND_DIR / ".env", override=False)
 DEFAULT_DATABASE_URL = f"sqlite:///{(BACKEND_DIR / 'data' / 'dashboard.db').as_posix()}"
+MIN_IDENTITY_SECRET_LENGTH = 32
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,14 @@ class Settings:
     worker_wake_url: str | None = None  # the website's /api/worker/wake, polled while asleep
     scans_enabled: bool = True  # false on staging: its data is a copy, scans run on production
     scan_review_enabled: bool = True  # scans requested from the dashboard wait for an admin's review
+    # the Student Hub web app's identity tokens (`Authorization: Bearer`), signed with this
+    # shared secret (the web app's CONTEST_JWT_SECRET); unset = only the dashboard's own sign-in
+    identity_jwt_secret: str | None = None
+
+    def __post_init__(self):
+        if self.identity_jwt_secret is not None and len(self.identity_jwt_secret) < MIN_IDENTITY_SECRET_LENGTH:
+            raise ValueError(f"IDENTITY_JWT_SECRET must be at least {MIN_IDENTITY_SECRET_LENGTH} characters "
+                             "(the same value as CONTEST_JWT_SECRET in the web app)")
 
     @property
     def production(self) -> bool:
@@ -73,4 +82,5 @@ def get_settings() -> Settings:
         scans_enabled=os.environ.get("SCANS_ENABLED", "true").lower() not in ("0", "false", "no"),
         scan_review_enabled=os.environ.get("SCAN_REVIEW_ENABLED", "true").lower() not in ("0", "false", "no"),
         allowed_origins=tuple(o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()),
+        identity_jwt_secret=_env("IDENTITY_JWT_SECRET"),
     )

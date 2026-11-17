@@ -20,8 +20,8 @@ export type AtRiskStudent = {
   college: "BITS" | "CDU";
   section: string;
   hall: string;
-  attendance30d: number;
-  lastInteractionDays: number;
+  attendance30d: number | null;
+  lastInteractionDays: number | null;
   contestsAttended: number;
   flags: string[];
 };

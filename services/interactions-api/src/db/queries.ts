@@ -24,6 +24,16 @@ function assertCanEdit(student: Student, actor: Actor) {
 
 const levelNumber = (label: string) => Number(label.replace('Level ', ''));
 
+// Tells the database who is making this transaction's changes, for core.change_log
+// (db/core/migrations/20261118000001). Without it a change is logged as a direct database edit.
+async function setChangeContext(client: PoolClient, actor: Actor) {
+  await client.query(
+    `SELECT set_config('app.source', 'interactions-api', true), set_config('app.actor_name', $1, true),
+            set_config('app.actor_email', $2, true), set_config('app.actor_role', $3, true)`,
+    [actor.name, actor.email, actor.role === 'admin' ? 'admin' : actor.isSenior ? 'senior_instructor' : 'instructor']
+  );
+}
+
 const INTERACTION_JSON = `
   json_build_object(
     'id', it.id,
@@ -150,6 +160,7 @@ export async function updateStudentProgress(
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
+    await setChangeContext(client, actor);
     await client.query("SELECT set_config('app.user_id', $1, true)", [actor.id]);
     await client.query(
       'UPDATE students SET level = $2, current_topic = $3, current_subtopic = $4, current_step = $5, updated_at = now() WHERE id = $1',
@@ -396,6 +407,7 @@ export async function deleteInteraction(id: string, reason: string, actor: Actor
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
+    await setChangeContext(client, actor);
     await client.query(
       `INSERT INTO deleted_interactions (id, student_id, data, delete_reason, deleted_by)
        SELECT it.id, it.student_id, to_jsonb(it), $2, $3 FROM interactions it WHERE it.id = $1`,
@@ -465,6 +477,7 @@ export async function addInteraction(log: InteractionLog, actor: Actor): Promise
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
+    await setChangeContext(client, actor);
     const student = await getStudent(log.studentId, client);
     if (!student) throw new ValidationError(`Unknown student "${log.studentId}".`);
     assertCanEdit(student, actor);
@@ -556,6 +569,7 @@ export async function createInstructor(input: NewInstructorInput, actor: Actor):
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
+    await setChangeContext(client, actor);
     // Serialise instructor creation so two admins can't take the same new id.
     await client.query('LOCK TABLE instructors IN SHARE ROW EXCLUSIVE MODE');
 
@@ -638,6 +652,7 @@ export async function assignStudentsToInstructor(instructorId: string, rollNumbe
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
+    await setChangeContext(client, actor);
     const { rows: [instructor] } = await client.query<{ id: string; first_name: string; full_name: string; email: string }>(
       'SELECT id, first_name, full_name, email FROM instructors WHERE id = $1 AND left_on IS NULL FOR UPDATE',
       [instructorId]

@@ -18,7 +18,10 @@ export type NavIcon =
   | "curriculum"
   | "messages"
   | "staff"
-  | "analytics";
+  | "analytics"
+  | "assignments"
+  | "changelog"
+  | "shield";
 
 export type NavItem = {
   href: string;
@@ -32,8 +35,11 @@ export type NavSection = {
   items: NavItem[];
 };
 
-const EVERYONE: readonly Role[] = ["owner", "admin", "senior_instructor", "instructor"];
+const EVERYONE: readonly Role[] = ["owner", "admin", "senior_instructor", "instructor", "success_coach"];
+/** Admin panel (admins) and Senior SDI panel (senior instructors). */
+const PANEL: readonly Role[] = ["owner", "admin", "senior_instructor"];
 const ADMINS: readonly Role[] = ["owner", "admin"];
+const SUPER_ADMIN: readonly Role[] = ["owner"];
 
 /** Single source for the sidebar and for route access checks. */
 export const NAV: NavSection[] = [
@@ -48,20 +54,34 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: "Admin",
+    label: "Admin panel",
     items: [
+      { href: "/admin/assignments", label: "Assignments", icon: "assignments", roles: PANEL },
+      { href: "/admin/staff", label: "Staff & roles", icon: "staff", roles: PANEL },
+      { href: "/admin/change-log", label: "Change log", icon: "changelog", roles: ADMINS },
       { href: "/admin/curriculum", label: "Curriculum", icon: "curriculum", roles: ADMINS },
       { href: "/admin/messages", label: "Messages", icon: "messages", roles: ADMINS },
-      { href: "/admin/staff", label: "Staff & roles", icon: "staff", roles: ADMINS },
       { href: "/analytics", label: "Analytics", icon: "analytics", roles: ADMINS },
     ],
   },
+  {
+    label: "Super admin",
+    items: [{ href: "/superadmin", label: "Super admins", icon: "shield", roles: SUPER_ADMIN }],
+  },
 ];
+
+/** Labels that depend on who is looking. */
+function labelFor(item: NavItem, role: Role) {
+  if (item.href === "/students" && (role === "instructor" || role === "success_coach")) return "My students";
+  if (item.href === "/admin/staff" && role === "senior_instructor") return "My team";
+  return item.label;
+}
 
 export function navForRole(role: Role): NavSection[] {
   return NAV.map((section) => ({
     ...section,
-    items: section.items.filter((item) => item.roles.includes(role)),
+    label: section.label === "Admin panel" && role === "senior_instructor" ? "Senior SDI panel" : section.label,
+    items: section.items.filter((item) => item.roles.includes(role)).map((item) => ({ ...item, label: labelFor(item, role) })),
   })).filter((section) => section.items.length > 0);
 }
 
