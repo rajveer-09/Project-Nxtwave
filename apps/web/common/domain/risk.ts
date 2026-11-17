@@ -1,0 +1,64 @@
+/*
+
+Author : Rajveer Sharma
+Date : 16 Nov 2026
+@ Nxtwave
+
+*/
+
+/**
+ * At-risk rules: the single definition used by Home, the Students list and the
+ * Student page (UI plan UI-8: "flags from one shared rules source"). Thresholds
+ * will move to core settings so admins can tune them.
+ */
+export const RISK_THRESHOLDS = {
+  attendancePct: 75,
+  interactionGapDays: 14,
+  missedContestsInARow: 3,
+  weeksAtLevel: 6,
+  testsBelowPassOutOfLast3: 2,
+} as const;
+
+export type FlagKey = "attendance" | "interaction" | "contests" | "level" | "tests";
+
+export const FLAG_LABEL: Record<FlagKey, string> = {
+  attendance: `Attendance < ${RISK_THRESHOLDS.attendancePct}%`,
+  interaction: `No interaction ${RISK_THRESHOLDS.interactionGapDays}d+`,
+  contests: "Missed contests",
+  level: "Stuck on level",
+  tests: "Below pass in tests",
+};
+
+export type RiskInput = {
+  attendance30d: number;
+  daysSinceInteraction: number | null;
+  contestAbsentStreak: number;
+  weeksAtLevel: number;
+  testsBelowPassLast3: number;
+};
+
+export function riskFlags(input: RiskInput): FlagKey[] {
+  const flags: FlagKey[] = [];
+  if (input.attendance30d < RISK_THRESHOLDS.attendancePct) flags.push("attendance");
+  if (input.daysSinceInteraction === null || input.daysSinceInteraction >= RISK_THRESHOLDS.interactionGapDays) flags.push("interaction");
+  if (input.contestAbsentStreak >= RISK_THRESHOLDS.missedContestsInARow) flags.push("contests");
+  if (input.weeksAtLevel >= RISK_THRESHOLDS.weeksAtLevel) flags.push("level");
+  if (input.testsBelowPassLast3 >= RISK_THRESHOLDS.testsBelowPassOutOfLast3) flags.push("tests");
+  return flags;
+}
+
+/** Human-readable reason, e.g. for the flags banner on the Student page. */
+export function flagDetail(key: FlagKey, input: RiskInput): string {
+  switch (key) {
+    case "attendance":
+      return `Attendance ${input.attendance30d}% (below ${RISK_THRESHOLDS.attendancePct}%)`;
+    case "interaction":
+      return input.daysSinceInteraction === null ? "No interaction yet" : `No interaction for ${input.daysSinceInteraction} days`;
+    case "contests":
+      return `Missed the last ${input.contestAbsentStreak} contests`;
+    case "level":
+      return `${input.weeksAtLevel} weeks at the current level`;
+    case "tests":
+      return `Below pass in ${input.testsBelowPassLast3} of the last 3 weekly tests`;
+  }
+}

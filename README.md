@@ -1,0 +1,129 @@
+# NxtWave Student Hub
+
+One website for attendance, instructor interactions, weekly tests, curriculum, messages and LeetCode contests, with one login and one student roster keyed by NIAT ID.
+
+It replaces three separate apps:
+
+| Old app | Becomes |
+|---|---|
+| Attendance tracker (Go API + Next.js) | **Attendance** module; the Go API keeps running as a service |
+| Student Interaction Logs (Next.js) | **Interactions** module, served directly by the web app |
+| NxtRank LeetCode contest tracker (FastAPI + worker) | **Contests** module; NxtRank stays a separate service in its own repo |
+
+## Architecture
+
+```
+Browser ──► apps/web (Next.js 16)
+              ├─ UI for every module, one sign-in, one session
+              ├─ core + Interactions + Tests + Curriculum + Messages data (direct SQL)
+              ├─ /api/attendance/*  ──► services/attendance-api (Go)
+              └─ /api/contest/*     ──► NxtRank (FastAPI, separate repo)
+
+One Neon Postgres database, one schema per owner:
+  core        students, staff, roles, assignments, sessions, audit  (written by the web app)
+  logs        interactions, tests, curriculum, messages             (web app)
+  attendance  halls, sessions, marks, terms, internships            (Go service)
+  contest     contests, results, scans                              (NxtRank)
+```
+
+- **One roster.** `core.students` is keyed by NIAT ID; every module joins to it.
+- **One sign-in.** Email + password or Google workspace, sessions stored in `core.sessions`. The web app proxies service calls with a 60-second signed identity token (separate audience and secret per service), so the services never see the session cookie.
+- **One Postgres role per service** with its own `search_path` and grants, so each service writes only to its own schema and reads `core`.
+
+## Repository layout
+
+| Path | What it is |
+|---|---|
+| `apps/web` | Next.js 16 app: all UI, unified auth, core/Interactions/Tests/Curriculum/Messages data, service proxies |
+| `services/attendance-api` | Go attendance API (copied from the attendance repo) |
+| `db/core/migrations` | dbmate migrations for the shared `core` schema |
+| `db/setup/service_roles.sql` | Creates one Postgres role per service with its grants and `search_path` |
+| `db/migration/roster_dry_run.py` | Read-only preview of the roster and staff merge from the three old databases |
+| `.github/workflows` | CI for the web app and the attendance API |
+
+### How `apps/web` is organised
+
+Code is grouped **by module** plus **`common/`** for shared code.
+
+```
+apps/web/
+├── app/            Next.js routes only. Thin: read params, check access, render a module's screen.
+├── common/         Shared by every module. Never imports from modules/ (enforced by ESLint).
+│   ├── ui/         shadcn/ui primitives
+│   ├── components/ Page header, stat card, chips, data table, section card, empty state, calendar…
+│   ├── lib/        Utilities, IST dates, safe CSV, URL params, API client, navigation and access rules
+│   ├── auth/       Passwords, sessions, lockout, route guard, roles, Google OIDC, student access
+│   ├── services/   Same-origin proxy to backend services + identity tokens
+│   ├── db/         Postgres pool
+│   ├── domain/     Cross-module business rules (at-risk flags)
+│   └── sample-data/ Sample roster used until the database is connected
+└── modules/
+    ├── shell/        Sidebar, global filters, sign-out, message bell, urgent banner
+    ├── login/        Sign-in forms and server actions
+    ├── home/         Home dashboard
+    ├── students/     Students list and the full Student page
+    ├── attendance/   Hall sheet, calendar, terms, internships, imports, analytics
+    ├── interactions/ Log form (incl. Wispr Flow transcript), recent logs, CSV export
+    ├── contests/     Contest list, contest page, results, scan review
+    ├── tests/        Weekly test result-format builder, test creation, results entry
+    ├── curriculum/   Level question bank and off-roadmap question review
+    ├── messages/     Compose by role or person, inbox, live counts
+    └── admin/        Staff and roles
+```
+
+Inside a module: `components/` (screens), `actions.ts` (server actions), `data.ts` (server-only reads and writes), `api.ts` (browser calls to a service), `types.ts`, `service.ts` (proxy config) and `sample-service.ts` (development stand-in with the real service contract).
+
+Rules:
+
+1. `common/` never imports from `modules/` or `app/`; modules never import from `app/`. Both are enforced by ESLint.
+2. Modules may import another module's `data.ts` or `types.ts` when one screen shows another's data (for example the Student page).
+3. Route files stay thin: access check and data loading, then render the module's component.
+4. Server-only code starts with `import "server-only"`.
+
+## Running the web app
+
+Requires Node 24.
+
+```bash
+cd apps/web
+npm install
+npm run dev          # http://localhost:3000
+```
+
+Checks: `npm run lint`, `npm run typecheck`, `npm run build`.
+
+### Sign-in modes
+
+- **No database (`WEB_DATABASE_URL` unset):** `/login` shows a development role picker (Owner, Admin, Senior instructor, Instructor) and every module runs on sample data. Disabled in production builds unless `ALLOW_DEV_SESSION=true`; never set that on a public deployment.
+- **Database (`WEB_DATABASE_URL` set):** real sign-in against `core.staff`.
+  - Email + password. Existing hashes from the three old apps are accepted and upgraded on first sign-in. Locks after 5 failures in 15 minutes per email and per IP.
+  - Google workspace (OIDC + PKCE) when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `APP_BASE_URL` are set. Only verified emails on `GOOGLE_ALLOWED_DOMAIN` that match an active staff row.
+  - Sessions last 12 hours (sliding) and are ended everywhere by bumping `session_version`.
+  - First Owner: `STAFF_PASSWORD='…' npm run create-staff -- --email you@nxtwave.co.in --name "Your Name" --role owner`
+
+`apps/web/.env.example` lists every setting.
+
+### Service proxies
+
+`/api/attendance/*` and `/api/contest/*` forward to the Go and NxtRank services once `ATTENDANCE_API_ORIGIN`/`ATTENDANCE_JWT_SECRET` and `CONTEST_API_ORIGIN`/`CONTEST_JWT_SECRET` are set. In development, without them, they answer from sample services that follow the real contracts.
+
+## Database
+
+1. Copy `.env.example` to `.env` and fill in values. `.env` is git-ignored.
+2. Preview the roster merge (read-only; review CSVs go to `db/migration/out/`, which is git-ignored because it holds personal data):
+   ```bash
+   python -m venv .venv && .venv/Scripts/pip install -r db/migration/requirements.txt
+   .venv/Scripts/python -I db/migration/roster_dry_run.py
+   ```
+3. Apply `db/core/migrations` and run `db/setup/service_roles.sql` on a Neon branch first, then on main.
+
+## Branches
+
+- `master`: production
+- `staging`: pre-production; changes land here first and are merged to `master` after review
+
+## Rules
+
+- No connection strings, passwords or student data in the repo.
+- Example student data uses fictional names and `N99…` NIAT IDs.
+- Colours, colleges, levels and thresholds come from tokens, the API or settings, never hard-coded in screens.

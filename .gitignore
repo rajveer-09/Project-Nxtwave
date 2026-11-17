@@ -1,0 +1,85 @@
+# ---------------------------------------------------------------
+# Secrets: connection strings, passwords and keys never go in git
+# ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------------------------------------------------------------
+# Personal data: migration review output and roster files
+# ---------------------------------------------------------------
+db/migration/out/
+*.local.csv
+*.csv
+seed-data/
+
+# ---------------------------------------------------------------
+# Documentation: only the root README is published
+# ---------------------------------------------------------------
+*.md
+!/README.md
+docs/
+
+# ---------------------------------------------------------------
+# Tests and test tooling
+# ---------------------------------------------------------------
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+*_test.go
+apps/web/test/
+apps/web/vitest.config.*
+services/attendance-api/internal/testdb/
+coverage/
+
+# ---------------------------------------------------------------
+# Node / Next.js
+# ---------------------------------------------------------------
+node_modules/
+.next/
+out/
+build/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+.pnp
+.pnp.*
+.yarn/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ---------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# ---------------------------------------------------------------
+# Go
+# ---------------------------------------------------------------
+services/attendance-api/bin/
+services/attendance-api/server
+*.exe
+*.out
+
+# ---------------------------------------------------------------
+# Logs, local tooling, OS and editor files
+# ---------------------------------------------------------------
+*.log
+logs/
+tmp/
+.claude/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

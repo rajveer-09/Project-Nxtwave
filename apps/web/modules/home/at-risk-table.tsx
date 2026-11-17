@@ -1,0 +1,91 @@
+/*
+
+Author : Rajveer Sharma
+Date : 14 Nov 2026
+@ Nxtwave
+
+*/
+
+"use client";
+
+import type { ColumnDef } from "@tanstack/react-table";
+import Link from "next/link";
+import { FlagChip } from "@/common/components/chips";
+import { DataTable } from "@/common/components/data-table";
+import type { AtRiskStudent } from "@/modules/home/sample-data";
+import { cn } from "@/common/lib/utils";
+
+const columns: ColumnDef<AtRiskStudent>[] = [
+  {
+    accessorKey: "name",
+    header: "Student",
+    cell: ({ row }) => (
+      <div className="flex flex-col">
+        <Link href={`/students/${row.original.niatId}`} className="font-semibold text-foreground hover:text-primary">
+          {row.original.name}
+        </Link>
+        <span className="text-xs text-muted-foreground tabular">{row.original.niatId}</span>
+      </div>
+    ),
+  },
+  {
+    id: "group",
+    header: "Group",
+    enableSorting: false,
+    cell: ({ row }) => (
+      <span className="text-sidebar-foreground">
+        {row.original.college} · {row.original.section} · {row.original.hall}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "attendance30d",
+    header: "Attendance · 30d",
+    cell: ({ getValue }) => {
+      const value = getValue<number>();
+      const low = value < 75;
+      return (
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+            <span className={cn("block h-full", low ? "bg-warning-strong" : "bg-primary")} style={{ width: `${value}%` }} />
+          </span>
+          <span className={cn("font-semibold tabular", low && "text-warning")}>{value}%</span>
+        </div>
+      );
+    },
+  },
+  {
+    accessorKey: "lastInteractionDays",
+    header: "Last interaction",
+    cell: ({ getValue }) => <span className="text-sidebar-foreground">{getValue<number>()} days ago</span>,
+  },
+  {
+    accessorKey: "contestsAttended",
+    header: "Contests · last 4",
+    cell: ({ getValue }) => <span className="text-sidebar-foreground tabular">{getValue<number>()} of 4</span>,
+  },
+  {
+    id: "flags",
+    header: "Why flagged",
+    enableSorting: false,
+    cell: ({ row }) => (
+      <div className="flex flex-wrap gap-1.5">
+        {row.original.flags.map((flag) => (
+          <FlagChip key={flag}>{flag}</FlagChip>
+        ))}
+      </div>
+    ),
+  },
+];
+
+export function AtRiskTable({ rows }: { rows: AtRiskStudent[] }) {
+  return (
+    <DataTable
+      columns={columns}
+      data={rows}
+      caption="Students who need attention"
+      emptyTitle="No students need attention"
+      emptyDescription="Nobody matches the at-risk rules for the current filters."
+    />
+  );
+}
