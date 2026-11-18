@@ -136,8 +136,10 @@ bash clone.sh                       # options: [folder] --branch staging --no-in
 ```powershell
 # Windows PowerShell
 gh api repos/lakshayysinghh/Project-Nxtwave/contents/infra/scripts/clone.cmd -H "Accept: application/vnd.github.raw" | Set-Content -Encoding ascii clone.cmd
-.\clone.cmd                         # options: [folder] [branch]
+.\clone.cmd                         # options: [folder] [branch] --no-install
 ```
+
+**Update** an existing copy: run the same script again on the same folder. It fetches every branch, adds new ones, fast-forwards the ones that are behind and reinstalls dependencies. Branches with your own unpushed commits, or uncommitted changes in the way, are left as they are and reported.
 
 **Start everything** from the repository folder:
 
