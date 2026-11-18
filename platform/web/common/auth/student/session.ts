@@ -13,7 +13,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { authMode, STUDENT_COOKIE } from "@/common/auth/config";
 import type { Db } from "@/common/auth/core/db";
-import { DUMMY_HASH, hashPassword, needsRehash, verifyPassword } from "@/common/auth/core/password";
+import { DUMMY_HASH, hashPassword, isFirstPassword, needsRehash, verifyPassword } from "@/common/auth/core/password";
 import { FAILURE_WINDOW_MINUTES, MAX_FAILURES } from "@/common/auth/core/login";
 import { hashToken } from "@/common/auth/core/sessions";
 import { getDb } from "@/common/db/pool";
@@ -94,18 +94,48 @@ export async function studentPasswordLogin(db: Db, niatId: string, password: str
   );
   if ((fails[0]?.n ?? 0) >= MAX_FAILURES) return { ok: false, reason: "locked" };
 
-  const { rows } = await db.query<{ password_hash: string | null }>(
-    `SELECT a.password_hash FROM core.student_accounts a JOIN core.students s ON s.niat_id = a.niat_id
-     WHERE a.niat_id = $1 AND a.active AND s.status = 'active'`,
+  // Any active student on the roster can sign in; their account is made on the first sign-in.
+  const { rows } = await db.query<{ name: string; has_account: boolean; active: boolean | null; password_hash: string | null }>(
+    `SELECT s.full_name AS name, a.niat_id IS NOT NULL AS has_account, a.active, a.password_hash
+     FROM core.students s LEFT JOIN core.student_accounts a ON a.niat_id = s.niat_id
+     WHERE s.niat_id = $1 AND s.status = 'active'`,
     [niatId],
   );
-  const hash = rows[0]?.password_hash ?? null;
-  const valid = await verifyPassword(password, hash ?? DUMMY_HASH);
-  if (!hash || !valid) {
+  const r = rows[0];
+  const hash = r?.password_hash ?? null;
+  const ownPassword = await verifyPassword(password, hash ?? DUMMY_HASH);
+  // No password chosen yet (no account, or one without a password): the shared first password works.
+  const firstPassword = !!r && !hash && isFirstPassword(password);
+  const valid = !!r && r.active !== false && ((!!hash && ownPassword) || firstPassword);
+  if (!valid) {
     for (const key of keys) await db.query("INSERT INTO core.login_failures (key) VALUES ($1)", [key]);
     return { ok: false, reason: "invalid" };
   }
   await db.query("DELETE FROM core.login_failures WHERE key = $1", [idKey]);
-  if (needsRehash(hash)) await db.query("UPDATE core.student_accounts SET password_hash = $1 WHERE niat_id = $2", [await hashPassword(password), niatId]);
+  if (!r.has_account) await createFirstAccount(db, niatId, r.name);
+  else if (hash && needsRehash(hash)) await db.query("UPDATE core.student_accounts SET password_hash = $1 WHERE niat_id = $2", [await hashPassword(password), niatId]);
   return { ok: true };
+}
+
+/** A student's sign-in account, made at their first sign-in; they choose a password next (must_change_password). */
+async function createFirstAccount(db: Db, niatId: string, name: string) {
+  const pool = db as unknown as import("pg").Pool;
+  const client = typeof pool.connect === "function" ? await pool.connect() : null;
+  const q = client ?? db;
+  try {
+    if (client) await client.query("BEGIN");
+    // Who did it, for the change log (core.student_accounts trigger).
+    await q.query(
+      `SELECT set_config('app.source', 'ui', true), set_config('app.actor_name', $1, true), set_config('app.actor_role', 'student', true),
+              set_config('app.source_detail', 'first sign-in', true)`,
+      [name],
+    );
+    await q.query("INSERT INTO core.student_accounts (niat_id, must_change_password) VALUES ($1, true) ON CONFLICT (niat_id) DO NOTHING", [niatId]);
+    if (client) await client.query("COMMIT");
+  } catch (err) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client?.release();
+  }
 }

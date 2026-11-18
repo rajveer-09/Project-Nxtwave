@@ -17,6 +17,7 @@ import { getSessionUser } from "@/common/auth/session";
  */
 export async function requireAccess(pathname: string) {
   const user = await getSessionUser();
+  if (user.mustSetPassword) redirect("/set-password");
   if (!canAccess(user.role, pathname)) redirect("/forbidden");
   return user;
 }

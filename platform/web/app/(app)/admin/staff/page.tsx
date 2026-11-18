@@ -42,7 +42,7 @@ async function StaffContent() {
         actions={sample ? <StatusPill>Sample data · no database connected</StatusPill> : null}
       />
       {roles.length && !sample ? (
-        <SectionCard title="Add a person" description="They sign in with Google, or with the first password you set here.">
+        <SectionCard title="Add a person" description="They sign in with the default first password (or one you set here), then choose their own.">
           <AddStaffForm roles={roles} />
         </SectionCard>
       ) : null}

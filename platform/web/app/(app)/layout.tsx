@@ -6,6 +6,7 @@ Date : 14 Nov 2026
 
 */
 
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AppShell } from "@/modules/shell/app-shell";
 import { QueryProvider } from "@/modules/shell/query-provider";
@@ -14,6 +15,8 @@ import { getSessionUser } from "@/common/auth/session";
 
 async function ShellWithUser({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser();
+  // Signed in with the default first password: choose one before anything else.
+  if (user.mustSetPassword) redirect("/set-password");
   return (
     <QueryProvider>
       <AppShell user={user}>{children}</AppShell>

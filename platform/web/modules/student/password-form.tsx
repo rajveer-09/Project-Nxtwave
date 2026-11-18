@@ -16,14 +16,17 @@ const MIN_LENGTH = 10; // same as MIN_PASSWORD_LENGTH in common/auth/core/passwo
 const input =
   "h-12 rounded-xl border border-input bg-card px-3 text-[15px] text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
-export function PasswordForm() {
+/** firstTime: just signed in with the default or an issued password, so the current one isn't asked. */
+export function PasswordForm({ firstTime = false }: { firstTime?: boolean }) {
   const [state, action, pending] = useActionState<PasswordState, FormData>(changeOwnPassword, { error: null, done: false });
   return (
     <form action={action} className="flex flex-col gap-4">
-      <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-        Current password
-        <input name="current" type="password" autoComplete="current-password" required className={input} />
-      </label>
+      {firstTime ? null : (
+        <label className="flex flex-col gap-1.5 text-[13px] font-medium">
+          Current password
+          <input name="current" type="password" autoComplete="current-password" required className={input} />
+        </label>
+      )}
       <label className="flex flex-col gap-1.5 text-[13px] font-medium">
         New password
         <input name="next" type="password" autoComplete="new-password" required minLength={MIN_LENGTH} className={input} />

@@ -33,7 +33,10 @@ export async function studentSignOut() {
 
 export type PasswordState = { error: string | null; done: boolean };
 
-/** A student sets their own password (required after an admin issues one). Signs out their other devices. */
+/**
+ * A student sets their own password: required after the first sign-in (default password) or after an
+ * admin issues one. Just signed in with that password, so it isn't asked again then. Signs out other devices.
+ */
 export async function changeOwnPassword(_prev: PasswordState, formData: FormData): Promise<PasswordState> {
   const student = await requireStudent();
   const current = String(formData.get("current") ?? "");
@@ -42,11 +45,13 @@ export async function changeOwnPassword(_prev: PasswordState, formData: FormData
   const problem = passwordPolicyError(next);
   if (problem) return { error: problem, done: false };
   if (next !== confirm) return { error: "The two new passwords don't match.", done: false };
-  if (next === current) return { error: "Choose a password different from the one you were given.", done: false };
+  if (!student.mustChangePassword && next === current) return { error: "Choose a password different from your current one.", done: false };
 
   const pool = getDb() as unknown as Pool;
-  const { rows } = await pool.query<{ password_hash: string | null }>("SELECT password_hash FROM core.student_accounts WHERE niat_id = $1", [student.niatId]);
-  if (!(await verifyPassword(current, rows[0]?.password_hash))) return { error: "Your current password isn't right.", done: false };
+  if (!student.mustChangePassword) {
+    const { rows } = await pool.query<{ password_hash: string | null }>("SELECT password_hash FROM core.student_accounts WHERE niat_id = $1", [student.niatId]);
+    if (!(await verifyPassword(current, rows[0]?.password_hash))) return { error: "Your current password isn't right.", done: false };
+  }
 
   const client = await pool.connect();
   try {

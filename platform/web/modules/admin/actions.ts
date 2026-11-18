@@ -22,7 +22,7 @@ import {
   type AssignmentHistory,
   type ImportPreview,
 } from "@/modules/admin/assignments-data";
-import { addStaff, deactivateStaff, deleteStaff, reactivateStaff, setStaffRole } from "@/modules/admin/staff-data";
+import { addStaff, deactivateStaff, deleteStaff, reactivateStaff, setStaffRole, resetStaffPassword } from "@/modules/admin/staff-data";
 import { issuePasswords, setStudentAccess, type Issued } from "@/modules/admin/student-access-data";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; error: string };
@@ -49,6 +49,15 @@ export async function deactivateAction(staffIds: string[]): Promise<ActionResult
   const parsed = idList.safeParse(staffIds);
   if (!parsed.success) return { ok: false, error: "Pick people again." };
   const result = await deactivateStaff(user, parsed.data);
+  if (result.ok) refreshStaff();
+  return result;
+}
+
+export async function resetPasswordAction(staffIds: string[]): Promise<ActionResult> {
+  const user = await getSessionUser();
+  const parsed = idList.safeParse(staffIds);
+  if (!parsed.success) return { ok: false, error: "Pick people again." };
+  const result = await resetStaffPassword(user, parsed.data);
   if (result.ok) refreshStaff();
   return result;
 }

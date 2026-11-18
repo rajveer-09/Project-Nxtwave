@@ -33,9 +33,18 @@ function scrypt(password: string, salt: Buffer, keylen: number, options: ScryptO
   );
 }
 
+/**
+ * The shared first password: accepted only until someone chooses their own (core.staff.must_set_password,
+ * or a student without a password), and the first page after it asks them to choose one.
+ */
+export const FIRST_PASSWORD = "nxtwave";
+export const isFirstPassword = (password: string) => password === FIRST_PASSWORD;
+
 /** Policy for passwords people choose. Not applied when re-hashing an existing password at sign-in. */
 export function passwordPolicyError(password: string): string | null {
-  return password.length < MIN_PASSWORD_LENGTH ? `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` : null;
+  if (password.length < MIN_PASSWORD_LENGTH) return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  if (password.trim().toLowerCase().includes(FIRST_PASSWORD)) return "Choose a password that isn't based on the default one.";
+  return null;
 }
 
 export async function hashPassword(password: string): Promise<string> {

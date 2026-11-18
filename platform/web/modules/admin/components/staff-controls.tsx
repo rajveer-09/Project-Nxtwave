@@ -36,7 +36,7 @@ export function AddStaffForm({ roles }: { roles: Role[] }) {
             { label: "Name", after: name.trim() },
             { label: "Email", after: email.trim().toLowerCase() },
             { label: "NxtOne role", after: ROLE_LABEL[role] },
-            { label: "Sign-in", after: password ? "Password you set (they can change it) or Google" : "Google only" },
+            { label: "Sign-in", after: password ? "The password you set; they choose their own at first sign-in" : "Default first password; they choose their own at first sign-in" },
           ],
           confirmLabel: "Add person",
           action: () => addStaffAction({ name, email, role, password }),
@@ -75,7 +75,7 @@ export function AddStaffForm({ roles }: { roles: Role[] }) {
           className={`${input} w-48`}
           minLength={10}
           autoComplete="new-password"
-          placeholder="Blank = Google only"
+          placeholder="Blank = default first password"
         />
       </label>
       <Button type="submit">Add person</Button>

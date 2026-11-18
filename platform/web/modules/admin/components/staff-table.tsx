@@ -13,7 +13,7 @@ import { StatusPill } from "@/common/components/chips";
 import { useConfirm } from "@/common/components/confirm";
 import { ROLE_LABEL, type Role } from "@/common/auth/roles";
 import { Button } from "@/common/ui/button";
-import { changeRoleAction, deactivateAction, deleteStaffAction, reactivateAction } from "@/modules/admin/actions";
+import { changeRoleAction, deactivateAction, deleteStaffAction, reactivateAction, resetPasswordAction } from "@/modules/admin/actions";
 import type { StaffListRow } from "@/modules/admin/staff-data";
 
 const MODULE_LABEL: Record<string, string> = { platform: "NxtOne", attendance: "Attendance", logs: "Interactions", contest: "Contests" };
@@ -52,6 +52,15 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
       confirmLabel: list.length === 1 ? "Deactivate" : `Deactivate ${list.length}`,
       danger: true,
       action: () => deactivateAction(list.map((r) => r.id)),
+      onSuccess: clear,
+    });
+  const resetPassword = (list: StaffListRow[]) =>
+    ask({
+      title: list.length === 1 ? `Reset ${list[0].name}'s password?` : `Reset ${list.length} passwords?`,
+      description: "Their current password stops working and they're signed out everywhere. They sign in with the default first password and choose a new one.",
+      items: list.map((r) => `${r.name} · ${r.email}`),
+      confirmLabel: list.length === 1 ? "Reset password" : `Reset ${list.length} passwords`,
+      action: () => resetPasswordAction(list.map((r) => r.id)),
       onSuccess: clear,
     });
   const reactivate = (list: StaffListRow[]) =>
@@ -94,9 +103,14 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
           {chosen.length ? (
             <>
               {mode === "active" ? (
-                <Button size="sm" variant="outline" onClick={() => deactivate(chosen)}>
-                  Deactivate {chosen.length}
-                </Button>
+                <>
+                  <Button size="sm" variant="outline" onClick={() => resetPassword(chosen)}>
+                    Reset {chosen.length} passwords
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => deactivate(chosen)}>
+                    Deactivate {chosen.length}
+                  </Button>
+                </>
               ) : (
                 <>
                   <Button size="sm" variant="outline" onClick={() => reactivate(chosen)}>
@@ -205,16 +219,23 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
                       <div className="text-xs text-muted-foreground">{when(row.deactivatedAt)}</div>
                     </td>
                   ) : (
-                    <td className="border-b border-muted px-3 py-3">{row.signIn === "google" ? "Google only" : "Password or Google"}</td>
+                    <td className="border-b border-muted px-3 py-3">
+                      {row.signIn === "first" ? <span className="text-muted-foreground">Not set up yet</span> : "Own password"}
+                    </td>
                   )}
                   <td className="border-b border-muted px-5 py-3">
                     <div className="flex items-center justify-end gap-2">
                       {mode === "readonly" || !editable ? (
                         row.active ? <StatusPill tone="accent">Active</StatusPill> : <StatusPill>Deactivated</StatusPill>
                       ) : mode === "active" ? (
-                        <Button variant="outline" size="sm" onClick={() => deactivate([row])}>
-                          Deactivate
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => resetPassword([row])}>
+                            Reset password
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => deactivate([row])}>
+                            Deactivate
+                          </Button>
+                        </>
                       ) : (
                         <>
                           <Button variant="outline" size="sm" onClick={() => reactivate([row])}>

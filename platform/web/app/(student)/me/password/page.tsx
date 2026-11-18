@@ -21,11 +21,11 @@ async function Content() {
         <h1 className="text-[24px] font-semibold tracking-tight">{student.mustChangePassword ? "Choose your password" : "Change your password"}</h1>
         <p className="text-sm text-muted-foreground">
           {student.mustChangePassword
-            ? "You signed in with a password your instructor gave you. Choose your own to continue."
+            ? "Welcome to NxtOne. Before you start, choose a password only you know. You'll use it from now on."
             : "Other devices will be signed out."}
         </p>
       </div>
-      <PasswordForm />
+      <PasswordForm firstTime={student.mustChangePassword} />
     </div>
   );
 }

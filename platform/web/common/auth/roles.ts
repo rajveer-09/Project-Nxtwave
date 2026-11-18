@@ -73,6 +73,8 @@ export type SessionUser = {
   name: string;
   email: string;
   role: Role;
+  /** Signed in with the default first password: must choose their own before anything else. */
+  mustSetPassword?: boolean;
 };
 
 export function initials(name: string) {

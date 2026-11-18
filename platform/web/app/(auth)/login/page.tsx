@@ -7,11 +7,10 @@ Date : 18 Nov 2026
 */
 
 import { ChartNoAxesCombined, ShieldCheck, Sparkles } from "lucide-react";
-import { Suspense } from "react";
 import { Brand } from "@/common/components/brand";
 import { ThemeToggle } from "@/common/components/theme";
-import { authMode, devSessionAllowed, googleConfigured } from "@/common/auth/config";
-import { DevRolePicker, GoogleError, PasswordForm } from "@/modules/login/sign-in-forms";
+import { authMode, devSessionAllowed } from "@/common/auth/config";
+import { DevRolePicker, PasswordForm } from "@/modules/login/sign-in-forms";
 
 export const metadata = { title: "Sign in" };
 
@@ -21,31 +20,12 @@ const POINTS = [
   { icon: ShieldCheck, title: "Every change on record", text: "Who changed what, and when, is kept for the people who need to know." },
 ];
 
-function GoogleButton() {
-  return (
-    <a
-      href="/api/auth/google/login"
-      className="flex h-12 items-center justify-center gap-3 rounded-xl border border-input bg-card text-[15px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-        <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.7z" />
-        <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24z" />
-        <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6H1.3a12 12 0 0 0 0 10.8z" />
-        <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9z" />
-      </svg>
-      Continue with Google
-    </a>
-  );
-}
-
 /**
- * Landing + sign-in. One form for everyone: an email signs in as staff, a NIAT ID as a student.
- * Static apart from the form, so it opens instantly.
+ * Landing + sign-in. A Student / Staff choice, then NIAT ID or work email and password. First-time
+ * sign-ins use the default first password and choose their own next. Static apart from the form.
  */
 export default function LoginPage() {
   const database = authMode() === "database";
-  const google = database && googleConfigured();
-  const development = process.env.NODE_ENV !== "production";
   return (
     <div className="flex min-h-app flex-col bg-background lg:flex-row">
       {/* ---- Left: what NxtOne is */}
@@ -90,27 +70,8 @@ export default function LoginPage() {
         <div className="flex w-full max-w-[400px] flex-col gap-7">
           <div className="flex flex-col gap-2">
             <h2 className="text-[28px] font-semibold tracking-tight">Sign in</h2>
-            <p className="text-[15px] text-muted-foreground">Staff use their work email. Students use their NIAT ID.</p>
+            <p className="text-[15px] text-muted-foreground">Students sign in with their NIAT ID, staff with their work email.</p>
           </div>
-
-          <Suspense fallback={null}>
-            <GoogleError />
-          </Suspense>
-
-          {google ? (
-            <>
-              <GoogleButton />
-              <div className="-my-1 flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="h-px flex-1 bg-border" />
-                or
-                <span className="h-px flex-1 bg-border" />
-              </div>
-            </>
-          ) : development ? (
-            <p className="rounded-lg border border-dashed border-input px-3 py-2.5 text-xs text-muted-foreground">
-              Development: Google sign-in appears once GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and APP_BASE_URL are set.
-            </p>
-          ) : null}
 
           <PasswordForm enabled={database} />
           {devSessionAllowed() ? <DevRolePicker /> : null}

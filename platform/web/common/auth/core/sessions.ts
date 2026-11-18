@@ -29,6 +29,7 @@ type StaffRow = {
   id: string;
   name: string;
   email: string;
+  must_set_password: boolean;
   roles: { module: string; role: string }[] | null;
 };
 
@@ -47,11 +48,14 @@ export function platformRole(roles: { module: string; role: string }[]): Role | 
 
 function toUser(row: StaffRow): SessionUser | null {
   const role = platformRole(row.roles ?? []);
-  return role ? { id: String(row.id), name: row.name, email: row.email, role } : null;
+  if (!role) return null;
+  const user: SessionUser = { id: String(row.id), name: row.name, email: row.email, role };
+  if (row.must_set_password) user.mustSetPassword = true;
+  return user;
 }
 
 const STAFF_WITH_ROLES = `
-  SELECT s.id, s.name, lower(s.email::text) AS email,
+  SELECT s.id, s.name, lower(s.email::text) AS email, s.must_set_password,
          COALESCE(json_agg(json_build_object('module', r.module, 'role', r.role))
                   FILTER (WHERE r.module IS NOT NULL), '[]') AS roles
   FROM core.staff s

@@ -31,7 +31,8 @@ export type StaffListRow = {
   email: string;
   instructorCode: string | null;
   active: boolean;
-  signIn: "password" | "google";
+  /** "own": has chosen their own password. "first": hasn't yet, so the default first password works for them. */
+  signIn: "own" | "first";
   /** Platform role (what they can open in NxtOne); null = no access. */
   role: Role | null;
   roles: { module: string; role: string }[];
@@ -67,7 +68,7 @@ function sampleRows(viewer: SessionUser): StaffListRow[] {
     email: s.email,
     instructorCode: s.role.includes("instructor") ? `INS${String(i + 1).padStart(3, "0")}` : null,
     active: s.active,
-    signIn: s.role === "owner" || s.role === "admin" ? "google" : "password",
+    signIn: "own",
     role: s.role,
     roles: MODULE_ROLE[s.role],
     studentsAssigned: ROSTER.filter((r) => r.instructor === s.name).length,
@@ -78,7 +79,7 @@ function sampleRows(viewer: SessionUser): StaffListRow[] {
 }
 
 const STAFF_SQL = `SELECT s.id::text, s.name, lower(s.email::text) AS email, s.instructor_code, s.active AND s.left_on IS NULL AS active,
-            s.password_hash IS NOT NULL AS has_password,
+            s.must_set_password,
             COALESCE((SELECT json_agg(json_build_object('module', r.module, 'role', r.role) ORDER BY r.module)
                       FROM core.staff_roles r WHERE r.staff_id = s.id), '[]') AS roles,
             (SELECT count(*)::int FROM core.student_assignments a
@@ -94,7 +95,7 @@ type StaffRow = {
   email: string;
   instructor_code: string | null;
   active: boolean;
-  has_password: boolean;
+  must_set_password: boolean;
   roles: { module: string; role: string }[];
   students: number;
   deactivated_at: string | null;
@@ -127,7 +128,7 @@ export async function listStaff(viewer: SessionUser): Promise<{ rows: StaffListR
           email: r.email,
           instructorCode: r.instructor_code,
           active: r.active,
-          signIn: r.has_password ? ("password" as const) : ("google" as const),
+          signIn: r.must_set_password ? ("first" as const) : ("own" as const),
           role,
           roles: r.roles,
           studentsAssigned: r.students,
@@ -216,6 +217,26 @@ export async function deactivateStaff(viewer: SessionUser, staffIds: string[]): 
   return { ok: true, message: `${check.targets.length === 1 ? check.targets[0].name : people(check.targets.length)} deactivated. Super admins can reactivate or delete from their Deactivated list.` };
 }
 
+/**
+ * Back to the default first password: their own password stops working, they're signed out
+ * everywhere, and at their next sign-in (with the default password) they choose a new one.
+ */
+export async function resetStaffPassword(viewer: SessionUser, staffIds: string[]): Promise<Result> {
+  const check = await checkTargets(viewer, staffIds);
+  if ("error" in check) return { ok: false, error: check.error! };
+  await withChange(viewer, "ui", check.targets.length > 1 ? `reset ${check.targets.length} passwords` : "reset password", async (db) => {
+    for (const t of check.targets) {
+      await db.query("UPDATE core.staff SET password_hash = NULL, must_set_password = true WHERE id = $1", [t.id]);
+      await revokeAllSessions(db, t.id);
+    }
+  });
+  expire(TAGS.staff);
+  return {
+    ok: true,
+    message: `${check.targets.length === 1 ? check.targets[0].name : people(check.targets.length)} can sign in with the default password and will choose a new one.`,
+  };
+}
+
 export async function reactivateStaff(viewer: SessionUser, staffIds: string[]): Promise<Result> {
   if (viewer.role !== "owner") return { ok: false, error: "Only super admins reactivate people." };
   const check = await checkTargets(viewer, staffIds);
@@ -295,5 +316,5 @@ export async function addStaff(viewer: SessionUser, input: { name: string; email
     throw err;
   }
   expire(TAGS.staff);
-  return { ok: true, message: `${name} added${hash ? "" : " (Google sign-in only)"}.` };
+  return { ok: true, message: `${name} added. They sign in with ${hash ? "the password you set" : "the default first password"} and choose their own.` };
 }

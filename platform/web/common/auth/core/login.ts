@@ -8,7 +8,7 @@ Date : 15 Nov 2026
 
 import type { SessionUser } from "@/common/auth/roles";
 import type { Db } from "@/common/auth/core/db";
-import { DUMMY_HASH, hashPassword, needsRehash, verifyPassword } from "@/common/auth/core/password";
+import { DUMMY_HASH, hashPassword, isFirstPassword, needsRehash, verifyPassword } from "@/common/auth/core/password";
 import { findActiveStaffByEmail } from "@/common/auth/core/sessions";
 
 /** Lock a key (email or IP) after this many failures inside the window. */
@@ -40,15 +40,18 @@ export async function passwordLogin(db: Db, email: string, password: string, ip:
   if ((await recentFailures(db, keys)) >= MAX_FAILURES) return { ok: false, reason: "locked" };
 
   const found = await findActiveStaffByEmail(db, email);
-  const valid = await verifyPassword(password, found?.passwordHash ?? DUMMY_HASH);
+  const ownPassword = await verifyPassword(password, found?.passwordHash ?? DUMMY_HASH);
+  // Until they choose their own password, the shared first password also works (then they must choose one).
+  const firstPassword = !!found?.user.mustSetPassword && isFirstPassword(password);
+  const valid = !!found && ((ownPassword && !!found.passwordHash) || firstPassword);
 
-  if (!found || !valid || !found.passwordHash) {
+  if (!found || !valid) {
     for (const key of keys) await db.query("INSERT INTO core.login_failures (key) VALUES ($1)", [key]);
     return { ok: false, reason: "invalid" };
   }
 
   await db.query("DELETE FROM core.login_failures WHERE key = $1", [emailKey]);
-  if (needsRehash(found.passwordHash)) {
+  if (ownPassword && found.passwordHash && needsRehash(found.passwordHash)) {
     // Upgrade migrated Interactions / Attendance hashes to the current format.
     await db.query("UPDATE core.staff SET password_hash = $1 WHERE id = $2", [await hashPassword(password), found.user.id]);
   }
