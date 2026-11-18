@@ -133,7 +133,7 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
       ) : null}
 
       <SectionCard
-        title="Interactions per day"
+        title="Interactions"
         description={`${shortDay(range.from)} – ${shortDay(range.to)}${takenBy ? ` · taken by ${takenBy}` : ""}`}
       >
         <div className="flex flex-col gap-4">
