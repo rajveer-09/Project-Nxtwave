@@ -6,13 +6,15 @@ Date : 16 Nov 2026
 
 */
 
-import Link from "next/link";
+import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { PageHeader } from "@/common/components/page-header";
 import { InteractionForm, type FormStudent } from "@nxtone/interactions-ui/components/interaction-form";
 import { RecentLogs } from "@nxtone/interactions-ui/components/recent-logs";
+import { OverdueBanner, OverduePill, OverdueReminder } from "@nxtone/interactions-ui/components/overdue-banner";
+import { OVERDUE_COOKIE, overdueStartsOpen, parseOverduePref } from "@nxtone/interactions-ui/lib/overdue-cookie";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
 import { inScope, studentScope } from "@/common/auth/student-access";
@@ -58,6 +60,8 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
     getStructure(),
   ]);
   const overdue = myStudents.filter((s) => s.lastInteractionDays === null || s.lastInteractionDays >= RISK_THRESHOLDS.interactionGapDays);
+  // Whether the Overdue banner starts open (its toggle is remembered in a cookie).
+  const overduePref = parseOverduePref((await cookies()).get(OVERDUE_COOKIE)?.value);
   const today = todayIst();
   const weekAgo = addDays(today, -7);
   const thisWeek = all.filter((it) => it.date > weekAgo).length;
@@ -95,35 +99,34 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   const instructors = [...new Set(roster.map((s) => s.instructor).filter((name) => name !== "Unassigned"))].sort();
   const student = typeof params.student === "string" ? params.student.toUpperCase() : undefined;
 
+  const overdueLabel = `${overdue.length} ${logging ? "of my students" : "students"} overdue (${RISK_THRESHOLDS.interactionGapDays}d+)`;
+  // Instructors with overdue students: the pill is a button that shows/hides the list below it.
+  const overdueReminder = logging && overdue.length > 0;
+
   return (
-    <>
+    <OverdueReminder
+      count={overdue.length}
+      initialOpen={overdueStartsOpen(overduePref, overdue.length)}
+      seen={overduePref.open ? null : overduePref.seen}
+    >
       <PageHeader
         eyebrow={logging ? `Interactions · my students (${myStudents.length})` : "Interactions · all students"}
         title={logging ? "Log an interaction" : "Interactions"}
         actions={
           <div className="flex flex-wrap gap-2 text-[13px]">
-            <StatusPill tone={overdue.length ? "warning" : "accent"}>
-              {overdue.length} {logging ? "of my students" : "students"} overdue ({RISK_THRESHOLDS.interactionGapDays}d+)
-            </StatusPill>
+            {overdueReminder ? (
+              <OverduePill>{overdueLabel}</OverduePill>
+            ) : (
+              <StatusPill tone={overdue.length ? "warning" : "accent"}>{overdueLabel}</StatusPill>
+            )}
             <StatusPill tone="accent">{thisWeek} logged this week</StatusPill>
             {sample ? <StatusPill>Sample data</StatusPill> : null}
           </div>
         }
       />
 
-      {logging && overdue.length ? (
-        <nav aria-label="Overdue students" className="flex flex-wrap items-center gap-2 rounded-xl border border-warning-border bg-warning-soft px-4 py-3 text-[13px]">
-          <span className="font-semibold text-warning">Overdue:</span>
-          {overdue.map((s) => (
-            <Link
-              key={s.niatId}
-              href={`/interactions?student=${s.niatId}`}
-              className="flex min-h-8 items-center rounded-full bg-card px-3 font-semibold text-foreground hover:bg-muted"
-            >
-              {s.name} · {s.lastInteractionDays === null ? "never" : `${s.lastInteractionDays}d`}
-            </Link>
-          ))}
-        </nav>
+      {overdueReminder ? (
+        <OverdueBanner students={overdue.map((s) => ({ niatId: s.niatId, name: s.name, days: s.lastInteractionDays }))} />
       ) : null}
 
       {!logging ? (
@@ -183,7 +186,7 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
         ) : null}
         <RecentLogs rows={inRange.slice(0, logging ? 12 : 40)} total={inRange.length} exportHref="/api/logs/interactions/export" />
       </div>
-    </>
+    </OverdueReminder>
   );
 }
 
@@ -194,8 +197,8 @@ export default function InteractionsPage({ searchParams }: PageProps<"/interacti
         <div className="flex flex-col gap-5" aria-busy="true" aria-label="Loading interactions">
           <Skeleton className="h-16 w-96" />
           <div className="flex flex-wrap gap-5">
-            <Skeleton className="h-[640px] flex-[1_1_520px] rounded-xl" />
-            <Skeleton className="h-[480px] flex-[1_1_460px] rounded-xl" />
+            <Skeleton className="h-[640px] flex-[1_1_440px] rounded-xl" />
+            <Skeleton className="h-[480px] flex-[1.5_1_560px] rounded-xl" />
           </div>
         </div>
       }

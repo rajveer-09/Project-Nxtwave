@@ -7,7 +7,7 @@ Date : 15 Nov 2026
 */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { OAUTH_COOKIE, SESSION_COOKIE } from "@/common/auth/config";
+import { loginScopedCookieNames, OAUTH_COOKIE, SESSION_COOKIE } from "@/common/auth/config";
 import { createSession, findActiveStaffByEmail } from "@/common/auth/core/sessions";
 import { finishGoogleSignIn, type OAuthPending } from "@/common/auth/google";
 import { clientIp } from "@/common/auth/request";
@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
   });
   const response = NextResponse.redirect(new URL("/", request.url));
   response.cookies.delete({ name: OAUTH_COOKIE, path: "/api/auth/google" });
+  for (const name of loginScopedCookieNames(request.cookies.getAll())) response.cookies.delete(name);
   response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",

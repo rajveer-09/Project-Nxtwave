@@ -304,7 +304,7 @@ export function InteractionForm({
         event.preventDefault();
         submit();
       }}
-      className="flex min-w-0 flex-[1_1_520px] flex-col gap-5 rounded-xl border border-border bg-card p-5"
+      className="flex min-w-0 flex-[1_1_440px] flex-col gap-5 rounded-xl border border-border bg-card p-5"
       noValidate
     >
       <div className="flex flex-wrap gap-3">

@@ -11,7 +11,7 @@ Date : 15 Nov 2026
 import type { Pool } from "pg";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { authMode, DEV_ROLE_COOKIE, devSessionAllowed, SESSION_COOKIE, STUDENT_COOKIE } from "@/common/auth/config";
+import { authMode, DEV_ROLE_COOKIE, devSessionAllowed, loginScopedCookieNames, SESSION_COOKIE, STUDENT_COOKIE } from "@/common/auth/config";
 import { createStudentSession, NIAT_ID, STUDENT_SESSION_HOURS, studentPasswordLogin } from "@/common/auth/student/session";
 import { passwordLogin } from "@/common/auth/core/login";
 import { createSession, deleteSession, findActiveStaffByEmail, forgetSessions, getSessionUserByToken } from "@/common/auth/core/sessions";
@@ -77,6 +77,7 @@ export async function passwordSignIn(_prev: SignInState, formData: FormData): Pr
   }
   const token = await createSession(db, result.user.id, meta);
   store.delete(STUDENT_COOKIE);
+  clearLoginScoped(store);
   store.set(SESSION_COOKIE, token, sessionCookieOptions);
   // First sign-in with the default password: choose one before anything else.
   redirect(result.user.mustSetPassword ? "/set-password" : safeNext(formData.get("next")));
@@ -133,8 +134,14 @@ export async function setOwnPassword(_prev: SetPasswordState, formData: FormData
 
   const requestHeaders = await headers();
   const token = await createSession(db, user.id, { ip: clientIp(requestHeaders), userAgent: requestHeaders.get("user-agent") });
+  clearLoginScoped(store);
   store.set(SESSION_COOKIE, token, sessionCookieOptions);
   redirect("/");
+}
+
+/** Clears the nx_login_* cookies (choices that last until the next sign-in, e.g. a hidden reminder). */
+function clearLoginScoped(store: Awaited<ReturnType<typeof cookies>>) {
+  for (const name of loginScopedCookieNames(store.getAll())) store.delete(name);
 }
 
 /** Only same-site paths: "/students?x=1" yes; "//evil.com", "https://…", "/\\evil" no. */
@@ -148,7 +155,9 @@ export async function devSignIn(formData: FormData) {
   if (!devSessionAllowed()) throw new Error("Development sign-in is disabled.");
   const role = String(formData.get("role") ?? "");
   if (!isRole(role)) throw new Error("Unknown role");
-  (await cookies()).set(DEV_ROLE_COOKIE, role, { ...sessionCookieOptions, maxAge: 60 * 60 * 12 });
+  const store = await cookies();
+  clearLoginScoped(store);
+  store.set(DEV_ROLE_COOKIE, role, { ...sessionCookieOptions, maxAge: 60 * 60 * 12 });
   redirect("/");
 }
 
@@ -159,5 +168,6 @@ export async function signOut() {
   }
   store.delete(SESSION_COOKIE);
   store.delete(DEV_ROLE_COOKIE);
+  clearLoginScoped(store);
   redirect("/login");
 }
