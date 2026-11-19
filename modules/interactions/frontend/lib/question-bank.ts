@@ -6,13 +6,15 @@ Date : 16 Nov 2026
 
 */
 
+import { DEMO_QUESTION_BANK } from "@nxtone/interactions-ui/lib/demo-question-bank";
+
 /**
  * Sample roadmap question bank until the Curriculum admin (UI-7, logs.questions) exists.
  * Keyed by "Level N|Topic" or "Level N|Topic|Subtopic"; step codes follow the curriculum.
  */
 export type BankQuestion = { title: string; step: string; source: string; url?: string };
 
-export const QUESTION_BANK: Record<string, BankQuestion[]> = {
+export const SAMPLE_BANK: Record<string, BankQuestion[]> = {
   "Level 1|Arrays|Prefix & Suffix sum": [
     { title: "Running Sum of 1d Array", step: "2.1", source: "LeetCode 1480" },
     { title: "Find Pivot Index", step: "2.1", source: "LeetCode 724" },
@@ -62,21 +64,34 @@ export const QUESTION_BANK: Record<string, BankQuestion[]> = {
   ],
 };
 
+/** Sample bank plus the demo questions (demo-question-bank.ts), merged per key; a demo title already in the sample is skipped. */
+export const QUESTION_BANK: Record<string, BankQuestion[]> = (() => {
+  const out: Record<string, BankQuestion[]> = {};
+  for (const [key, list] of Object.entries(SAMPLE_BANK)) out[key] = [...list];
+  for (const [key, list] of Object.entries(DEMO_QUESTION_BANK)) {
+    const have = new Set((out[key] ?? []).map((q) => q.title));
+    out[key] = [...(out[key] ?? []), ...list.filter((q) => !have.has(q.title))];
+  }
+  return out;
+})();
+
 /** Bank key for a level/topic/subtopic, e.g. "Level 1|Arrays|Prefix & Suffix sum". */
 export const bankKey = (level: string, topic: string, subtopic?: string | null) => (subtopic ? `${level}|${topic}|${subtopic}` : `${level}|${topic}`);
 
+/** One thing covered in an interaction: a subtopic of a topic, or a topic that has no subtopics. */
+export type CoveredItem = { topic: string; subtopic: string | null };
+
 /**
- * Questions for the picked level/topics/subtopics, de-duplicated by title.
+ * Questions for the covered items, in order, de-duplicated by title. `where` is "Topic › Subtopic" or "Topic".
  * `bank` is the live question bank from the Curriculum module; QUESTION_BANK is its starting data.
  */
 export function questionsFor(
   level: string,
-  topics: string[],
-  subtopics: string[],
+  items: CoveredItem[],
   bank: Record<string, BankQuestion[]> = QUESTION_BANK,
 ): (BankQuestion & { where: string })[] {
   const QUESTION_BANK_IN_USE = bank;
-  const keys = subtopics.length ? subtopics.map((sub) => bankKey(level, topics[0], sub)) : topics.map((t) => bankKey(level, t));
+  const keys = items.map((it) => bankKey(level, it.topic, it.subtopic));
   const seen = new Set<string>();
   const out: (BankQuestion & { where: string })[] = [];
   for (const key of keys) {

@@ -8,7 +8,7 @@ Date : 16 Nov 2026
 
 "use client";
 
-import { ClipboardPaste, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ClipboardPaste, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ import { QuestionTitle } from "@nxtone/interactions-ui/curriculum/components/que
 import { liveTopics, reachedSteps, subtopicNames, topicNames, type Structure } from "@nxtone/interactions-ui/curriculum/lib/structure";
 import { clearInteractionDraft, interactionDraftKey, loadInteractionDraft, saveInteractionDraft } from "@nxtone/interactions-ui/lib/draft";
 import { blockKeyboardSubmit } from "@nxtone/interactions-ui/lib/forms";
-import { questionsFor, type BankQuestion } from "@nxtone/interactions-ui/lib/question-bank";
+import { questionsFor, type BankQuestion, type CoveredItem } from "@nxtone/interactions-ui/lib/question-bank";
 import { parseSheetRow } from "@nxtone/interactions-ui/lib/sheet-row-parser";
 import { interactionInput, STATUSES, STATUS_LABEL, type InteractionStatus } from "@nxtone/interactions-ui/lib/types";
 import { cn } from "@/common/lib/utils";
@@ -43,7 +43,6 @@ type Fields = {
   level: number;
   topics: string[];
   subtopics: string[];
-  stepsReached: Record<string, string>;
   status: InteractionStatus;
   rating: number;
   picked: string[];
@@ -67,7 +66,6 @@ function blankFields(student: FormStudent | undefined, today: string, takenBy: s
     level: student?.level ?? 0,
     topics: student ? [student.topic] : [],
     subtopics: student?.subtopic ? [student.subtopic] : [],
-    stepsReached: {},
     status: "In Progress",
     rating: 3,
     picked: [],
@@ -117,6 +115,147 @@ function Chip({ on, onClick, children, tone = "dark" }: { on: boolean; onClick: 
   );
 }
 
+const stepKey = (item: string, code: string) => `${item}|${code}`;
+
+/** Adds (on) or removes the keys from a set, returning a new set. */
+function toggleKeys(prev: Set<string>, keys: string[], on: boolean): Set<string> {
+  const next = new Set(prev);
+  for (const k of keys) {
+    if (on) next.add(k);
+    else next.delete(k);
+  }
+  return next;
+}
+
+/**
+ * One subtopic's (or topic's) roadmap questions, grouped into collapsible rows by step
+ * ("2.1 · Easy standard question", ticked/total). Steps with no questions are left out.
+ */
+function StepGroups({
+  title,
+  heading = title,
+  questions,
+  steps,
+  picked,
+  open,
+  onToggleOpen,
+  onTogglePick,
+}: {
+  /** The subtopic or topic name; keys the open step rows. */
+  title: string;
+  /** Shown above the rows; defaults to the title. */
+  heading?: string;
+  questions: (BankQuestion & { where: string })[];
+  steps: { code: string; label: string }[];
+  picked: string[];
+  open: Set<string>;
+  onToggleOpen: (keys: string[], on: boolean) => void;
+  onTogglePick: (title: string) => void;
+}) {
+  // The whole block can be folded to its heading, so several subtopics don't crowd the form.
+  const [folded, setFolded] = useState(false);
+  // Curriculum step order first; a question at a step the curriculum doesn't list still shows, by its code.
+  const known = new Set(steps.map((s) => s.code));
+  const extra = [...new Set(questions.map((q) => q.step).filter((c) => !known.has(c)))].sort().map((code) => ({ code, label: "" }));
+  // Level 0 has no steps: its questions sit in one "Questions" row (as on the Curriculum page).
+  const groups = steps.length
+    ? [...steps, ...extra].map((s) => ({ ...s, questions: questions.filter((q) => q.step === s.code) })).filter((g) => g.questions.length)
+    : questions.length
+      ? [{ code: "", label: "Questions", questions }]
+      : [];
+  if (!groups.length) {
+    return (
+      <section aria-label={`${heading} questions`} className="flex flex-col gap-1">
+        <h3 className="text-sm font-semibold">{heading} — Questions</h3>
+        <p className="text-[13px] text-muted-foreground">No roadmap questions here yet. Add what you asked below.</p>
+      </section>
+    );
+  }
+
+  const keys = groups.map((g) => stepKey(title, g.code));
+  const allOpen = keys.every((k) => open.has(k));
+  const tickedHere = questions.filter((q) => picked.includes(q.title)).length;
+
+  return (
+    <section aria-label={`${heading} questions`} className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">
+          <button
+            type="button"
+            aria-expanded={!folded}
+            onClick={() => setFolded(!folded)}
+            className="-ml-1.5 flex min-h-8 items-center gap-1.5 rounded-md px-1.5 text-left hover:bg-muted"
+          >
+            <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 transition-transform", folded && "-rotate-90")} />
+            {heading} — Questions
+            {/* When folded, still show how many were ticked here. */}
+            {folded ? (
+              <span className={cn("ml-1 text-xs font-normal tabular", tickedHere ? "text-primary" : "text-muted-foreground")}>
+                {tickedHere}/{questions.length} selected
+              </span>
+            ) : null}
+          </button>
+        </h3>
+        {!folded ? (
+          <button type="button" onClick={() => onToggleOpen(keys, !allOpen)} className="min-h-8 rounded-full border border-input px-3 text-xs font-semibold hover:bg-muted">
+            {allOpen ? "Collapse all" : "Expand all"}
+          </button>
+        ) : null}
+      </div>
+      <ul hidden={folded} className="flex flex-col gap-2">
+        {groups.map((g) => {
+          const key = stepKey(title, g.code);
+          const isOpen = open.has(key);
+          const ticked = g.questions.filter((q) => picked.includes(q.title)).length;
+          return (
+            <li key={g.code} className="overflow-hidden rounded-xl border border-border">
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                onClick={() => onToggleOpen([key], !isOpen)}
+                className={cn("flex min-h-12 w-full items-center gap-2.5 px-3.5 text-left text-sm font-semibold hover:bg-muted", isOpen && "border-b border-border")}
+              >
+                <ChevronRight aria-hidden="true" className={cn("size-4 shrink-0 transition-transform", isOpen && "rotate-90")} />
+                <span className="flex-1">
+                  {/* "2.1 · Easy standard question"; Level 0's single row is just "Questions". */}
+                  {[g.code, g.label].filter(Boolean).join(" · ")}
+                </span>
+                <span className={cn("text-xs tabular", ticked ? "text-primary" : "text-muted-foreground")}>
+                  {ticked}/{g.questions.length}
+                </span>
+              </button>
+              {isOpen ? (
+                <ul className="flex flex-col py-1.5">
+                  {g.questions.map((q) => {
+                    const on = picked.includes(q.title);
+                    return (
+                      <li key={q.title}>
+                        <label className={cn("flex min-h-11 cursor-pointer items-center gap-3 px-3.5 text-sm hover:bg-muted", on && "bg-accent")}>
+                          {/* Round tick-box, as in the design: an outlined circle, filled with a ring when ticked. */}
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() => onTogglePick(q.title)}
+                            className="size-5 shrink-0 cursor-pointer appearance-none rounded-full border-2 border-muted-foreground checked:border-primary checked:bg-primary checked:shadow-[inset_0_0_0_3px_var(--card)] focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                          />
+                          <span className="flex-1">
+                            <QuestionTitle title={q.title} url={q.url} className="font-normal" />
+                          </span>
+                          {q.source ? <span className="text-xs text-muted-foreground">{q.source}</span> : null}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export function InteractionForm({
   students,
   instructors,
@@ -159,6 +298,8 @@ export function InteractionForm({
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [pasteWarnings, setPasteWarnings] = useState<string[]>([]);
+  // Which step rows are expanded in "Questions asked", keyed by stepKey(subtopic or topic, step code).
+  const [openSteps, setOpenSteps] = useState<Set<string>>(() => new Set());
   const loadedKey = useRef<string | null>(null);
 
   const draftKey = niatId ? interactionDraftKey(userId, { studentId: niatId }) : null;
@@ -185,21 +326,42 @@ export function InteractionForm({
   const level = levelName(f.level);
   const levelOptions = structure.levels.filter((l) => l.level === f.level || liveTopics(structure, l.level).length);
   const topicOptions = topicNames(structure, f.level);
-  const subtopicMode = f.topics.length === 1 && subtopicNames(structure, f.level, f.topics[0]).length > 0;
-  const subtopicOptions = subtopicMode ? subtopicNames(structure, f.level, f.topics[0]) : [];
+  // One topic per interaction. A topic with subtopics is covered through the subtopics picked for it;
+  // a topic without subtopics is covered as itself. Steps and questions are per covered item.
+  const subsOf = (topic: string) => subtopicNames(structure, f.level, topic);
+  const topicsWithSubs = f.topics.filter((t) => subsOf(t).length > 0);
+  const covered: CoveredItem[] = f.topics.flatMap<CoveredItem>((t) => {
+    const subs = subsOf(t);
+    return subs.length ? subs.filter((s) => f.subtopics.includes(s)).map((s) => ({ topic: t, subtopic: s })) : [{ topic: t, subtopic: null }];
+  });
+  const itemName = (c: CoveredItem) => c.subtopic ?? c.topic;
+  const whereOf = (c: CoveredItem) => (c.subtopic ? `${c.topic} › ${c.subtopic}` : c.topic);
+  const missingSubs = topicsWithSubs.filter((t) => !subsOf(t).some((s) => f.subtopics.includes(s)));
   const stepOptions = reachedSteps(structure, f.level);
-  const stepItems = stepOptions.length ? (subtopicMode ? f.subtopics : f.topics) : [];
-  const bank = questionsFor(level, f.topics, subtopicMode ? f.subtopics : [], questionBank);
+  const bank = questionsFor(level, covered, questionBank);
+  // Step reached isn't asked any more (2026-11-19): it is the highest step among the questions ticked for each
+  // subtopic (or topic without subtopics). Items with nothing ticked get no step. Level 0 has no steps.
+  const stepRankOf = (code: string) => stepOptions.findIndex((s) => s.code === code);
+  const stepsReached: Record<string, string> = {};
+  if (stepOptions.length) {
+    for (const c of covered) {
+      const codes = bank.filter((q) => q.where === whereOf(c) && f.picked.includes(q.title) && stepRankOf(q.step) >= 0).map((q) => q.step);
+      if (codes.length) stepsReached[itemName(c)] = codes.reduce((a, b) => (stepRankOf(b) > stepRankOf(a) ? b : a));
+    }
+  }
   const words = f.transcriptText.trim() ? f.transcriptText.trim().split(/\s+/).length : 0;
 
   function changeLevel(n: number) {
     const first = topicNames(structure, n)[0];
-    setF((prev) => ({ ...prev, level: n, topics: first ? [first] : [], subtopics: [], stepsReached: {}, picked: [] }));
+    setF((prev) => ({ ...prev, level: n, topics: first ? [first] : [], subtopics: [], picked: [] }));
   }
-  function toggleTopic(topic: string) {
+  // One topic per interaction (user, 2026-11-19): picking a topic replaces the current one and drops the old
+  // topic's subtopics. Picking the selected topic again keeps it, since a topic is required.
+  function selectTopic(topic: string) {
     setF((prev) => {
-      const topics = prev.topics.includes(topic) ? prev.topics.filter((t) => t !== topic) : [...prev.topics, topic];
-      return { ...prev, topics, subtopics: [], stepsReached: {}, picked: [] };
+      if (prev.topics.length === 1 && prev.topics[0] === topic) return prev;
+      const subs = subtopicNames(structure, prev.level, topic);
+      return { ...prev, topics: [topic], subtopics: prev.subtopics.filter((s) => subs.includes(s)) };
     });
   }
   function toggleSubtopic(sub: string) {
@@ -219,7 +381,8 @@ export function InteractionForm({
       ...prev,
       date: v.date ?? prev.date,
       takenBy: !fixedTakenBy && v.takenByName && instructors.includes(v.takenByName) ? v.takenByName : prev.takenBy,
-      topics: v.topics?.length ? (v.topics.length === 1 ? v.topics : v.topics) : prev.topics,
+      // One topic per interaction: a sheet row naming several keeps the first (warned below).
+      topics: v.topics?.length ? [v.topics[0]] : prev.topics,
       subtopics: v.topics?.length ? [] : prev.subtopics,
       status: v.status ?? prev.status,
       rating: v.rating ?? prev.rating,
@@ -231,6 +394,7 @@ export function InteractionForm({
       meetRecording: v.meetRecording ?? prev.meetRecording,
     }));
     const warnings = [...result.warnings];
+    if (v.topics && v.topics.length > 1) warnings.push(`The sheet lists ${v.topics.join(", ")}. An interaction covers one topic, so only ${v.topics[0]} was picked; log the others separately.`);
     if (!fixedTakenBy && v.takenByName && !instructors.includes(v.takenByName)) warnings.push(`"${v.takenByName}" isn't in the instructor list. Pick "Taken by" by hand.`);
     setPasteWarnings(warnings);
     if (result.filled) {
@@ -250,8 +414,8 @@ export function InteractionForm({
       takenBy: f.takenBy,
       level: f.level,
       topics: f.topics,
-      subtopics: subtopicMode ? f.subtopics : [],
-      stepsReached: Object.fromEntries(stepItems.filter((item) => f.stepsReached[item]).map((item) => [item, f.stepsReached[item]])),
+      subtopics: covered.flatMap((c) => (c.subtopic ? [c.subtopic] : [])),
+      stepsReached,
       status: f.status,
       rating: f.rating,
       questions: [
@@ -270,8 +434,7 @@ export function InteractionForm({
     const next: Record<string, string> = {};
     const parsed = interactionInput.safeParse(payload);
     if (!parsed.success) for (const issue of parsed.error.issues) next[String(issue.path[0])] ??= issue.message;
-    if (subtopicMode && f.subtopics.length === 0) next.subtopics = "Pick the subtopic(s) covered";
-    if (stepItems.some((item) => !f.stepsReached[item])) next.stepsReached = "Pick the step reached for each item";
+    if (missingSubs.length) next.subtopics = `Pick the subtopic(s) covered for ${missingSubs.join(", ")}`;
     setErrors(next);
     if (Object.keys(next).length) {
       toast.error("Some fields need attention.");
@@ -304,7 +467,7 @@ export function InteractionForm({
         event.preventDefault();
         submit();
       }}
-      className="flex min-w-0 flex-[1_1_520px] flex-col gap-5 rounded-xl border border-border bg-card p-5"
+      className="flex min-w-0 flex-[1_1_440px] flex-col gap-5 rounded-xl border border-border bg-card p-5"
       noValidate
     >
       <div className="flex flex-wrap gap-3">
@@ -445,85 +608,63 @@ export function InteractionForm({
                 ))}
               </select>
             </label>
-            <div role="group" aria-label="Topics" className="flex flex-col gap-1.5">
-              <span className="text-[13px] font-medium">Topics</span>
+            <div role="group" aria-label="Topic" className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-medium">Topic <span className="font-normal text-muted-foreground">· one per interaction</span></span>
               <div className="flex flex-wrap gap-2">
                 {topicOptions.map((topic) => (
-                  <Chip key={topic} on={f.topics.includes(topic)} onClick={() => toggleTopic(topic)}>
+                  <Chip key={topic} on={f.topics.includes(topic)} onClick={() => selectTopic(topic)}>
                     {topic}
                   </Chip>
                 ))}
               </div>
               <FieldError id="err-topics" message={errors.topics} />
             </div>
-            {subtopicMode ? (
-              <div role="group" aria-label="Subtopics" className="flex flex-col gap-1.5">
-                <span className="text-[13px] font-medium">Subtopics of {f.topics[0]}</span>
-                <div className="flex flex-wrap gap-2">
-                  {subtopicOptions.map((sub) => (
-                    <Chip key={sub} tone="accent" on={f.subtopics.includes(sub)} onClick={() => toggleSubtopic(sub)}>
-                      {sub}
-                    </Chip>
-                  ))}
-                </div>
-                <FieldError id="err-subtopics" message={errors.subtopics} />
-              </div>
-            ) : null}
-            {stepItems.length ? (
-              <div className="flex flex-col gap-2">
-                <span className="text-[13px] font-medium">Step reached</span>
-                {stepItems.map((item) => (
-                  <label key={item} className="flex flex-wrap items-center gap-3 text-[13px]">
-                    <span className="min-w-40 font-semibold">{item}</span>
-                    <select
-                      value={f.stepsReached[item] ?? ""}
-                      onChange={(e) => set("stepsReached", { ...f.stepsReached, [item]: e.target.value })}
-                      aria-invalid={!!errors.stepsReached && !f.stepsReached[item]}
-                      className={cn(input, "h-10 max-w-80 flex-1")}
-                    >
-                      <option value="">Pick the step…</option>
-                      {stepOptions.map((s) => (
-                        <option key={s.code} value={s.code}>
-                          {s.code} · {s.label}
-                        </option>
+            {topicsWithSubs.length ? (
+              <div className="flex flex-col gap-3">
+                {/* The picked topic's subtopic chips (an interaction covers one topic). */}
+                {topicsWithSubs.map((topic) => (
+                  <div key={topic} role="group" aria-label={`Subtopics of ${topic}`} className="flex flex-col gap-1.5">
+                    <span className="text-[13px] font-medium">Subtopics of {topic}</span>
+                    <div className="flex flex-wrap gap-2">
+                      {subsOf(topic).map((sub) => (
+                        <Chip key={sub} tone="accent" on={f.subtopics.includes(sub)} onClick={() => toggleSubtopic(sub)}>
+                          {sub}
+                        </Chip>
                       ))}
-                    </select>
-                  </label>
+                    </div>
+                  </div>
                 ))}
-                <FieldError id="err-steps" message={errors.stepsReached} />
+                <FieldError id="err-subtopics" message={errors.subtopics} />
               </div>
             ) : null}
           </fieldset>
 
           <fieldset className="flex flex-col gap-3 rounded-lg border border-border p-4">
-            <legend className="px-1.5 text-[13px] font-semibold">Questions asked · {f.picked.length + f.offRoadmap.length} selected</legend>
+            {/* Count only ticks on questions shown now; ticks under a subtopic that was unticked aren't saved. */}
+            <legend className="px-1.5 text-[13px] font-semibold">Questions asked · {bank.filter((q) => f.picked.includes(q.title)).length + f.offRoadmap.length} selected</legend>
+            {missingSubs.length ? (
+              <p className="text-[13px] text-muted-foreground">Pick a subtopic of {missingSubs.join(" and ")} above to see its questions.</p>
+            ) : null}
             {bank.length ? (
-              <ul className="flex flex-col gap-1.5">
-                {bank.map((q) => {
-                  const on = f.picked.includes(q.title);
-                  return (
-                    <li key={q.title}>
-                      <label className={cn("flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border px-3 text-sm", on ? "border-accent-border bg-accent" : "border-border")}>
-                        <input
-                          type="checkbox"
-                          checked={on}
-                          onChange={() => set("picked", on ? f.picked.filter((t) => t !== q.title) : [...f.picked, q.title])}
-                          className="size-[18px] accent-primary"
-                        />
-                        <span className="flex-1 font-medium">
-                          <QuestionTitle title={q.title} url={q.url} className="font-medium" />
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {q.step} · {q.source}
-                        </span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
+              <div className="flex flex-col gap-5">
+                {covered.map((c) => (
+                  <StepGroups
+                    key={itemName(c)}
+                    title={itemName(c)}
+                    // "Maths › Digit Manipulation", so the heading names the topic too.
+                    heading={whereOf(c)}
+                    questions={bank.filter((q) => q.where === whereOf(c))}
+                    steps={stepOptions}
+                    picked={f.picked}
+                    open={openSteps}
+                    onToggleOpen={(keys, on) => setOpenSteps((prev) => toggleKeys(prev, keys, on))}
+                    onTogglePick={(title) => set("picked", f.picked.includes(title) ? f.picked.filter((t) => t !== title) : [...f.picked, title])}
+                  />
+                ))}
+              </div>
+            ) : covered.length ? (
               <p className="text-[13px] text-muted-foreground">No roadmap questions for this selection yet. Add what you asked below.</p>
-            )}
+            ) : null}
             <div className="flex flex-col gap-2 border-t border-dashed border-input pt-3">
               <span className="text-xs font-bold text-muted-foreground">Outside the roadmap</span>
               {f.offRoadmap.map((title) => (

@@ -15,7 +15,7 @@ import type { buildStudentDetail, CalendarDay } from "@/common/sample-data/stude
 import { listInteractions } from "@nxtone/interactions-ui/data";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 import { studentSteps, subtopicNames } from "@nxtone/interactions-ui/curriculum/lib/structure";
-import { STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
+import { coveredLabel, STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
 
 /**
  * The Student page from the combined database: attendance (attendance schema, same day
@@ -221,7 +221,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     round: it.round,
     by: it.takenBy,
     level: `L${it.level}`,
-    topics: [...it.topics, ...it.subtopics].join(" › "),
+    topics: coveredLabel(it.topics, it.subtopics),
     status: STATUS_LABEL[it.status],
     rating: it.rating,
     questions: it.questions.map((q) => q.title + (q.offRoadmap ? " (off-roadmap)" : q.step ? ` (${q.step})` : "")).join(", ") || it.tweakedQuestions || "—",
@@ -273,7 +273,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
       date: shortDate(it.date),
       module: "interactions" as const,
       title: `Round ${it.round} with ${it.takenBy} · ${STATUS_LABEL[it.status]} · ${it.rating} / 5`,
-      detail: [...it.topics, ...it.subtopics].join(" › "),
+      detail: coveredLabel(it.topics, it.subtopics),
     })),
     ...marks.rows
       .filter((m) => m.status === "A" && m.date >= addDays(today, -30) && resolve(m.date).counted)

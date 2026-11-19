@@ -19,6 +19,8 @@ import { todayIst } from "@/common/lib/dates";
 import { INTERACTIONS_SERVICE } from "@nxtone/interactions-ui/service";
 import { canLogFor, canLogForOthers } from "@nxtone/interactions-ui/lib/permissions";
 import { interactionInput, STATUSES, type AskedQuestion, type Interaction, type InteractionInput, type InteractionStatus } from "@nxtone/interactions-ui/lib/types";
+import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
+import { subtopicNames, type Structure } from "@nxtone/interactions-ui/curriculum/lib/structure";
 import { buildStudentDetail, SAMPLE_TODAY } from "@/common/sample-data/student-detail";
 import { ROSTER } from "@/common/sample-data/roster";
 
@@ -159,6 +161,7 @@ export async function createInteraction(raw: unknown, user: SessionUser): Promis
     createdAt: new Date().toISOString(),
   };
   s.interactions.unshift(interaction);
+  const where = placement(await getStructure(), input.level, input.topics, input.subtopics);
   for (const q of input.questions.filter((q) => q.offRoadmap)) {
     s.offRoadmap.push({
       title: q.title,
@@ -166,8 +169,7 @@ export async function createInteraction(raw: unknown, user: SessionUser): Promis
       by: user.name,
       at: interaction.createdAt,
       level: input.level,
-      topic: input.topics[0] ?? "",
-      subtopic: input.subtopics[0] ?? null,
+      ...where,
     });
   }
   return { ok: true, interaction };
@@ -211,6 +213,14 @@ export function formatQuestions(questions: AskedQuestion[]): string {
 }
 
 const splitList = (value: string | null) => (value ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+
+// Where an off-roadmap question is suggested to go: the first topic, and a subtopic only if it is one of that
+// topic's (an interaction can cover several topics, so the first subtopic may belong to another one).
+function placement(s: Structure, level: number, topics: string[], subtopics: string[]): { topic: string; subtopic: string | null } {
+  const topic = topics[0] ?? "";
+  const subs = subtopicNames(s, level, topic);
+  return { topic, subtopic: subtopics.find((x) => subs.includes(x)) ?? null };
+}
 
 type DbRow = {
   id: string;
@@ -359,6 +369,7 @@ async function dbOffRoadmapEntries(): Promise<OffRoadmapEntry[]> {
     `SELECT upper(student_id) AS niat_id, instructor_name AS by, created_at, level, topics, subtopics, questions_asked
      FROM logs.interactions WHERE questions_asked ILIKE '%(off-roadmap)%'`,
   );
+  const structure = await getStructure();
   return rows.flatMap((r) =>
     parseQuestions(r.questions_asked)
       .filter((q) => q.offRoadmap)
@@ -368,8 +379,7 @@ async function dbOffRoadmapEntries(): Promise<OffRoadmapEntry[]> {
         by: r.by,
         at: new Date(r.created_at).toISOString(),
         level: r.level ?? 0,
-        topic: splitList(r.topics)[0] ?? "",
-        subtopic: splitList(r.subtopics)[0] ?? null,
+        ...placement(structure, r.level ?? 0, splitList(r.topics), splitList(r.subtopics)),
       })),
   );
 }

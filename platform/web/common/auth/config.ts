@@ -27,6 +27,17 @@ export const STUDENT_COOKIE = "nx_student";
 export const DEV_ROLE_COOKIE = "dev_role";
 export const OAUTH_COOKIE = "nx_oauth";
 
+/**
+ * Cookies named nx_login_* hold choices that last until the next sign-in, e.g. a hidden reminder
+ * (modules/interactions/frontend/lib/overdue-cookie.ts). Every sign-in and sign-out clears them.
+ */
+export const LOGIN_SCOPED_PREFIX = "nx_login_";
+
+/** Names of the login-scoped cookies among these, to delete at sign-in / sign-out. */
+export function loginScopedCookieNames(all: { name: string }[]): string[] {
+  return all.map((c) => c.name).filter((name) => name.startsWith(LOGIN_SCOPED_PREFIX));
+}
+
 export function googleConfigured(): boolean {
   return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.APP_BASE_URL);
 }

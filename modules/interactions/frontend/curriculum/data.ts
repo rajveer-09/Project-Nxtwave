@@ -17,7 +17,7 @@ import { withChange } from "@/common/db/change";
 import { getDb } from "@/common/db/pool";
 import { listOffRoadmapEntries } from "@nxtone/interactions-ui/data";
 import { LEVELS } from "@nxtone/interactions-ui/lib/curriculum";
-import { bankKey, QUESTION_BANK, type BankQuestion } from "@nxtone/interactions-ui/lib/question-bank";
+import { bankKey, QUESTION_BANK, SAMPLE_BANK, type BankQuestion } from "@nxtone/interactions-ui/lib/question-bank";
 import { findLevel, findTopic, levelName, subtopicNames, topicSteps } from "./lib/structure";
 import { canEditCurriculum, getStructure } from "./structure";
 
@@ -52,9 +52,10 @@ export type Decision = { status: "added" | "kept" | "dismissed"; by: string; at:
 type Store = { questions: Question[]; decisions: Map<string, Decision> };
 const g = globalThis as unknown as { __curriculumStore?: Store };
 
-function seed(): Store {
+// In-memory mode shows the demo questions too; the database is only ever seeded with the sample bank (no demo rows).
+function seed(bank: Record<string, BankQuestion[]> = QUESTION_BANK): Store {
   const questions: Question[] = [];
-  for (const [key, list] of Object.entries(QUESTION_BANK)) {
+  for (const [key, list] of Object.entries(bank)) {
     const [levelName, topic, subtopic] = key.split("|");
     for (const q of list) {
       questions.push({
@@ -116,7 +117,7 @@ const seeded = globalThis as unknown as { __curriculumSeeded?: Promise<void> };
 /** Adds the Interactions app's question bank once. Ids are derived from the question, so re-running adds nothing. */
 function ensureSeeded(): Promise<void> {
   seeded.__curriculumSeeded ??= (async () => {
-    const rows = seed().questions.map((q) => ({
+    const rows = seed(SAMPLE_BANK).questions.map((q) => ({
       ...q,
       id: `bank-${createHash("sha1").update(`${q.level}|${q.topic}|${q.subtopic ?? ""}|${q.step}|${q.title}`).digest("hex").slice(0, 12)}`,
     }));

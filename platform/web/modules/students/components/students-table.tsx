@@ -74,8 +74,10 @@ export function StudentsTable({
 }) {
   const showInstructor = viewer.role !== "instructor";
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1240px] border-collapse text-[13px]">
+    // @container: the row buttons show their text only when this area is at least 78rem wide
+    // (row-actions.tsx); below that they're icon-only, so the table needs less width.
+    <div className="@container overflow-x-auto">
+      <table className="w-full min-w-[1040px] border-collapse text-[13px] @[78rem]:min-w-[1240px]">
         <caption className="sr-only">Students</caption>
         <thead>
           <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
@@ -128,7 +130,7 @@ export function StudentsTable({
                 </td>
                 <td className="border-b border-muted px-3 py-2.5">
                   {s.flags.length ? (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-col items-start gap-1.5">
                       {s.flags.map((flag) => (
                         <FlagChip key={flag}>{FLAG_LABEL[flag]}</FlagChip>
                       ))}
