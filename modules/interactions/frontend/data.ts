@@ -116,11 +116,22 @@ function store(): Store {
   return globalStore.__interactionStore;
 }
 
-export async function listInteractions(filter: { instructor?: string; niatId?: string; niatIds?: string[]; limit?: number } = {}) {
+/**
+ * Interactions, newest first. `takenBy` + `othersOnly`: what that person took for students who
+ * aren't assigned to them (the Log interaction page's "for other students" list).
+ */
+export type InteractionFilter = { instructor?: string; niatId?: string; niatIds?: string[]; takenBy?: string; othersOnly?: boolean; limit?: number };
+
+export async function listInteractions(filter: InteractionFilter = {}) {
   if (authMode() === "database") return dbListInteractions(filter);
   const only = filter.niatIds ? new Set(filter.niatIds) : null;
   const rows = store().interactions.filter(
-    (it) => (!filter.instructor || it.assignedInstructor === filter.instructor) && (!filter.niatId || it.niatId === filter.niatId) && (!only || only.has(it.niatId)),
+    (it) =>
+      (!filter.instructor || it.assignedInstructor === filter.instructor) &&
+      (!filter.niatId || it.niatId === filter.niatId) &&
+      (!only || only.has(it.niatId)) &&
+      (!filter.takenBy || it.takenBy === filter.takenBy) &&
+      (!filter.othersOnly || it.assignedInstructor !== it.takenBy),
   );
   return filter.limit ? rows.slice(0, filter.limit) : rows;
 }
@@ -294,7 +305,7 @@ function interactionSelect(withTranscript: boolean) {
     ) cur ON true`;
 }
 
-async function dbListInteractions(filter: { instructor?: string; niatId?: string; niatIds?: string[]; limit?: number }): Promise<Interaction[]> {
+async function dbListInteractions(filter: InteractionFilter): Promise<Interaction[]> {
   "use cache: remote";
   cacheLife({ stale: 30, revalidate: 60, expire: 900 });
   cacheTag(TAGS.interactions, ...(filter.niatId ? [TAGS.student(filter.niatId)] : []));
@@ -302,9 +313,11 @@ async function dbListInteractions(filter: { instructor?: string; niatId?: string
     `${interactionSelect(!!filter.niatId)}
      WHERE ($1::text IS NULL OR cur.name = $1) AND ($2::text IS NULL OR upper(it.student_id) = $2)
        AND ($4::text[] IS NULL OR upper(it.student_id) = ANY($4::text[]))
+       AND ($5::text IS NULL OR it.instructor_name = $5)
+       AND (NOT $6 OR COALESCE(cur.name, it.assigned_instructor_name) IS DISTINCT FROM it.instructor_name)
      ORDER BY it.date DESC, it.created_at DESC
      LIMIT $3`,
-    [filter.instructor ?? null, filter.niatId?.toUpperCase() ?? null, filter.limit ?? 100_000, filter.niatIds ?? null],
+    [filter.instructor ?? null, filter.niatId?.toUpperCase() ?? null, filter.limit ?? 100_000, filter.niatIds ?? null, filter.takenBy ?? null, !!filter.othersOnly],
   );
   return rows.map(toInteraction);
 }

@@ -59,9 +59,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   );
 
   // What this person logged for students who aren't theirs (their own work, so they may see it).
-  const forOthers = (await listInteractions())
-    .filter((it) => it.takenBy === user.name && it.assignedInstructor !== user.name)
-    .slice(0, 10);
+  const forOthers = await listInteractions({ takenBy: user.name, othersOnly: true, limit: 10 });
   const recent = forOthers.length ? (
     <SectionCard title="You logged recently for other students" description="Only interactions you took yourself">
       <ul className="flex flex-col">
