@@ -6,8 +6,10 @@ Date : 18 Nov 2026
 
 */
 
+import { Download } from "lucide-react";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 import { BarList } from "@/common/components/bar-list";
 import { DailyBars, TrendLine } from "@/common/components/charts";
 import { DateRange } from "@/common/components/date-range";
@@ -17,17 +19,23 @@ import { SectionCard } from "@/common/components/section-card";
 import { StatCard, type Trend } from "@/common/components/stat-card";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
-import { usingSampleData } from "@/common/data/roster";
+import { getRoster, usingSampleData } from "@/common/data/roster";
 import { todayIst } from "@/common/lib/dates";
 import { eachDay, parseRange, shortDay } from "@/common/lib/range";
 import type { SearchParamsRecord } from "@/common/lib/url";
 import { getAnalytics, type Headline } from "@/modules/analytics/data";
+import { getConversions, getEvaluation, type OutcomeCounts } from "@/modules/analytics/evaluation";
+import { InstructorMetrics, StudentInteractions } from "@/modules/analytics/components/evaluation-tables";
+import { CollegeCards, DailyByCollege, LevelConversions, type ConversionItem } from "@/modules/analytics/components/evaluation-sections";
+import { TopicProgression } from "@/modules/analytics/components/topic-progression";
 import { RISK_THRESHOLDS } from "@/common/domain/risk";
 
 export const metadata = { title: "Analytics" };
 
 const OUTCOME_LABEL: Record<string, string> = { Cleared: "Cleared", "In Progress": "In progress", "Need to Revisit": "Needs revisit" };
 const fmt = (n: number) => n.toLocaleString("en-IN");
+/** A file download (CSV of every interaction), not a page. */
+const EXPORT_HREF = "/api/logs/interactions/export";
 
 /** "+3.2 pts vs previous 30 days" style comparison; higher is better for every headline here. */
 function compare(now: number | null, before: number | null, unit: "pts" | "count", days: number): { delta: string; trend: Trend } {
@@ -35,15 +43,15 @@ function compare(now: number | null, before: number | null, unit: "pts" | "count
   const diff = Math.round((now - before) * 10) / 10;
   const sign = diff > 0 ? "+" : diff < 0 ? "−" : "±";
   const amount = unit === "pts" ? `${Math.abs(diff)} pts` : fmt(Math.abs(diff));
-  return { delta: `${sign}${amount} vs previous ${days} days`, trend: diff > 0 ? "good" : diff < 0 ? "bad" : "neutral" };
+  return { delta: `${sign}${amount} ${days === 1 ? "vs the day before" : `vs previous ${days} days`}`, trend: diff > 0 ? "good" : diff < 0 ? "bad" : "neutral" };
 }
 
-function Headlines({ now, before, days, roster }: { now: Headline; before: Headline; days: number; roster: number }) {
+function Headlines({ now, before, days, roster, levelUps }: { now: Headline; before: Headline; days: number; roster: number; levelUps: { now: number; before: number } }) {
   const cards = [
     { module: "Attendance", label: "Average attendance", value: now.attendancePct === null ? "—" : `${now.attendancePct}%`, sub: "Present ÷ marked, counted days", ...compare(now.attendancePct, before.attendancePct, "pts", days) },
     { module: "Interactions", label: "Interactions logged", value: fmt(now.interactions), sub: `${(now.interactions / days).toFixed(1)} a day`, ...compare(now.interactions, before.interactions, "count", days) },
     { module: "Interactions", label: "Students reached", value: fmt(now.studentsReached), sub: `of ${fmt(roster)} on the roster`, ...compare(now.studentsReached, before.studentsReached, "count", days) },
-    { module: "DSA progress", label: "Level-ups", value: fmt(now.levelUps), sub: "Students moved up a level", ...compare(now.levelUps, before.levelUps, "count", days) },
+    { module: "DSA progress", label: "Level-ups", value: fmt(levelUps.now), sub: "Level conversions that count", ...compare(levelUps.now, levelUps.before, "count", days) },
     { module: "Contests", label: "Contest participation", value: now.contestParticipation === null ? "—" : `${now.contestParticipation}%`, sub: "Took part ÷ students with a handle", ...compare(now.contestParticipation, before.contestParticipation, "pts", days) },
   ];
   return (
@@ -66,6 +74,16 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
       eyebrow="Admin panel"
       title="Analytics"
       description="How the cohort is doing across attendance, interactions, DSA progress and contests, for any dates."
+      actions={
+        <a
+          href={EXPORT_HREF}
+          download
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-semibold hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <Download aria-hidden="true" className="size-4" />
+          Export interactions (CSV)
+        </a>
+      }
     />
   );
   const filters = (
@@ -82,8 +100,81 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
     );
   }
 
-  const a = await getAnalytics(range.from, range.to);
+  const [a, ev, conversions, roster, structure] = await Promise.all([
+    getAnalytics(range.from, range.to),
+    getEvaluation(range.from, range.to, today),
+    getConversions(),
+    getRoster(),
+    getStructure(),
+  ]);
   const days = eachDay(range);
+  const byId = new Map(roster.map((s) => [s.niatId, s]));
+  const colleges = [...new Set(roster.map((s) => s.college))].sort();
+
+  // Level conversions in the chosen dates, for students still on the roster
+  const toItem = (c: (typeof conversions)[number]): ConversionItem | null => {
+    const s = byId.get(c.niatId);
+    return s ? { niatId: c.niatId, name: s.name, college: s.college, instructor: s.instructor, from: c.from, date: c.date } : null;
+  };
+  const inDates = (from: string, to: string) => conversions.filter((c) => c.date >= from && c.date <= to);
+  const counted = inDates(range.from, range.to)
+    .filter((c) => c.counted)
+    .map(toItem)
+    .filter((c) => c !== null);
+  const notCounted = inDates(range.from, range.to)
+    .filter((c) => !c.counted)
+    .map(toItem)
+    .filter((c) => c !== null)
+    .sort((x, y) => x.from - y.from || x.name.localeCompare(y.name));
+  const levelUps = {
+    now: counted.length,
+    before: inDates(a.previousRange.from, a.previousRange.to).filter((c) => c.counted && byId.has(c.niatId)).length,
+  };
+
+  // Students per level and per current topic (curriculum order; topics nobody is on show 0)
+  const levelCount = Math.max(structure.levels.length, 1);
+  const perLevel = Array.from({ length: levelCount }, (_, level) => roster.filter((s) => s.level === level).length);
+  const topicLevels = structure.levels.map((l) => {
+    const here = roster.filter((s) => s.level === l.level);
+    const names = l.topics.filter((t) => !t.archived).map((t) => t.name);
+    for (const s of here) if (!names.includes(s.topic)) names.push(s.topic);
+    return { level: l.level, title: l.title, students: here.length, topics: names.map((topic) => ({ topic, count: here.filter((s) => s.topic === topic).length })) };
+  });
+
+  // Day × college outcomes, latest day first
+  const cells = new Map<string, OutcomeCounts>(ev.daily.map((d) => [`${d.day}|${d.college}`, d]));
+  const dailyDays = [...days].reverse();
+
+  const collegeCards = colleges.map((college) => {
+    const c = ev.colleges.find((x) => x.college === college);
+    return {
+      college,
+      students: roster.filter((s) => s.college === college).length,
+      interactions: c?.interactions ?? 0,
+      today: c?.today ?? 0,
+      cleared: c?.cleared ?? 0,
+      revisit: c?.revisit ?? 0,
+    };
+  });
+
+  const perStudent = new Map(ev.students.map((s) => [s.niatId, s]));
+  const studentRows = roster
+    .map((s) => {
+      const x = perStudent.get(s.niatId);
+      return {
+        niatId: s.niatId,
+        name: s.name,
+        college: s.college,
+        instructor: s.instructor,
+        level: s.level,
+        standing: s.standing,
+        interactions: x?.interactions ?? 0,
+        cleared: x?.cleared ?? 0,
+        revisits: x?.revisits ?? 0,
+        last: x?.last ?? null,
+      };
+    })
+    .sort((x, y) => y.interactions - x.interactions || x.name.localeCompare(y.name));
   const attendanceMap = new Map(a.attendanceByDay.map((d) => [d.day, d.pct]));
   const interactionMap = new Map(a.interactionsByDay.map((d) => [d.day, d.n]));
   const attendanceSeries = days.map((day) => ({ day, label: shortDay(day), value: attendanceMap.get(day) ?? null }));
@@ -94,7 +185,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
     <>
       {header}
       {filters}
-      <Headlines now={a.headline} before={a.previous} days={range.days} roster={a.rosterSize} />
+      <Headlines now={a.headline} before={a.previous} days={range.days} roster={a.rosterSize} levelUps={levelUps} />
 
       <div className="grid gap-5 xl:grid-cols-2">
         <SectionCard title="Attendance by day" description={`Present ÷ marked · ${RISK_THRESHOLDS.attendancePct}% line · days off are gaps`}>
@@ -125,19 +216,45 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
                 warn: o.status === "Need to Revisit",
               }))}
               labelWidth="7.5rem"
+              valueWidth="5.5rem"
             />
           ) : (
             <p className="text-sm text-muted-foreground">No interactions in these dates.</p>
           )}
         </SectionCard>
-        <SectionCard title="Level-ups" description={`Moved up to each level${a.levelDowns ? ` · ${a.levelDowns} moved down` : ""}`}>
-          {a.levelUpsTo.length ? (
-            <BarList items={a.levelUpsTo.map((l) => ({ label: `To L${l.level}`, value: l.n, display: fmt(l.n) }))} labelWidth="4rem" />
-          ) : (
-            <p className="text-sm text-muted-foreground">No level changes in these dates.</p>
-          )}
+        <SectionCard title="Students per level" description={`Where the ${fmt(roster.length)} students are now`}>
+          <BarList
+            items={perLevel.map((n, level) => ({ label: `L${level}`, value: n, display: `${fmt(n)} · ${roster.length ? Math.round((n * 1000) / roster.length) / 10 : 0}%` }))}
+            labelWidth="2.25rem"
+            valueWidth="5.5rem"
+          />
         </SectionCard>
       </div>
+
+      <SectionCard title="Level conversions" description={`Students who moved up a level · ${shortDay(range.from)} – ${shortDay(range.to)} · open a row to see who`}>
+        <LevelConversions counted={counted} notCounted={notCounted} colleges={colleges} levels={levelCount} />
+      </SectionCard>
+
+      <SectionCard title="Daily overview by college" description="Students interacted with each day and their outcome that day (the latest, if seen more than once)">
+        <DailyByCollege days={dailyDays} colleges={colleges} cells={cells} today={today} />
+      </SectionCard>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <SectionCard title="College-wise" description={`Interactions and outcomes · ${shortDay(range.from)} – ${shortDay(range.to)}`}>
+          <CollegeCards cards={collegeCards} />
+        </SectionCard>
+        <SectionCard title="Current topic progression" description="Students on each topic right now">
+          <TopicProgression levels={topicLevels} />
+        </SectionCard>
+      </div>
+
+      <SectionCard title="Instructor metrics" description="Interactions each instructor took · last 3 and 7 days include today" bodyClassName="px-0 pb-2">
+        <InstructorMetrics rows={ev.instructors} />
+      </SectionCard>
+
+      <SectionCard title="Student interaction analytics" description="Every student's interactions, all time · open a name for their history" bodyClassName="px-0 pb-2">
+        <StudentInteractions rows={studentRows} />
+      </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <SectionCard title="Attendance by hall" description={`Below ${RISK_THRESHOLDS.attendancePct}% in orange`}>
@@ -146,6 +263,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
               items={a.attendanceByHall.map((h) => ({ label: h.hall, value: h.pct, display: `${h.pct}% · ${h.students}`, warn: h.pct < RISK_THRESHOLDS.attendancePct }))}
               max={100}
               labelWidth="4.5rem"
+              valueWidth="5.5rem"
             />
           ) : (
             <p className="text-sm text-muted-foreground">Nothing marked in these dates.</p>
@@ -160,6 +278,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
               })}
               max={100}
               labelWidth="10rem"
+              valueWidth="5.5rem"
             />
           ) : (
             <p className="text-sm text-muted-foreground">No contests scanned in these dates.</p>

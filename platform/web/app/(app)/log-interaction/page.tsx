@@ -14,7 +14,6 @@ import { SectionCard } from "@/common/components/section-card";
 import { Button } from "@/common/ui/button";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
-import { getRosterStudent } from "@/common/data/roster";
 import { formatDate, todayIst } from "@/common/lib/dates";
 import type { SearchParamsRecord } from "@/common/lib/url";
 import { questionBank as loadQuestionBank } from "@nxtone/interactions-ui/curriculum/data";
@@ -22,6 +21,10 @@ import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 import { InteractionForm, type FormStudent } from "@nxtone/interactions-ui/components/interaction-form";
 import { listInteractions } from "@nxtone/interactions-ui/data";
 import { canLogFor } from "@nxtone/interactions-ui/lib/permissions";
+import { fullFormStudent } from "@nxtone/interactions-ui/my-students-data";
+import { getRoster, getRosterStudent, usingSampleData } from "@/common/data/roster";
+import { buildStudentDetail } from "@/common/sample-data/student-detail";
+import { latestTestTotals } from "@/modules/tests/data";
 import { STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
 
 export const metadata = { title: "Log interaction" };
@@ -31,9 +34,10 @@ const field =
   "h-11 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground uppercase tabular focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
 /**
- * Log an interaction with any student by NIAT ID, e.g. when covering for another instructor. "Taken by"
- * is always the person logging. Only what the form needs is shown: the student's name and where they
- * are on the roadmap; nothing of their instructor's other data (attendance, tests, other students).
+ * The page for logging an interaction: type a student's NIAT ID (instructors also reach it from the
+ * Log button in My students on /interactions). Your own students get the full form context (attendance, last test,
+ * contests). For someone else's student (e.g. covering for another instructor) "Taken by" is always the
+ * person logging, and only what the form needs is shown: their name and where they are on the roadmap.
  */
 async function Content({ searchParams }: { searchParams: Promise<SearchParamsRecord> }) {
   await connection();
@@ -45,7 +49,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   const lookup = (
     <form method="get" action="/log-interaction" className="flex flex-wrap items-end gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5">
       <label className="flex flex-[1_1_260px] flex-col gap-1 text-xs font-medium text-muted-foreground">
-        Student&apos;s NIAT ID
+        Student’s NIAT ID
         <input name="niat" defaultValue={raw} required autoFocus={!raw} placeholder="e.g. N24H01A0031" maxLength={11} autoComplete="off" spellCheck={false} className={field} />
       </label>
       <Button type="submit" className="h-11 px-5">
@@ -55,13 +59,13 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   );
 
   // What this person logged for students who aren't theirs (their own work, so they may see it).
-  const mine = (await listInteractions())
+  const forOthers = (await listInteractions())
     .filter((it) => it.takenBy === user.name && it.assignedInstructor !== user.name)
     .slice(0, 10);
-  const recent = mine.length ? (
+  const recent = forOthers.length ? (
     <SectionCard title="You logged recently for other students" description="Only interactions you took yourself">
       <ul className="flex flex-col">
-        {mine.map((it, i) => (
+        {forOthers.map((it, i) => (
           <li key={it.id} className={`flex flex-wrap items-baseline justify-between gap-2 py-2 text-[13px] ${i ? "border-t border-muted" : ""}`}>
             <span>
               <span className="font-semibold">{it.studentName}</span> <span className="text-xs text-muted-foreground tabular">{it.niatId}</span>
@@ -79,7 +83,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
     return (
       <>
         {lookup}
-        <EmptyState title="Type a NIAT ID to start" description="You can log an interaction you took with any student. It's saved with you as the person who took it." />
+        <EmptyState title="Type a NIAT ID to start" description="Your own students open with their attendance, last test and contests. For anyone else's student you're saved as the person who took it." />
         {recent}
       </>
     );
@@ -97,8 +101,10 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   }
 
   const [questionBank, structure] = await Promise.all([loadQuestionBank(), getStructure()]);
-  const own = canLogFor(user, student);
-  const formStudent: FormStudent = {
+  const isMine = canLogFor(user, student);
+  const instructors = isMine ? [...new Set((await getRoster()).map((s) => s.instructor).filter((name) => name !== "Unassigned"))].sort() : [user.name];
+  const latestTest = !isMine ? null : usingSampleData() ? (buildStudentDetail(student).tests.list.at(-1)?.total ?? null) : ((await latestTestTotals([student.niatId])).get(student.niatId) ?? null);
+  const formStudent: FormStudent = isMine ? fullFormStudent(student, latestTest) : {
     niatId: student.niatId,
     name: student.name,
     group: "",
@@ -118,20 +124,20 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
       <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
         Logging for <b className="text-foreground">{student.name}</b> · Level {student.level} · {student.topic}
         {student.subtopic ? ` › ${student.subtopic}` : ""}.{" "}
-        {own ? "This is one of your students; their full context is on the Interactions page." : "Saved with you as the person who took it; their instructor sees it in the student's history."}
+        {isMine ? "One of your students." : "Saved with you as the person who took it; their instructor sees it in the student's history."}
       </p>
       <div className="flex flex-wrap items-start gap-5">
         <InteractionForm
           key={student.niatId}
           students={[formStudent]}
-          instructors={[user.name]}
+          instructors={instructors}
           userId={user.id}
           userName={user.name}
           initialStudent={student.niatId}
           today={today}
           questionBank={questionBank}
           structure={structure}
-          fixedTakenBy={user.name}
+          fixedTakenBy={isMine ? undefined : user.name}
         />
       </div>
       {recent}
@@ -142,7 +148,11 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
 export default function LogInteractionPage({ searchParams }: PageProps<"/log-interaction">) {
   return (
     <>
-      <PageHeader eyebrow="Any student · by NIAT ID" title="Log interaction" description="Took an interaction with a student who isn't yours? Log it here. You are recorded as the person who took it." />
+      <PageHeader
+        eyebrow="Interactions"
+        title="Log interaction"
+        description="Type the student's NIAT ID. For someone else's student you're recorded as the person who took it."
+      />
       <Suspense fallback={<Skeleton className="h-[480px] rounded-xl" />}>
         <Content searchParams={searchParams} />
       </Suspense>

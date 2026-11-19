@@ -28,6 +28,8 @@ export type InteractionItem = {
   improvementAreas: string;
   actionItems: string;
   transcriptWords: number;
+  /** Code room saved with this interaction, if any. */
+  codeRoom?: string;
 };
 
 /** Expandable interaction rounds; the latest opens by default. */
@@ -75,6 +77,16 @@ export function InteractionsList({ items, student = false }: { items: Interactio
                     <dd className="mt-0.5">{value}</dd>
                   </div>
                 ))}
+                {it.codeRoom ? (
+                  <div>
+                    <dt className="text-xs font-bold text-muted-foreground">Code written</dt>
+                    <dd className="mt-0.5">
+                      <a href={`/room/${it.codeRoom}`} target="_blank" rel="noopener" className="font-semibold text-primary hover:text-accent-strong">
+                        View code →
+                      </a>
+                    </dd>
+                  </div>
+                ) : null}
                 {student ? null : <div>
                   <dt className="text-xs font-bold text-muted-foreground">Recording & transcript</dt>
                   <dd className="mt-0.5 flex flex-wrap gap-x-2">

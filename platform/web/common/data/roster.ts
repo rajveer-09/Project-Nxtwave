@@ -13,6 +13,7 @@ import { authMode } from "@/common/auth/config";
 import { expire, TAGS } from "@/common/data/cache";
 import { getDb } from "@/common/db/pool";
 import { riskFlags, type RiskInput } from "@/common/domain/risk";
+import { standingFromOutcome } from "@/common/domain/standing";
 import { todayIst } from "@/common/lib/dates";
 import { ROSTER, type College, type RosterStudent } from "@/common/sample-data/roster";
 
@@ -74,6 +75,7 @@ type Row = {
   mterm: number;
   interactions: number;
   last_interaction: string | null;
+  level_outcome: string | null;
   lc_handle: string | null;
   lc_rating: number | null;
   contests_attended: number | null;
@@ -142,7 +144,7 @@ SELECT s.niat_id, s.full_name, s.college, s.section, s.hall, s.joined_on::text,
        COALESCE(lsn.change_date, ls.created_at::date)::text AS level_since,
        COALESCE(att.p30, 0) AS p30, COALESCE(att.m30, 0) AS m30,
        COALESCE(att.pterm, 0) AS pterm, COALESCE(att.mterm, 0) AS mterm,
-       COALESCE(ints.n, 0) AS interactions, ints.last::text AS last_interaction,
+       COALESCE(ints.n, 0) AS interactions, ints.last::text AS last_interaction, cur.outcome AS level_outcome,
        lc.handle AS lc_handle, lc.rating AS lc_rating, lc.attended AS contests_attended, lc.absent_streak
 FROM core.students s
 LEFT JOIN LATERAL (
@@ -156,6 +158,12 @@ LEFT JOIN LATERAL (
 LEFT JOIN attendance.students ast ON ast.niat_id = s.niat_id
 LEFT JOIN attendance.mentors m ON m.id = ast.poc_id
 LEFT JOIN logs.students ls ON upper(ls.id) = s.niat_id
+-- standing at the current level: the latest interaction logged at it (common/domain/standing.ts)
+LEFT JOIN LATERAL (
+  SELECT it.status_post_interaction AS outcome FROM logs.interactions it
+  WHERE it.student_id = ls.id AND COALESCE(it.level, 0) = ls.level
+  ORDER BY it.date DESC, it.created_at DESC LIMIT 1
+) cur ON true
 LEFT JOIN level_since lsn ON lsn.niat_id = s.niat_id
 LEFT JOIN att ON att.niat_id = s.niat_id
 LEFT JOIN ints ON ints.niat_id = s.niat_id
@@ -202,6 +210,7 @@ async function loadRoster(today: string): Promise<RosterStudent[]> {
       contestsAttended: r.contests_attended ?? 0,
       lastInteractionDays,
       interactions: r.interactions,
+      standing: standingFromOutcome(r.level_outcome),
       lastTestScore: null,
       risk,
       flags: riskFlags(risk),

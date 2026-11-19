@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { logInteraction } from "@nxtone/interactions-ui/actions";
+import { RoomPanel } from "@nxtone/interactions-ui/room/components/room-panel";
 import { Button } from "@/common/ui/button";
 import { QuestionTitle } from "@nxtone/interactions-ui/curriculum/components/question-title";
 import { liveTopics, reachedSteps, subtopicNames, topicNames, type Structure } from "@nxtone/interactions-ui/curriculum/lib/structure";
@@ -55,6 +56,8 @@ type Fields = {
   meetRecording: string;
   transcriptUrl: string;
   transcriptText: string;
+  /** Code room used during this interaction (attached when saved), "" for none. */
+  roomId: string;
 };
 
 const levelName = (n: number) => `Level ${n}`;
@@ -78,6 +81,7 @@ function blankFields(student: FormStudent | undefined, today: string, takenBy: s
     meetRecording: "",
     transcriptUrl: "",
     transcriptText: "",
+    roomId: "",
   };
 }
 
@@ -442,7 +446,7 @@ export function InteractionForm({
       return;
     }
     startTransition(async () => {
-      const result = await logInteraction(payload);
+      const result = await logInteraction(payload, f.roomId || null);
       if (!result.ok) {
         setErrors(result.fieldErrors ?? {});
         toast.error(result.error);
@@ -558,6 +562,8 @@ export function InteractionForm({
             </a>
           </div>
           )}
+
+          <RoomPanel niatId={student.niatId} studentName={student.name} roomId={f.roomId} onRoom={(id) => set("roomId", id)} />
 
           <div className="flex flex-col gap-2.5 rounded-lg border border-dashed border-input p-3">
             <button

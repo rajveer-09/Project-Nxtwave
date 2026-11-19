@@ -6,13 +6,15 @@ Date : 16 Nov 2026
 
 */
 
+import { Code2 } from "lucide-react";
 import { IntentLink } from "@/common/components/intent-link";
 import { StatusPill } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
 import { formatDate } from "@/common/lib/dates";
 import { coveredLabel, STATUS_LABEL, type Interaction } from "@nxtone/interactions-ui/lib/types";
 
-export function RecentLogs({ rows, total, exportHref }: { rows: Interaction[]; total: number; exportHref: string }) {
+/** `codeRooms`: interaction id → code room saved with it (shows a "Code" link). */
+export function RecentLogs({ rows, total, exportHref, codeRooms = {} }: { rows: Interaction[]; total: number; exportHref: string; codeRooms?: Record<string, string> }) {
   return (
     <section aria-labelledby="recent-h" className="min-w-0 flex-[1.5_1_560px] overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-border px-5 py-4">
@@ -61,6 +63,12 @@ export function RecentLogs({ rows, total, exportHref }: { rows: Interaction[]; t
                     <td className="border-b border-muted px-2.5 py-2.5 text-sidebar-foreground">
                       {it.questions.length}
                       {off ? <span className="ml-1.5 rounded-md bg-warning-soft px-1.5 text-xs font-semibold text-warning">{off} off-roadmap</span> : null}
+                      {codeRooms[it.id] ? (
+                        <a href={`/room/${codeRooms[it.id]}`} target="_blank" rel="noopener" className="ml-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-accent-strong">
+                          <Code2 aria-hidden="true" className="size-3.5" />
+                          View code
+                        </a>
+                      ) : null}
                     </td>
                     <td className="border-b border-muted px-2.5 py-2.5">
                       <StatusPill tone={it.status === "Cleared" ? "accent" : it.status === "Need to Revisit" ? "warning" : "neutral"}>

@@ -46,7 +46,7 @@ export function ProfileHeader({ d }: { d: StudentDetail }) {
             Message instructor
           </Link>
           <Link
-            href={`/interactions?student=${s.niatId}`}
+            href={`/log-interaction?niat=${s.niatId}`}
             className="flex min-h-11 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/85"
           >
             Log interaction

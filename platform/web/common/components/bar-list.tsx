@@ -24,11 +24,13 @@ export function BarList({
   items,
   max,
   labelWidth = "3.5rem",
+  valueWidth = "3rem",
   className,
 }: {
   items: BarListItem[];
   max?: number;
   labelWidth?: string;
+  valueWidth?: string;
   className?: string;
 }) {
   const top = max ?? Math.max(...items.map((item) => item.value), 1);
@@ -38,7 +40,7 @@ export function BarList({
         <li
           key={item.label}
           className="grid items-center gap-2.5 text-[13px]"
-          style={{ gridTemplateColumns: `${labelWidth} minmax(0, 1fr) 3rem` }}
+          style={{ gridTemplateColumns: `${labelWidth} minmax(0, 1fr) ${valueWidth}` }}
         >
           <span className="font-medium text-muted-foreground">{item.label}</span>
           <span className="h-2.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">

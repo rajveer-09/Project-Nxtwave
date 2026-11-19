@@ -97,7 +97,7 @@ export function OverdueBanner({ students }: { students: OverdueStudent[] }) {
       {students.map((s) => (
         <Link
           key={s.niatId}
-          href={`/interactions?student=${s.niatId}`}
+          href={`/log-interaction?niat=${s.niatId}`}
           className="flex min-h-8 items-center rounded-full bg-card px-3 font-semibold text-foreground hover:bg-muted"
         >
           {s.name} · {s.days === null ? "never" : `${s.days}d`}

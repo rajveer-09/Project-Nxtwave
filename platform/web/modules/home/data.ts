@@ -15,6 +15,8 @@ import type { BarListItem } from "@/common/components/bar-list";
 import { getRoster, usingSampleData } from "@/common/data/roster";
 import { getDb } from "@/common/db/pool";
 import { FLAG_LABEL, RISK_THRESHOLDS } from "@/common/domain/risk";
+import { STANDINGS, type Standing } from "@/common/domain/standing";
+import type { RosterStudent } from "@/common/sample-data/roster";
 import { formatDate, todayIst } from "@/common/lib/dates";
 import * as sample from "@/modules/home/sample-data";
 import { getSessionUser } from "@/common/auth/session";
@@ -37,7 +39,33 @@ export type HomeData = {
   halls: BarListItem[];
   todo: { href: string; label: string; urgent: boolean }[];
   contest: { name: string; date: string; state: string; tookPart: number; medianSolved: string; bestGlobalRank: string } | null;
+  /** Students past the very start of the roadmap (pastStart below). */
+  pastStart: number;
+  /** Standing at each student's current level, overall and per level. */
+  standing: StandingSummary;
 };
+
+export type StandingCounts = Record<Standing, number>;
+export type StandingSummary = { total: number; counts: StandingCounts; byLevel: { level: number; total: number; counts: StandingCounts }[] };
+
+const LEVEL_COUNT = 8;
+const emptyCounts = (): StandingCounts => Object.fromEntries(STANDINGS.map((s) => [s, 0])) as StandingCounts;
+
+export function standingSummary(roster: RosterStudent[]): StandingSummary {
+  const counts = emptyCounts();
+  const byLevel = Array.from({ length: LEVEL_COUNT }, (_, level) => ({ level, total: 0, counts: emptyCounts() }));
+  for (const s of roster) {
+    counts[s.standing]++;
+    const row = byLevel[s.level];
+    if (!row) continue;
+    row.total++;
+    row.counts[s.standing]++;
+  }
+  return { total: roster.length, counts, byLevel };
+}
+
+/** Moved past the very start: above Level 0, or past Introduction (topic or step) within Level 0. */
+const pastStart = (s: RosterStudent) => s.level > 0 || s.topic !== "Introduction" || (s.step !== "" && s.step !== "Introduction");
 
 const signed = (n: number, unit = "") => `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}${unit}`;
 const pctOf = (part: number, whole: number) => (whole ? Math.round((part * 1000) / whole) / 10 : null);
@@ -51,7 +79,7 @@ async function homeQueries(today: string, ids: string[] | null) {
   cacheLife({ stale: 30, revalidate: 60, expire: 900 });
   cacheTag(TAGS.home, TAGS.roster, TAGS.interactions);
   const db = getDb();
-  const [day, interactions, contests, drafts, offRoadmap, term] = await Promise.all([
+  const [day, interactions, contests, drafts, offRoadmap, term, todayLogs] = await Promise.all([
     // Latest day with marks (today if marking has started), and the same weekday a week earlier
     db.query<{ date: string; present: number; marked: number; halls_marked: number; halls_total: number; prev_present: number; prev_marked: number }>(
       `WITH latest AS (SELECT max(date) AS d FROM attendance.attendance WHERE date <= $1::date),
@@ -89,6 +117,14 @@ async function homeQueries(today: string, ids: string[] | null) {
     db.query<{ n: number }>("SELECT count(*)::int AS n FROM contest.scan_drafts"),
     db.query<{ n: number }>("SELECT count(*)::int AS n FROM logs.interactions WHERE questions_asked ILIKE '%(off-roadmap)%'"),
     db.query<{ name: string }>("SELECT name FROM attendance.terms WHERE $1::date BETWEEN start_date AND end_date ORDER BY is_current DESC LIMIT 1", [today]),
+    // Today's interactions; a student is counted once per outcome however many times they were seen
+    db.query<{ n: number; cleared: number; revisit: number }>(
+      `SELECT count(*)::int AS n,
+              count(DISTINCT upper(student_id)) FILTER (WHERE status_post_interaction = 'Cleared')::int AS cleared,
+              count(DISTINCT upper(student_id)) FILTER (WHERE status_post_interaction = 'Need to Revisit')::int AS revisit
+       FROM logs.interactions WHERE date = $1::date AND ($2::text[] IS NULL OR upper(student_id) = ANY($2::text[]))`,
+      [today, ids],
+    ),
   ]);
 
   return {
@@ -98,6 +134,7 @@ async function homeQueries(today: string, ids: string[] | null) {
     drafts: { rows: drafts.rows },
     offRoadmap: { rows: offRoadmap.rows },
     term: { rows: term.rows },
+    todayLogs: { rows: todayLogs.rows },
   };
 }
 
@@ -120,13 +157,15 @@ async function loadHomeData(): Promise<HomeData> {
       halls: sample.hallAttendance,
       todo: sample.adminTodo,
       contest: { ...sample.latestContest, date: sample.latestContest.date, state: "Final", bestGlobalRank: sample.latestContest.bestGlobalRank },
+      pastStart: 412,
+      standing: standingSummary(await getRoster()),
     };
   }
 
   // Instructors and success coaches see their own students; everyone else the whole roster.
   const scope = studentScope(await getSessionUser());
   const roster = (await getRoster()).filter((s) => inScope(scope, s));
-  const { day, interactions, contests, drafts, offRoadmap, term } = await homeQueries(today, scope ? roster.map((s) => s.niatId).sort() : null);
+  const { day, interactions, contests, drafts, offRoadmap, term, todayLogs } = await homeQueries(today, scope ? roster.map((s) => s.niatId).sort() : null);
 
   // ---- attendance
   const d = day.rows[0];
@@ -146,6 +185,9 @@ async function loadHomeData(): Promise<HomeData> {
   const participation = latest ? pctOf(latest.took_part, latest.handles) : null;
   const prevParticipation = previous ? pctOf(previous.took_part, previous.handles) : null;
 
+  // ---- today's interactions
+  const t = todayLogs.rows[0] ?? { n: 0, cleared: 0, revisit: 0 };
+
   const kpis: HomeKpi[] = [
     {
       module: "Attendance",
@@ -160,6 +202,14 @@ async function loadHomeData(): Promise<HomeData> {
       label: "Last 30 days",
       value: avg30 === null ? "—" : `${avg30}%`,
       sub: `${below} student${below === 1 ? "" : "s"} below ${RISK_THRESHOLDS.attendancePct}%`,
+      delta: "",
+      trend: "neutral",
+    },
+    {
+      module: "Interactions",
+      label: "Taken today",
+      value: String(t.n),
+      sub: `${t.cleared} student${t.cleared === 1 ? "" : "s"} cleared · ${t.revisit} to revisit`,
       delta: "",
       trend: "neutral",
     },
@@ -198,7 +248,10 @@ async function loadHomeData(): Promise<HomeData> {
   }));
 
   // ---- distributions
-  const levels = Array.from({ length: 8 }, (_, level) => ({ label: `L${level}`, value: roster.filter((s) => s.level === level).length }));
+  const levels = Array.from({ length: LEVEL_COUNT }, (_, level) => {
+    const value = roster.filter((s) => s.level === level).length;
+    return { label: `L${level}`, value, display: `${value} · ${roster.length ? Math.round((value * 1000) / roster.length) / 10 : 0}%` };
+  });
   const byHall = new Map<string, number[]>();
   for (const s of withAttendance) {
     if (!byHall.has(s.hall)) byHall.set(s.hall, []);
@@ -236,6 +289,8 @@ async function loadHomeData(): Promise<HomeData> {
           bestGlobalRank: latest.best_rank === null ? "—" : latest.best_rank.toLocaleString("en-IN"),
         }
       : null,
+    pastStart: roster.filter(pastStart).length,
+    standing: standingSummary(roster),
   };
 }
 

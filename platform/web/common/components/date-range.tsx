@@ -13,7 +13,7 @@ import { addDays } from "@/common/lib/dates";
 import { cn } from "@/common/lib/utils";
 
 /**
- * Date range for any data view: quick ranges (7 / 30 / 90 days, this month) or custom from–to.
+ * Date range for any data view: quick ranges (today, 7 / 30 / 90 days, this month) or custom from–to.
  * Lives inside a <LiveForm>: its two date fields are named "from" and "to", and picking a quick
  * range fills them and applies the form.
  */
@@ -24,6 +24,7 @@ export function DateRange({ from, to, today, max = 400 }: { from: string; to: st
   const [range, setRange] = useState({ from, to });
   const root = useRef<HTMLDivElement>(null);
   const presets = [
+    { label: "Today", from: today, to: today },
     { label: "7 days", from: addDays(today, -6), to: today },
     { label: "30 days", from: addDays(today, -29), to: today },
     { label: "90 days", from: addDays(today, -89), to: today },
@@ -37,8 +38,9 @@ export function DateRange({ from, to, today, max = 400 }: { from: string; to: st
   return (
     <div ref={root} className="flex flex-wrap items-end gap-2">
       <div role="group" aria-label="Quick ranges" className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
-        {presets.map((p) => {
-          const on = p.from === range.from && p.to === range.to;
+        {presets.map((p, i) => {
+          // Only the first matching preset is marked (on the 1st, "This month" is the same as "Today").
+          const on = presets.findIndex((q) => q.from === range.from && q.to === range.to) === i;
           return (
             <button
               key={p.label}

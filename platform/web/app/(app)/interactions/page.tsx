@@ -7,27 +7,26 @@ Date : 16 Nov 2026
 */
 
 import { cookies } from "next/headers";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { PageHeader } from "@/common/components/page-header";
-import { InteractionForm, type FormStudent } from "@nxtone/interactions-ui/components/interaction-form";
 import { RecentLogs } from "@nxtone/interactions-ui/components/recent-logs";
 import { OverdueBanner, OverduePill, OverdueReminder } from "@nxtone/interactions-ui/components/overdue-banner";
 import { OVERDUE_COOKIE, overdueStartsOpen, parseOverduePref } from "@nxtone/interactions-ui/lib/overdue-cookie";
+import { MyStudents } from "@nxtone/interactions-ui/components/my-students";
+import { isOverdue, myStudentsList, scopedStudents } from "@nxtone/interactions-ui/my-students-data";
+import { usingSampleData } from "@/common/data/roster";
+import { roomsByInteraction } from "@nxtone/interactions-ui/room/data";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
-import { inScope, studentScope } from "@/common/auth/student-access";
 import { addDays, todayIst } from "@/common/lib/dates";
 import { listInteractions } from "@nxtone/interactions-ui/data";
 import { canLogInteractions } from "@nxtone/interactions-ui/lib/permissions";
-import { buildStudentDetail } from "@/common/sample-data/student-detail";
-import { getRoster, usingSampleData } from "@/common/data/roster";
-import { latestTestTotals } from "@/modules/tests/data";
 import { RISK_THRESHOLDS } from "@/common/domain/risk";
 import type { SearchParamsRecord } from "@/common/lib/url";
-import { questionBank as loadQuestionBank } from "@nxtone/interactions-ui/curriculum/data";
-import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 import { SectionCard } from "@/common/components/section-card";
 import { LiveForm } from "@/common/components/live-form";
 import { DateRange } from "@/common/components/date-range";
@@ -36,30 +35,22 @@ import { eachDay, parseRange, shortDay } from "@/common/lib/range";
 
 export const metadata = { title: "Interactions" };
 
-function lastLabel(days: number | null) {
-  if (days === null) return null;
-  return days === 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
-}
-
 async function InteractionsContent({ searchParams }: { searchParams: Promise<SearchParamsRecord> }) {
   // "Today" and the logs are request-time data: render per request, never from a prerender.
   await connection();
   const user = await requireAccess("/interactions");
   const params = await searchParams;
+  // Old links opened the form here; logging has its own page now.
+  if (typeof params.student === "string" && params.student) redirect(`/log-interaction?niat=${encodeURIComponent(params.student.toUpperCase())}`);
   // Instructors and senior instructors log for their own students; coaches read their coached students' logs.
-  const scope = studentScope(user) ?? (user.role === "senior_instructor" ? { instructor: user.name } : undefined);
   const logging = canLogInteractions(user);
-
-  const roster = await getRoster();
   const sample = usingSampleData();
-  const myStudents = roster.filter((s) => inScope(scope, s)).sort((a, b) => a.name.localeCompare(b.name));
-  const latestTests = sample ? null : await latestTestTotals(myStudents.map((s) => s.niatId));
-  const [all, questionBank, structure] = await Promise.all([
+  const { scope, students: myStudents } = await scopedStudents(user);
+  const [all, mine] = await Promise.all([
     listInteractions(scope?.coach !== undefined ? { niatIds: myStudents.map((s) => s.niatId) } : { instructor: scope?.instructor }),
-    loadQuestionBank(),
-    getStructure(),
+    myStudentsList(user),
   ]);
-  const overdue = myStudents.filter((s) => s.lastInteractionDays === null || s.lastInteractionDays >= RISK_THRESHOLDS.interactionGapDays);
+  const overdue = myStudents.filter(isOverdue);
   // Whether the Overdue banner starts open (its toggle is remembered in a cookie).
   const overduePref = parseOverduePref((await cookies()).get(OVERDUE_COOKIE)?.value);
   const today = todayIst();
@@ -71,6 +62,8 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   const takenBy = typeof params.by === "string" && params.by ? params.by : null;
   const people = [...new Set(all.map((it) => it.takenBy))].sort();
   const inRange = all.filter((it) => it.date >= range.from && it.date <= range.to && (!takenBy || it.takenBy === takenBy));
+  const recent = inRange.slice(0, 40);
+  const codeRooms = await roomsByInteraction(recent.map((it) => it.id));
   const perDay = new Map<string, number>();
   for (const it of inRange) perDay.set(it.date, (perDay.get(it.date) ?? 0) + 1);
   const daily = eachDay(range).map((day) => ({ day, label: shortDay(day), value: perDay.get(day) ?? 0 }));
@@ -78,26 +71,10 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   const reached = new Set(inRange.map((it) => it.niatId)).size;
   const activity = [
     ["Interactions", inRange.length.toLocaleString("en-IN")],
-    ["Per day", (inRange.length / range.days).toFixed(1)],
     ["Busiest day", busiest && busiest.value ? `${busiest.label} · ${busiest.value}` : "—"],
     ["Students reached", reached.toLocaleString("en-IN")],
   ];
 
-  const formStudents: FormStudent[] = myStudents.map((s) => ({
-    niatId: s.niatId,
-    name: s.name,
-    group: `${s.college} · ${s.section} · ${s.hall}`,
-    level: s.level,
-    topic: s.topic,
-    subtopic: s.subtopic,
-    attendance30d: s.attendance30d,
-    lastInteractionDays: s.lastInteractionDays,
-    lastInteractionLabel: lastLabel(s.lastInteractionDays),
-    contestAbsentStreak: s.risk.contestAbsentStreak,
-    latestTest: latestTests ? (latestTests.get(s.niatId) ?? null) : (buildStudentDetail(s).tests.list.at(-1)?.total ?? null),
-  }));
-  const instructors = [...new Set(roster.map((s) => s.instructor).filter((name) => name !== "Unassigned"))].sort();
-  const student = typeof params.student === "string" ? params.student.toUpperCase() : undefined;
 
   const overdueLabel = `${overdue.length} ${logging ? "of my students" : "students"} overdue (${RISK_THRESHOLDS.interactionGapDays}d+)`;
   // Instructors with overdue students: the pill is a button that shows/hides the list below it.
@@ -111,9 +88,9 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
     >
       <PageHeader
         eyebrow={logging ? `Interactions · my students (${myStudents.length})` : "Interactions · all students"}
-        title={logging ? "Log an interaction" : "Interactions"}
+        title="Interactions"
         actions={
-          <div className="flex flex-wrap gap-2 text-[13px]">
+          <div className="flex flex-wrap items-center gap-2 text-[13px]">
             {overdueReminder ? (
               <OverduePill>{overdueLabel}</OverduePill>
             ) : (
@@ -121,6 +98,11 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
             )}
             <StatusPill tone="accent">{thisWeek} logged this week</StatusPill>
             {sample ? <StatusPill>Sample data</StatusPill> : null}
+            {logging ? (
+              <Link href="/log-interaction" className="ml-1 inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90">
+                Log interaction
+              </Link>
+            ) : null}
           </div>
         }
       />
@@ -128,6 +110,8 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
       {overdueReminder ? (
         <OverdueBanner students={overdue.map((s) => ({ niatId: s.niatId, name: s.name, days: s.lastInteractionDays }))} />
       ) : null}
+
+      {mine ? <MyStudents students={mine} overdueDays={RISK_THRESHOLDS.interactionGapDays} /> : null}
 
       {!logging ? (
         <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
@@ -141,7 +125,6 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
       >
         <div className="flex flex-col gap-4">
           <LiveForm className="flex flex-wrap items-end gap-3" aria-label="Filter interactions">
-            {student ? <input type="hidden" name="student" value={student} /> : null}
             <DateRange from={range.from} to={range.to} today={today} />
             {!logging || user.role === "senior_instructor" ? (
               <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
@@ -170,22 +153,7 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
         </div>
       </SectionCard>
 
-      <div className="flex flex-wrap items-start gap-5">
-        {logging ? (
-          <InteractionForm
-            key={student ?? "none"}
-            students={formStudents}
-            instructors={instructors}
-            userId={user.id}
-            userName={user.name}
-            initialStudent={student}
-            today={today}
-            questionBank={questionBank}
-            structure={structure}
-          />
-        ) : null}
-        <RecentLogs rows={inRange.slice(0, logging ? 12 : 40)} total={inRange.length} exportHref="/api/logs/interactions/export" />
-      </div>
+      <RecentLogs rows={recent} total={inRange.length} exportHref="/api/logs/interactions/export" codeRooms={codeRooms} />
     </OverdueReminder>
   );
 }

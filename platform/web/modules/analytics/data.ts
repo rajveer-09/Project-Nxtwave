@@ -16,7 +16,8 @@ import { daysBetween } from "@/common/lib/range";
 /**
  * Cohort analytics for a date range (Analytics page, admins). One shared, cached result per range.
  * Attendance follows the attendance service's counting rules (counted days only; % = present ÷
- * marked). Each headline number also comes for the previous period of the same length.
+ * marked). Each headline number also comes for the previous period of the same length. Level-ups
+ * follow the conversion rule in modules/analytics/evaluation.ts and are counted on the page.
  */
 
 const COUNTED_MARKS = `
@@ -34,18 +35,18 @@ const COUNTED_MARKS = `
           ELSE extract(isodow FROM a.date) <> 7
         END`;
 
-export type Headline = { attendancePct: number | null; interactions: number; studentsReached: number; levelUps: number; contestParticipation: number | null };
+export type Headline = { attendancePct: number | null; interactions: number; studentsReached: number; contestParticipation: number | null };
 export type Analytics = {
   headline: Headline;
   previous: Headline;
+  /** The period `previous` covers: the same number of days just before. */
+  previousRange: { from: string; to: string };
   rosterSize: number;
   attendanceByDay: { day: string; pct: number | null }[];
   attendanceByHall: { hall: string; pct: number; students: number }[];
   interactionsByDay: { day: string; n: number }[];
   outcomes: { status: string; n: number }[];
   topInstructors: { name: string; n: number }[];
-  levelUpsTo: { level: number; n: number }[];
-  levelDowns: number;
   contests: { title: string; day: string; tookPart: number; handles: number }[];
 };
 
@@ -53,13 +54,12 @@ const pct = (p: number, m: number) => (m ? Math.round((p * 1000) / m) / 10 : nul
 
 async function headline(from: string, to: string): Promise<Headline> {
   const db = getDb();
-  const [att, ints, lv, ct] = await Promise.all([
+  const [att, ints, ct] = await Promise.all([
     db.query<{ p: number; m: number }>(`SELECT count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${COUNTED_MARKS}) x`, [from, to]),
     db.query<{ n: number; students: number }>(
       "SELECT count(*)::int AS n, count(DISTINCT upper(student_id))::int AS students FROM logs.interactions WHERE date BETWEEN $1::date AND $2::date",
       [from, to],
     ),
-    db.query<{ n: number }>("SELECT count(*)::int AS n FROM logs.level_changes WHERE change_date BETWEEN $1::date AND $2::date AND to_level > from_level", [from, to]),
     db.query<{ took: number; handles: number }>(
       `SELECT count(*) FILTER (WHERE r.status IN ('solved', 'zero'))::int AS took,
               count(*) FILTER (WHERE r.status NOT IN ('no_handle', 'invalid_handle', 'duplicate_handle'))::int AS handles
@@ -72,7 +72,6 @@ async function headline(from: string, to: string): Promise<Headline> {
     attendancePct: pct(att.rows[0].p, att.rows[0].m),
     interactions: ints.rows[0].n,
     studentsReached: ints.rows[0].students,
-    levelUps: lv.rows[0].n,
     contestParticipation: pct(ct.rows[0].took, ct.rows[0].handles),
   };
 }
@@ -86,7 +85,7 @@ export async function getAnalytics(from: string, to: string): Promise<Analytics>
   const prevTo = addDays(from, -1);
   const prevFrom = addDays(prevTo, -(span - 1));
 
-  const [now, before, byDay, byHall, intsByDay, outcomes, top, ups, downs, contests, roster] = await Promise.all([
+  const [now, before, byDay, byHall, intsByDay, outcomes, top, contests, roster] = await Promise.all([
     headline(from, to),
     headline(prevFrom, prevTo),
     db.query<{ day: string; p: number; m: number }>(`SELECT date::text AS day, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${COUNTED_MARKS}) x GROUP BY 1 ORDER BY 1`, [from, to]),
@@ -104,11 +103,6 @@ export async function getAnalytics(from: string, to: string): Promise<Analytics>
       "SELECT instructor_name AS name, count(*)::int AS n FROM logs.interactions WHERE date BETWEEN $1::date AND $2::date GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 10",
       [from, to],
     ),
-    db.query<{ level: number; n: number }>(
-      "SELECT to_level AS level, count(*)::int AS n FROM logs.level_changes WHERE change_date BETWEEN $1::date AND $2::date AND to_level > from_level GROUP BY 1 ORDER BY 1",
-      [from, to],
-    ),
-    db.query<{ n: number }>("SELECT count(*)::int AS n FROM logs.level_changes WHERE change_date BETWEEN $1::date AND $2::date AND to_level < from_level", [from, to]),
     db.query<{ title: string; day: string; took: number; handles: number }>(
       `SELECT c.title, (to_timestamp(c.start_time) AT TIME ZONE 'Asia/Kolkata')::date::text AS day,
               count(*) FILTER (WHERE r.status IN ('solved', 'zero'))::int AS took,
@@ -124,6 +118,7 @@ export async function getAnalytics(from: string, to: string): Promise<Analytics>
   return {
     headline: now,
     previous: before,
+    previousRange: { from: prevFrom, to: prevTo },
     rosterSize: roster.rows[0].n,
     attendanceByDay: byDay.rows.map((r) => ({ day: r.day, pct: pct(r.p, r.m) })),
     attendanceByHall: byHall.rows
@@ -133,8 +128,6 @@ export async function getAnalytics(from: string, to: string): Promise<Analytics>
     interactionsByDay: intsByDay.rows,
     outcomes: outcomes.rows,
     topInstructors: top.rows,
-    levelUpsTo: ups.rows,
-    levelDowns: downs.rows[0].n,
     contests: contests.rows.map((r) => ({ title: r.title, day: r.day, tookPart: r.took, handles: r.handles })),
   };
 }

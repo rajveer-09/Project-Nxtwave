@@ -15,6 +15,7 @@ import { PageHeader } from "@/common/components/page-header";
 import { SectionCard } from "@/common/components/section-card";
 import { StatCard } from "@/common/components/stat-card";
 import { AtRiskTable } from "@/modules/home/at-risk-table";
+import { StandingOverview } from "@/modules/home/standing-overview";
 import { isAdminRole } from "@/common/auth/roles";
 import { getSessionUser } from "@/common/auth/session";
 import { getHomeData, type HomeData } from "@/modules/home/data";
@@ -68,33 +69,41 @@ async function HomeContent() {
   const data = await getHomeData();
   return (
     <>
-      <section aria-label="Key numbers" className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
+      <section aria-label="Key numbers" className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
         {data.kpis.map((kpi) => (
           <StatCard key={kpi.label} {...kpi} />
         ))}
       </section>
 
       <div className="flex flex-wrap items-start gap-5">
-        <SectionCard
-          className="flex-[2_1_600px]"
-          bodyClassName="px-0 pb-2"
-          title="Students who need attention"
-          description={`Flags combine attendance, interactions and contests · ${data.atRiskTotal} students`}
-          action={
-            <Link href="/students?flag=any" className="text-[13px] font-semibold text-primary hover:text-accent-strong">
-              View all at-risk →
-            </Link>
-          }
-        >
-          <AtRiskTable rows={data.atRisk} />
-        </SectionCard>
+        <div className="flex min-w-0 flex-[2_1_600px] flex-col gap-5">
+          <SectionCard
+            bodyClassName="px-0 pb-2"
+            title="Students who need attention"
+            description={`Flags combine attendance, interactions and contests · ${data.atRiskTotal} students`}
+            action={
+              <Link href="/students?flag=any" className="text-[13px] font-semibold text-primary hover:text-accent-strong">
+                View all at-risk →
+              </Link>
+            }
+          >
+            <AtRiskTable rows={data.atRisk} />
+          </SectionCard>
+
+          <SectionCard title="Standing at current level" description="Where each student stands at the level they're on · click a number to see those students">
+            <StandingOverview summary={data.standing} />
+          </SectionCard>
+        </div>
 
         <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-5">
           <Suspense fallback={null}>
             <AdminTodo items={data.todo} />
           </Suspense>
           <SectionCard title="DSA level distribution" action={<span className="text-xs text-muted-foreground">{data.students} students</span>}>
-            <BarList items={data.levels} labelWidth="2.25rem" />
+            <BarList items={data.levels} labelWidth="2.25rem" valueWidth="5.5rem" />
+            <p className="mt-3.5 border-t border-border pt-3 text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground tabular">{data.pastStart}</span> past the start (above L0, or past its introduction)
+            </p>
           </SectionCard>
           <SectionCard
             title="Attendance by hall · 30 days"
@@ -144,8 +153,8 @@ async function HomeContent() {
 function HomeSkeleton() {
   return (
     <div className="flex flex-col gap-5" aria-busy="true" aria-label="Loading home">
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
-        {[0, 1, 2, 3].map((i) => (
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
+        {[0, 1, 2, 3, 4].map((i) => (
           <Skeleton key={i} className="h-36 rounded-xl" />
         ))}
       </div>

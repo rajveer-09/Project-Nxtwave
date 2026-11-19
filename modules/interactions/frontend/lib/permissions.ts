@@ -33,9 +33,7 @@ export function canLogForOthers(user: Pick<SessionUser, "role">): boolean {
   return user.role === "instructor" || user.role === "senior_instructor" || user.role === "admin" || user.role === "owner";
 }
 
-/** Where "Log interaction" goes for a student: the Interactions page for one's own, else the any-student page. */
+/** Where "Log interaction" goes for a student: the Log interaction page (full context for one's own students). */
 export function logHrefFor(user: SessionUser, student: { niatId: string; instructor: string }): string | null {
-  if (canLogFor(user, student)) return `/interactions?student=${student.niatId}`;
-  if (canLogForOthers(user)) return `/log-interaction?niat=${student.niatId}`;
-  return null;
+  return canLogFor(user, student) || canLogForOthers(user) ? `/log-interaction?niat=${student.niatId}` : null;
 }

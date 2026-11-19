@@ -19,6 +19,7 @@ import { isAdminRole, type SessionUser } from "@/common/auth/roles";
 import { studentChanges } from "@/modules/admin/change-log-data";
 import { ChangeTable } from "@/modules/admin/components/change-table";
 import { getStudent, type StudentDetail } from "@/modules/students/data";
+import { RoomsList } from "@nxtone/interactions-ui/room/components/rooms-list";
 
 export const metadata = { title: "Student" };
 
@@ -90,6 +91,9 @@ async function StudentContent({ params }: { params: Promise<{ niatId: string }> 
           <Section niatId={d.student.niatId} component={component} />
         </Suspense>
       ))}
+      <Suspense fallback={null}>
+        <RoomsList niatId={d.student.niatId} />
+      </Suspense>
       {isAdminRole(user.role) ? (
         <Suspense fallback={<SectionSkeleton />}>
           <ChangeHistory user={user} niatId={d.student.niatId} />

@@ -6,6 +6,7 @@ Date : 16 Nov 2026
 
 */
 
+import { roomsByInteraction } from "@nxtone/interactions-ui/room/data";
 import { BarList } from "@/common/components/bar-list";
 import type { StudentDetail } from "@/modules/students/data";
 import { cn } from "@/common/lib/utils";
@@ -14,18 +15,19 @@ import { SectionHeading } from "@/modules/students/components/profile/overview";
 import { TestsChart } from "@/modules/students/components/profile/tests-chart";
 import { Timeline } from "@/modules/students/components/profile/timeline";
 
-export function InteractionsSection({ d, student = false }: { d: StudentDetail; student?: boolean }) {
+export async function InteractionsSection({ d, student = false }: { d: StudentDetail; student?: boolean }) {
+  const rooms = await roomsByInteraction(d.interactions.map((it) => it.id));
   return (
     <section id="interactions" aria-labelledby="interactions-h" className="flex scroll-mt-6 flex-col gap-3">
       <SectionHeading
         id="interactions"
         title="Interactions"
         extra={`· ${d.snapshot.interactions} rounds${d.snapshot.avgRating !== null ? ` · avg rating ${d.snapshot.avgRating}` : ""}`}
-        link={student ? undefined : { href: `/interactions?student=${d.student.niatId}`, label: "Log a new one" }}
+        link={student ? undefined : { href: `/log-interaction?niat=${d.student.niatId}`, label: "Log a new one" }}
       />
       <InteractionsList
         student={student}
-        items={student ? d.interactions.map((it) => ({ ...it, transcriptWords: 0 })) : d.interactions}
+        items={d.interactions.map((it) => ({ ...it, transcriptWords: student ? 0 : it.transcriptWords, codeRoom: rooms[it.id] }))}
       />
     </section>
   );

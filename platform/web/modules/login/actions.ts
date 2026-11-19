@@ -62,7 +62,9 @@ export async function passwordSignIn(_prev: SignInState, formData: FormData): Pr
     const token = await createStudentSession(db, niatId, meta);
     store.delete(SESSION_COOKIE);
     store.set(STUDENT_COOKIE, token, { ...sessionCookieOptions, maxAge: STUDENT_SESSION_HOURS * 3600 });
-    redirect("/me");
+    // A student opening a code room link comes back to the room; everyone else to their page.
+    const next = formData.get("next");
+    redirect(typeof next === "string" && /^\/room\/[A-Za-z0-9]{12}$/.test(next) ? next : "/me");
   }
 
   const email = identifier.toLowerCase();

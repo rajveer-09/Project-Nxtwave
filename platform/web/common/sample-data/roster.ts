@@ -11,6 +11,7 @@ Date : 16 Nov 2026
  * Deterministic (seeded), fictional names, N99 demo NIAT IDs. Never real students.
  */
 import { riskFlags, type FlagKey, type RiskInput } from "@/common/domain/risk";
+import { STANDINGS, type Standing } from "@/common/domain/standing";
 
 export type College = "BITS" | "CDU";
 
@@ -36,6 +37,8 @@ export type RosterStudent = {
   contestsAttended: number;
   lastInteractionDays: number | null;
   interactions: number;
+  /** Standing at the current level (common/domain/standing.ts). */
+  standing: Standing;
   lastTestScore: number | null;
   risk: RiskInput;
   flags: FlagKey[];
@@ -91,7 +94,7 @@ function build(): RosterStudent[] {
   const used = new Set(FIXED.map((s) => s.niatId));
   const rows: RosterStudent[] = FIXED.map((s) => {
     const base = s as RosterStudent;
-    return { ...base, coach: "", poc: "Ravi V.", joinedOn: "2026-08-12", flags: riskFlags(base.risk) };
+    return { ...base, coach: "", poc: "Ravi V.", joinedOn: "2026-08-12", standing: STANDINGS[base.interactions % STANDINGS.length], flags: riskFlags(base.risk) };
   });
 
   let serial = 30;
@@ -132,6 +135,7 @@ function build(): RosterStudent[] {
       contestsAttended: hasHandle ? Math.max(0, 12 - streak - Math.floor(rand() * 5)) : 0,
       lastInteractionDays: gap,
       interactions: 2 + Math.floor(rand() * 12),
+      standing: STANDINGS[serial % STANDINGS.length],
       lastTestScore: Math.round(below >= 2 ? 10 + rand() * 9 : 20 + rand() * 28),
       risk,
       flags: riskFlags(risk),

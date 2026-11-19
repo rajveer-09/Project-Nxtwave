@@ -32,6 +32,7 @@ async function cachedDetail(niatId: string, today: string) {
   return student ? buildStudentDetailFromDb(student) : null;
 }
 import type { FlagKey } from "@/common/domain/risk";
+import { isStanding, type Standing } from "@/common/domain/standing";
 
 /**
  * Students data access. Reads the combined roster (common/data/roster.ts): the
@@ -52,6 +53,7 @@ export type StudentQuery = {
   instructor?: string;
   coach?: string;
   level?: string;
+  standing?: Standing;
   flag?: FlagFilter;
   sort?: SortKey;
   dir?: "asc" | "desc";
@@ -75,6 +77,7 @@ export function parseStudentQuery(params: Record<string, string | string[] | und
     hall: one(params.hall) || undefined,
     instructor: one(params.instructor) || undefined,
     level: one(params.level) || undefined,
+    standing: isStanding(one(params.standing)) ? (one(params.standing) as Standing) : undefined,
     flag: (FLAG_FILTERS as readonly string[]).includes(flag ?? "") ? (flag as FlagFilter) : undefined,
     sort: (SORT_KEYS as readonly string[]).includes(sort ?? "") ? (sort as SortKey) : undefined,
     dir: dir === "desc" ? "desc" : dir === "asc" ? "asc" : undefined,
@@ -93,6 +96,7 @@ function matches(s: RosterStudent, q: StudentQuery, ignoreFlag = false) {
   if (q.instructor && s.instructor !== q.instructor) return false;
   if (q.coach && s.coach !== q.coach) return false;
   if (q.level && String(s.level) !== q.level) return false;
+  if (q.standing && s.standing !== q.standing) return false;
   if (!ignoreFlag && q.flag) {
     if (q.flag === "any" ? s.flags.length === 0 : !s.flags.includes(q.flag as FlagKey)) return false;
   }

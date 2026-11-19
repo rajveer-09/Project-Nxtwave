@@ -11,6 +11,7 @@ Date : 16 Nov 2026
 import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { STANDING_LABEL, STANDINGS } from "@/common/domain/standing";
 import { withParams } from "@/common/lib/url";
 
 type Options = { sections: string[]; halls: string[]; instructors: string[] };
@@ -46,7 +47,8 @@ export function StudentsFilters({ options, hide = [] }: { options: Options; /** 
     { key: "section", label: "Section", all: "All", values: options.sections.map((v) => ({ value: v, label: v })) },
     { key: "hall", label: "Hall", all: "All", values: options.halls.map((v) => ({ value: v, label: v })) },
     { key: "instructor", label: "Instructor", all: "All", values: options.instructors.map((v) => ({ value: v, label: v })) },
-    { key: "level", label: "Level", all: "All", values: [0, 1, 2, 3, 4].map((v) => ({ value: String(v), label: `L${v}` })) },
+    { key: "level", label: "Level", all: "All", values: [0, 1, 2, 3, 4, 5, 6, 7].map((v) => ({ value: String(v), label: `L${v}` })) },
+    { key: "standing", label: "Standing", all: "All", values: STANDINGS.map((v) => ({ value: v, label: STANDING_LABEL[v] })) },
   ].filter((select) => !hide.includes(select.key));
 
   return (

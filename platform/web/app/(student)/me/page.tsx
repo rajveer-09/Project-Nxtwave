@@ -14,6 +14,9 @@ import { getStudent } from "@/modules/students/data";
 import { AttendanceSection, ProgressSection } from "@/modules/students/components/profile/attendance-progress";
 import { Snapshot } from "@/modules/students/components/profile/overview";
 import { ContestsSection, InteractionsSection, TestsSection } from "@/modules/students/components/profile/sections";
+import { JoinBanner } from "@nxtone/interactions-ui/room/components/join-banner";
+import { RoomsList } from "@nxtone/interactions-ui/room/components/rooms-list";
+import { openRoomsFor } from "@nxtone/interactions-ui/room/data";
 
 export const metadata = { title: "My progress" };
 
@@ -25,7 +28,7 @@ export const metadata = { title: "My progress" };
 async function Content() {
   const student = await requireStudent();
   if (student.mustChangePassword) redirect("/me/password");
-  const d = await getStudent(student.niatId);
+  const [d, openRooms] = await Promise.all([getStudent(student.niatId), openRoomsFor(student.niatId)]);
   if (!d) {
     return (
       <p className="rounded-xl border border-border bg-card px-4 py-3.5 text-sm text-muted-foreground">
@@ -52,10 +55,14 @@ async function Content() {
           ) : null}
         </span>
       </section>
+      <JoinBanner initial={openRooms} />
       <Snapshot d={d} />
       <AttendanceSection d={d} student />
       <ProgressSection d={d} student />
       <InteractionsSection d={d} student />
+      <Suspense fallback={null}>
+        <RoomsList niatId={student.niatId} title="Your code rooms" />
+      </Suspense>
       <TestsSection d={d} student />
       <ContestsSection d={d} student />
     </>

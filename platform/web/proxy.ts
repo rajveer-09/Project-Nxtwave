@@ -26,6 +26,16 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Code rooms: staff or the room's student, either session (the page checks which).
+  if (pathname.startsWith("/room/")) {
+    if (authMode() === "database" && !request.cookies.get(SESSION_COOKIE)?.value && !request.cookies.get(STUDENT_COOKIE)?.value) {
+      const login = new URL("/login", request.url);
+      login.searchParams.set("next", pathname);
+      return NextResponse.redirect(login);
+    }
+    return NextResponse.next();
+  }
+
   if (authMode() === "database") {
     if (!request.cookies.get(SESSION_COOKIE)?.value) {
       const login = new URL("/login", request.url);

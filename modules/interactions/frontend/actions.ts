@@ -10,16 +10,21 @@ Date : 16 Nov 2026
 
 import { getSessionUser } from "@/common/auth/session";
 import { createInteraction } from "@nxtone/interactions-ui/data";
+import { attachRoom } from "@nxtone/interactions-ui/room/data";
 
 export type LogResult =
   | { ok: true; round: number; offRoadmap: number; studentName: string }
   | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
-/** Saves one interaction. Validation and permission checks run here, whatever the form did. */
-export async function logInteraction(payload: unknown): Promise<LogResult> {
+/**
+ * Saves one interaction. Validation and permission checks run here, whatever the form did. A code
+ * room used during it (roomId) is attached to the saved interaction and ended.
+ */
+export async function logInteraction(payload: unknown, roomId?: string | null): Promise<LogResult> {
   const user = await getSessionUser();
   const result = await createInteraction(payload, user);
   if (!result.ok) return result;
+  await attachRoom(user, roomId ?? null, result.interaction.niatId, result.interaction.id).catch(() => false);
   return {
     ok: true,
     round: result.interaction.round,
