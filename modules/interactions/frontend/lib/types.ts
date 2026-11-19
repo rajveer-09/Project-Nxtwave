@@ -60,7 +60,7 @@ export const interactionInput = z
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
     takenBy: z.string().trim().min(1, "Pick who took the interaction"),
     level: z.number().int().min(0).max(7),
-    topics: z.array(z.string().min(1)).min(1, "Pick at least one topic"),
+    topics: z.array(z.string().min(1)).min(1, "Pick a topic").max(1, "Pick one topic: log other topics as separate interactions"),
     subtopics: z.array(z.string().min(1)),
     stepsReached: z.record(z.string(), z.string()),
     status: z.enum(STATUSES),
@@ -84,3 +84,12 @@ export const interactionInput = z
   });
 
 export type InteractionInput = z.infer<typeof interactionInput>;
+
+/**
+ * What an interaction covered, for lists: "Arrays › Array Traversal › Kadane's Algo" for one topic (as before),
+ * "Maths, STL › Digit Manipulation, Stack" when several topics were covered in one interaction.
+ */
+export function coveredLabel(topics: string[], subtopics: string[]): string {
+  if (topics.length <= 1) return [...topics, ...subtopics].join(" › ");
+  return [topics.join(", "), subtopics.join(", ")].filter(Boolean).join(" › ");
+}

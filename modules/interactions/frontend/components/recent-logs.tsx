@@ -10,7 +10,7 @@ import { IntentLink } from "@/common/components/intent-link";
 import { StatusPill } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
 import { formatDate } from "@/common/lib/dates";
-import { STATUS_LABEL, type Interaction } from "@nxtone/interactions-ui/lib/types";
+import { coveredLabel, STATUS_LABEL, type Interaction } from "@nxtone/interactions-ui/lib/types";
 
 export function RecentLogs({ rows, total, exportHref }: { rows: Interaction[]; total: number; exportHref: string }) {
   return (
@@ -56,7 +56,7 @@ export function RecentLogs({ rows, total, exportHref }: { rows: Interaction[]; t
                       </div>
                     </td>
                     <td className="border-b border-muted px-2.5 py-2.5 text-sidebar-foreground">
-                      L{it.level} · {[...it.topics, ...it.subtopics].join(" › ")}
+                      L{it.level} · {coveredLabel(it.topics, it.subtopics)}
                     </td>
                     <td className="border-b border-muted px-2.5 py-2.5 text-sidebar-foreground">
                       {it.questions.length}

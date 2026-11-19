@@ -12,7 +12,7 @@ import { listInteractions } from "@nxtone/interactions-ui/data";
 import { getFormatVersion, getResults, studentsFor, studentTestHistory } from "@/modules/tests/data";
 import { maxTotal, totalOf } from "@/modules/tests/types";
 import { formatDate } from "@/common/lib/dates";
-import { STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
+import { coveredLabel, STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
 import { buildStudentDetail } from "@/common/sample-data/student-detail";
 import type { RosterStudent } from "@/common/sample-data/roster";
 import { authMode } from "@/common/auth/config";
@@ -171,7 +171,7 @@ export const getStudent = cache(async (niatId: string) => {
         round: it.round,
         by: it.takenBy,
         level: `L${it.level}`,
-        topics: [...it.topics, ...it.subtopics].join(" › "),
+        topics: coveredLabel(it.topics, it.subtopics),
         status: STATUS_LABEL[it.status],
         rating: it.rating,
         questions: it.questions.map((q) => `${q.title} (${q.offRoadmap ? "off-roadmap" : (q.step ?? "roadmap")})`).join(", ") || it.tweakedQuestions || "—",

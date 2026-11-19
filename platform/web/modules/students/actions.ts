@@ -12,7 +12,7 @@ import { getSessionUser } from "@/common/auth/session";
 import { canViewStudent } from "@/common/auth/student-access";
 import { getRosterStudent } from "@/common/data/roster";
 import { listInteractions } from "@nxtone/interactions-ui/data";
-import { STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
+import { coveredLabel, STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
 
 export type HistoryEntry = {
   id: string;
@@ -43,7 +43,7 @@ export async function studentHistoryAction(niatId: string): Promise<{ ok: true; 
       round: it.round,
       takenBy: it.takenBy,
       level: it.level,
-      covered: [it.topics.join(", "), it.subtopics.length ? it.subtopics.join(", ") : ""].filter(Boolean).join(" › "),
+      covered: coveredLabel(it.topics, it.subtopics),
       status: STATUS_LABEL[it.status] ?? it.status,
       rating: it.rating,
       questions: it.questions.map((q) => ({ title: q.title, step: q.step, offRoadmap: q.offRoadmap })),

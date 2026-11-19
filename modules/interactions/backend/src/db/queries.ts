@@ -363,22 +363,44 @@ function validateInteractionFields(log: Pick<InteractionLog, 'date' | 'rating' |
 const splitList = (value: string | undefined | null) => (value ?? '').split(',').map((v) => v.trim()).filter(Boolean);
 const cleanSubtopics = (value: string | undefined) => Array.from(new Set(splitList(value))).join(', ');
 
-// An interaction with subtopics covers exactly one topic of its level, and every subtopic must belong to it.
+// One topic per interaction (decided 2026-11-19). Older interactions can list several (typed by hand, or
+// imported from the sheet); they can still be edited as long as no topic is added.
+function validateOneTopic(topics: string | undefined, previous?: string) {
+  const list = splitList(topics);
+  if (list.length <= 1) return;
+  const before = previous === undefined ? null : splitList(previous);
+  if (before && list.every((t) => before.includes(t))) return;
+  throw new ValidationError('Pick one topic. Log other topics as separate interactions.');
+}
+
+// Every subtopic must belong to exactly one of the interaction's topics. New interactions have one topic; older
+// ones may list several, and a subtopic name shared by two of them would be ambiguous (level completion,
+// first_cleared_sub, would credit both).
 function validateSubtopics(level: string | undefined, topics: string | undefined, subtopics: string | undefined) {
   const chosen = splitList(subtopics);
   if (!chosen.length) return;
   const topicList = splitList(topics);
-  if (topicList.length !== 1) throw new ValidationError('Pick one topic when choosing subtopics.');
-  const unknown = chosen.filter((s) => !isKnownSubtopic(level ?? 'Level 0', topicList[0], s));
-  if (unknown.length) throw new ValidationError(`Not subtopics of ${topicList[0]}: ${unknown.join(', ')}.`);
+  for (const sub of chosen) {
+    const owners = topicList.filter((t) => isKnownSubtopic(level ?? 'Level 0', t, sub));
+    if (!owners.length) throw new ValidationError(`"${sub}" is not a subtopic of ${topicList.join(' or ')}.`);
+    if (owners.length > 1) throw new ValidationError(`"${sub}" is a subtopic of both ${owners.join(' and ')}. Log them as separate interactions.`);
+  }
 }
 
-// Steps reached: one valid step code per subtopic covered (or per topic when the interaction has no subtopics).
-// Entries for anything not covered are dropped. Level 0 has no steps.
+// What a step is recorded for: each subtopic covered, plus each topic none of whose subtopics was picked (a topic
+// without subtopics, or an older log that didn't list them). For one topic this is the same as before.
+function coveredItems(level: string | undefined, topics: string | undefined, subtopics: string | undefined): string[] {
+  const subs = splitList(subtopics);
+  const bare = splitList(topics).filter((t) => !subs.some((s) => isKnownSubtopic(level ?? 'Level 0', t, s)));
+  return [...subs, ...bare];
+}
+
+// Steps reached: one valid step code per item covered (coveredItems). Entries for anything not covered are
+// dropped. Level 0 has no steps.
 function cleanStepsReached(level: string | undefined, topics: string | undefined, subtopics: string | undefined, steps: unknown): Record<string, string> {
   const codes = getKnownStepCodes(level);
   if (!codes.length || !steps || typeof steps !== 'object') return {};
-  const covered = splitList(subtopics).length ? splitList(subtopics) : splitList(topics);
+  const covered = coveredItems(level, topics, subtopics);
   const cleaned: Record<string, string> = {};
   for (const [name, code] of Object.entries(steps as Record<string, unknown>)) {
     if (!covered.includes(name)) continue;
@@ -452,6 +474,7 @@ export async function updateInteraction(
   const next = { ...current, ...patch };
   validateInteractionFields(next);
   validateFeedback(next, current);
+  validateOneTopic(next.topics, current.topics);
   validateSubtopics(current.level, next.topics, next.subtopics);
 
   const client = await getPool().connect();
@@ -495,6 +518,7 @@ export async function addInteraction(log: InteractionLog, actor: Actor): Promise
     const takenBy = directory.find((i) => i.id === log.takenByInstructorId) ?? matchInstructor(directory, log.instructorName, log.instructorEmail).instructor;
     assertCanLog(student, actor, log, takenBy?.id ?? null);
 
+    validateOneTopic(log.topics);
     validateSubtopics(log.level ?? student.level, log.topics, log.subtopics);
     const stepsReached = cleanStepsReached(log.level ?? student.level, log.topics, log.subtopics, log.stepsReached);
     await insertInteraction(client, { ...log, stepsReached }, student, { createdBy: actor.id });
