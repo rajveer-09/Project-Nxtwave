@@ -32,6 +32,8 @@ Date : 14 Nov 2026
     --color-accent-strong: var(--accent-strong);
     --color-accent-border: var(--accent-border);
     --color-surface-subtle: var(--surface-subtle);
+    --color-viz-present: var(--viz-present);
+    --color-viz-absent: var(--viz-absent);
 
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
@@ -104,6 +106,9 @@ Date : 14 Nov 2026
     --chart-3: #D9772E;
     --chart-4: #0F766E;
     --chart-5: #6D28D9;
+    /* Attendance charts: present / absent (same values as the attendance dashboard). */
+    --viz-present: #2A78D6;
+    --viz-absent: #EB6834;
     --radius: 0.625rem;
     --sidebar: #FFFFFF;
     --sidebar-foreground: #3D4250;
@@ -147,6 +152,8 @@ Date : 14 Nov 2026
     --chart-3: #D9772E;
     --chart-4: #2BB3A3;
     --chart-5: #A78BFA;
+    --viz-present: #3987E5;
+    --viz-absent: #D95926;
     --sidebar: #13161B;
     --sidebar-foreground: #C9CED8;
     --sidebar-primary: #7D97F2;
