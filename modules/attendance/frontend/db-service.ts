@@ -402,7 +402,9 @@ async function listInternships(url: URL, today: string) {
 /* ------------------------------------------------------------------ saving marks from NxtOne */
 
 /** Who can mark attendance in NxtOne: admins, and instructors and senior instructors for any hall. */
-export const canMarkAttendance = (u: Pick<SessionUser, "role">) => u.role === "owner" || u.role === "admin" || u.role === "senior_instructor" || u.role === "instructor";
+/** Who may mark attendance: every staff role (success coaches included, 19 Nov 2026). */
+export const canMarkAttendance = (u: Pick<SessionUser, "role">) =>
+  u.role === "owner" || u.role === "admin" || u.role === "senior_instructor" || u.role === "instructor" || u.role === "success_coach";
 
 export type MarkRowError = { index: number; niat_id: string; message: string };
 export type SaveMarksResult = { ok: true; saved: number; cleared: number } | { ok: false; error: string; details?: MarkRowError[] };

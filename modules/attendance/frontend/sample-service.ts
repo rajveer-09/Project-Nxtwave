@@ -67,6 +67,10 @@ function resolve(date: string, degree: string, today: string): { counted: boolea
 const json = (status: number, body: unknown) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const err = (status: number, code: string, message: string, details?: unknown) => json(status, { error: { code, message, details } });
 const isAdmin = (u: SessionUser) => u.role === "owner" || u.role === "admin";
+/** Same as canMarkAttendance (db-service): every staff role marks; the sample used to allow admins only. */
+const canMark = (u: SessionUser) => isAdmin(u) || u.role === "senior_instructor" || u.role === "instructor" || u.role === "success_coach";
+/** Attendance analytics: Owners and success coaches (19 Nov 2026). */
+const canSeeAnalytics = (u: SessionUser) => u.role === "owner" || u.role === "success_coach";
 
 export async function attendanceSample(request: Request, path: string[], user: SessionUser): Promise<Response> {
   const url = new URL(request.url);
@@ -97,7 +101,7 @@ export async function attendanceSample(request: Request, path: string[], user: S
   }
 
   if (route === "PUT admin/attendance") {
-    if (!isAdmin(user)) return err(403, "forbidden", "Only admins can mark attendance.");
+    if (!canMark(user)) return err(403, "forbidden", "Your role can't mark attendance.");
     let input: MarkInput[];
     try {
       input = (await request.json()) as MarkInput[];
@@ -166,5 +170,286 @@ export async function attendanceSample(request: Request, path: string[], user: S
     return json(200, { from: url.searchParams.get("from"), to: url.searchParams.get("to"), today, current: internships.filter((x) => x.current).length, internships });
   }
 
+  if (route.startsWith("GET admin/analytics")) {
+    if (!canSeeAnalytics(user)) return err(403, "forbidden", "Only Owners and success coaches can see attendance analytics.");
+    const input = analyticsInput(url, today);
+    if ("error" in input) return input.error;
+    if (route === "GET admin/analytics") return json(200, analyticsReport(input, today));
+    if (route === "GET admin/analytics/students") {
+      const show = url.searchParams.get("show") || "all";
+      if (!["all", "present", "absent", "unmarked"].includes(show)) return err(400, "bad_request", 'show must be "all", "present", "absent" or "unmarked".');
+      return json(200, { from: input.from, to: input.to, show, students: studentTallies(input, today, show) });
+    }
+    if (route === "GET admin/analytics/export.xlsx") {
+      return err(503, "service_unavailable", "Excel export needs the attendance service; the sample data can't build a workbook.");
+    }
+  }
+
+  if (route.startsWith("POST admin/imports/") || route === "PUT admin/calendar/entries") {
+    if (!isAdmin(user)) return err(403, "forbidden", "Only admins can import.");
+    return err(503, "service_unavailable", "Imports read .xlsx and .csv files in the attendance service, which isn't connected here (sample data). Nothing was saved.");
+  }
+
+  if (route === "GET admin/exports/attendance") {
+    if (!isAdmin(user)) return err(403, "forbidden", "Only admins can export attendance.");
+    const from = url.searchParams.get("from") || today;
+    const to = url.searchParams.get("to") || from;
+    if (![from, to].every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)) || from > to || to > today) return err(400, "bad_range", "Pick dates up to today, with From on or before To.");
+    if (daysBetween(from, to) > 62) return err(400, "bad_range", "Export at most 62 days at a time.");
+    return json(200, sampleExport(from, to, today));
+  }
+  if (route === "GET admin/exports/attendance.xlsx") {
+    return err(503, "service_unavailable", "Excel export needs the attendance service; the sample data can't build a workbook. Use Copy instead.");
+  }
+
   return err(404, "not_found", `The sample attendance service doesn't implement ${route} yet.`);
+}
+
+/* ---------- Export for the master sheet (internal/http/exports.go), over the sample ---------- */
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const sheetHeader = (ymd: string) => `${Number(ymd.slice(8))}-${MONTHS[Number(ymd.slice(5, 7)) - 1]}-${ymd.slice(0, 4)}`;
+
+function sampleExport(from: string, to: string, today: string) {
+  const m = marks();
+  const dates: string[] = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) dates.push(d);
+  const degrees = ["BITS", "CDU"].map((degree) => {
+    let unmarked = 0;
+    // The sample has no import file, so the order is section then name and every student is "unordered".
+    const students = ROSTER.filter((s) => s.college === degree).sort((a, b) => a.section.localeCompare(b.section) || a.name.localeCompare(b.name));
+    const rows = students.map((s) => ({
+      niat_id: s.niatId,
+      name: s.name,
+      section: s.section,
+      dropped: false,
+      values: dates.map((d) => {
+        const mark = m.get(`${s.niatId}|${d}`);
+        if (mark) return mark === "P" ? "Present" : "Absent";
+        const day = resolve(d, s.college, today);
+        if (day.counted) unmarked++;
+        if (d > today) return "";
+        if (day.kind === "holiday") return day.label || "Holiday";
+        if (day.kind === "exam") return day.label || "Exam";
+        if (day.kind === "exam_prep") return day.label || "Exam Preparation";
+        if (day.kind === "sunday") return "Sunday";
+        return "";
+      }),
+    }));
+    return { degree, rows, unmarked, unordered: rows.length };
+  });
+  return { from, to, today, dates, headers: dates.map(sheetHeader), degrees };
+}
+
+/* ---------- Analytics: the Go handler (internal/http/analytics.go) and stats.Analyze, over the sample ---------- */
+
+type Tally = { students: number; present: number; absent: number; unmarked: number; unmarked_students: number; working_days: number; pct: number | null; avg_present: number | null; avg_absent: number | null };
+type Input = { period: string; from: string; to: string; filter: { degree: string; hall: string | null; section: string }; selected: (s: (typeof ROSTER)[number]) => boolean };
+
+const round1 = (v: number) => Math.round(v * 10) / 10;
+const pct2 = (part: number, whole: number) => (whole === 0 ? null : Math.round((part * 10000) / whole) / 100);
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+const hallNumber = (h: string) => Number(/\d+/.exec(h)?.[0] ?? Number.MAX_SAFE_INTEGER);
+const hallLess = (a: string, b: string) => (a === "" || b === "" ? (b === "" ? (a === "" ? 0 : -1) : 1) : hallNumber(a) - hallNumber(b) || a.localeCompare(b));
+
+function presetRange(period: string, today: string): [string, string] | null {
+  if (period === "today") return [today, today];
+  if (period === "last7") return [addDays(today, -6), today];
+  if (period === "lastmonth") {
+    const first = `${today.slice(0, 7)}-01`;
+    const prevLast = addDays(first, -1);
+    return [`${prevLast.slice(0, 7)}-01`, prevLast];
+  }
+  return null;
+}
+
+function comparePeriod(period: string, from: string, to: string): [string, string] {
+  if (period === "lastmonth") return presetRange("lastmonth", from)!;
+  const n = daysBetween(from, to);
+  return [addDays(from, -n), addDays(from, -1)];
+}
+
+function analyticsInput(url: URL, today: string): Input | { error: Response } {
+  const q = url.searchParams;
+  let period = q.get("period") || "";
+  let from: string;
+  let to: string;
+  if (period === "" || period === "custom") {
+    const f = q.get("from");
+    const t = q.get("to");
+    if (f && t) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(f) || !/^\d{4}-\d{2}-\d{2}$/.test(t) || f > t) return { error: err(400, "bad_range", "Use from and to like 2026-11-01, with from on or before to.") };
+      [from, to, period] = [f, t, "custom"];
+    } else [from, to, period] = [today, today, "today"];
+  } else {
+    const range = presetRange(period, today);
+    if (!range) return { error: err(400, "bad_range", 'period must be "today", "last7", "lastmonth" or "custom".') };
+    [from, to] = range;
+  }
+  const degree = (q.get("degree") ?? "").trim().toUpperCase();
+  const section = (q.get("section") ?? "").trim().toUpperCase();
+  const hall = q.has("hall") ? (q.get("hall") ?? "").trim() : null;
+  const selected = (s: (typeof ROSTER)[number]) => (!degree || s.college === degree) && (hall === null || s.hall === hall) && (!section || s.section.toUpperCase() === section);
+  return { period, from, to, filter: { degree, hall, section }, selected };
+}
+
+/** stats.eachStudentDay: every counted working day of every selected student in from..to. */
+function eachStudentDay(input: Pick<Input, "selected">, from: string, to: string, today: string, fn: (i: number, day: string, mark: "P" | "A" | null) => void) {
+  const m = marks();
+  // A date is a working day for a degree when any student of that degree has a mark on a counted day.
+  const working = new Map<string, Set<string>>();
+  for (const s of ROSTER) {
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      if (!m.has(`${s.niatId}|${d}`) || !resolve(d, s.college, today).counted) continue;
+      if (!working.has(s.college)) working.set(s.college, new Set());
+      working.get(s.college)!.add(d);
+    }
+  }
+  ROSTER.forEach((s, i) => {
+    if (!input.selected(s)) return;
+    const w = working.get(s.college);
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      if (w?.has(d) && resolve(d, s.college, today).counted) fn(i, d, m.get(`${s.niatId}|${d}`) ?? null);
+    }
+  });
+}
+
+function newAcc() {
+  return { present: 0, absent: 0, unmarked: 0, students: new Set<number>(), unmarkedStudents: new Set<number>(), days: new Set<string>() };
+}
+type Acc = ReturnType<typeof newAcc>;
+function add(a: Acc, i: number, day: string, mark: "P" | "A" | null) {
+  a.students.add(i);
+  a.days.add(day);
+  if (mark === "P") a.present++;
+  else if (mark === "A") a.absent++;
+  else {
+    a.unmarked++;
+    a.unmarkedStudents.add(i);
+  }
+}
+function done(a: Acc): Tally {
+  const wd = a.days.size;
+  return {
+    students: a.students.size,
+    present: a.present,
+    absent: a.absent,
+    unmarked: a.unmarked,
+    unmarked_students: a.unmarkedStudents.size,
+    working_days: wd,
+    pct: pct2(a.present, a.present + a.absent),
+    avg_present: wd ? round1(a.present / wd) : null,
+    avg_absent: wd ? round1(a.absent / wd) : null,
+  };
+}
+
+function analyze(input: Pick<Input, "selected">, from: string, to: string, today: string) {
+  const total = newAcc();
+  const degrees = new Map<string, Acc>();
+  const halls = new Map<string, { degree: string; hall: string; acc: Acc }>();
+  const daily = new Map<string, Acc>();
+  eachStudentDay(input, from, to, today, (i, day, mark) => {
+    const s = ROSTER[i];
+    if (!degrees.has(s.college)) degrees.set(s.college, newAcc());
+    const hk = `${s.college}\u0000${s.hall}`;
+    if (!halls.has(hk)) halls.set(hk, { degree: s.college, hall: s.hall, acc: newAcc() });
+    if (!daily.has(day)) daily.set(day, newAcc());
+    for (const a of [total, degrees.get(s.college)!, halls.get(hk)!.acc, daily.get(day)!]) add(a, i, day, mark);
+  });
+  return {
+    total: done(total),
+    degrees: [...degrees.entries()].map(([degree, a]) => ({ degree, ...done(a) })).sort((a, b) => a.degree.localeCompare(b.degree)),
+    halls: [...halls.values()]
+      .map((h) => ({ degree: h.degree, ...(h.hall ? { hall: h.hall } : {}), ...done(h.acc) }))
+      .sort((a, b) => a.degree.localeCompare(b.degree) || hallLess(a.hall ?? "", b.hall ?? "")),
+    daily: [...daily.entries()]
+      .map(([date, a]) => {
+        const t = done(a);
+        return { date, students: t.students, present: t.present, absent: t.absent, unmarked: t.unmarked, pct: t.pct };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date)),
+  };
+}
+
+/** stats.extremes: best / worst only when at least two groups have a % and they differ. */
+function extremes(groups: { pct: number | null }[], name: (i: number) => string) {
+  const withPct = groups.map((g, i) => ({ pct: g.pct, i })).filter((g): g is { pct: number; i: number } => g.pct !== null);
+  const none = { top: [] as string[], topPct: null as number | null, bottom: [] as string[], bottomPct: null as number | null };
+  if (withPct.length < 2) return none;
+  const hi = Math.max(...withPct.map((g) => g.pct));
+  const lo = Math.min(...withPct.map((g) => g.pct));
+  if (hi === lo) return none;
+  return { top: withPct.filter((g) => g.pct === hi).map((g) => name(g.i)), topPct: hi, bottom: withPct.filter((g) => g.pct === lo).map((g) => name(g.i)), bottomPct: lo };
+}
+
+function analyticsReport(input: Input, today: string) {
+  const a = analyze(input, input.from, input.to, today);
+  let [pFrom, pTo] = comparePeriod(input.period, input.from, input.to);
+  if (input.from === input.to) {
+    // One day is compared with the previous working day, up to 14 days back.
+    for (let k = 1; k <= 14; k++) {
+      const d = addDays(input.from, -k);
+      if (analyze(input, d, d, today).total.working_days > 0) {
+        [pFrom, pTo] = [d, d];
+        break;
+      }
+    }
+  }
+  const prev = analyze(input, pFrom, pTo, today).total;
+  const deg = extremes(a.degrees, (i) => a.degrees[i].degree);
+  const hall = extremes(a.halls, (i) => `${a.halls[i].degree} · ${a.halls[i].hall || "No hall"}`);
+  const options = { degrees: [] as string[], halls: [] as { degree: string; value: string }[], sections: [] as { degree: string; value: string }[] };
+  const seen = new Set<string>();
+  for (const s of ROSTER) {
+    for (const [kind, key, value] of [["d", s.college, s.college], ["h", `${s.college}\u0000${s.hall}`, s.hall], ["s", `${s.college}\u0000${s.section}`, s.section]] as const) {
+      if (seen.has(kind + key)) continue;
+      seen.add(kind + key);
+      if (kind === "d") options.degrees.push(value);
+      else (kind === "h" ? options.halls : options.sections).push({ degree: s.college, value });
+    }
+  }
+  options.degrees.sort();
+  options.halls.sort((x, y) => hallLess(x.value, y.value));
+  options.sections.sort((x, y) => x.value.localeCompare(y.value));
+  return {
+    period: input.period,
+    from: input.from,
+    to: input.to,
+    today,
+    days: daysBetween(input.from, input.to),
+    generated_at: new Date().toISOString(),
+    filter: input.filter,
+    options,
+    ...a,
+    insights: {
+      top_degrees: deg.top,
+      top_degree_pct: deg.topPct,
+      top_halls: hall.top,
+      top_hall_pct: hall.topPct,
+      bottom_halls: hall.bottom,
+      bottom_hall_pct: hall.bottomPct,
+      change: a.total.pct !== null && prev.pct !== null ? Math.round((a.total.pct - prev.pct) * 100) / 100 : null,
+      prev_pct: prev.pct,
+    },
+    previous: { from: pFrom, to: pTo, total: prev },
+  };
+}
+
+/** stats.StudentTallies with the handler's student fields. */
+function studentTallies(input: Input, today: string, show: string) {
+  const by = new Map<number, { present: number; absent: number; unmarked: number }>();
+  eachStudentDay(input, input.from, input.to, today, (i, _day, mark) => {
+    const t = by.get(i) ?? { present: 0, absent: 0, unmarked: 0 };
+    if (mark === "P") t.present++;
+    else if (mark === "A") t.absent++;
+    else t.unmarked++;
+    by.set(i, t);
+  });
+  return [...by.entries()]
+    .sort(([a], [b]) => a - b)
+    .filter(([, t]) => show === "all" || (show === "present" && t.present > 0) || (show === "absent" && t.absent > 0) || (show === "unmarked" && t.unmarked > 0))
+    .map(([i, t]) => {
+      const s = ROSTER[i];
+      return { niat_id: s.niatId, name: s.name, degree: s.college, section: s.section, hall_no: s.hall, ...t, pct: pct2(t.present, t.present + t.absent) };
+    });
 }

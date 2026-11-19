@@ -21,11 +21,11 @@ export const metadata = { title: "Mark attendance" };
 async function Sheet() {
   await connection();
   const user = await requireAccess("/attendance");
-  // Instructors (and senior instructors) open on their own students and their hall; they can switch
-  // to everyone in the hall and mark them too.
+  // Instructors (and senior instructors) open on their own students and their hall, success coaches
+  // on the students they coach; they can switch to everyone in the hall and mark them too.
   let mine: { ids: string[]; hall: string | null } | undefined;
-  if (user.role === "instructor" || user.role === "senior_instructor") {
-    const own = (await getRoster()).filter((s) => s.instructor === user.name);
+  if (user.role === "instructor" || user.role === "senior_instructor" || user.role === "success_coach") {
+    const own = (await getRoster()).filter((s) => (user.role === "success_coach" ? s.coach === user.name : s.instructor === user.name));
     if (own.length) {
       const halls = new Map<string, number>();
       for (const s of own) halls.set(s.hall, (halls.get(s.hall) ?? 0) + 1);

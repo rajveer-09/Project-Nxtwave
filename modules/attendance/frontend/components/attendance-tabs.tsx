@@ -17,8 +17,6 @@ const TABS = [
   { href: "/attendance/calendar", label: "Calendar" },
   { href: "/attendance/terms", label: "Terms" },
   { href: "/attendance/internships", label: "Internships" },
-  { href: "/attendance/imports", label: "Imports" },
-  { href: "/attendance/analytics", label: "Analytics" },
 ];
 
 export function AttendanceTabs() {

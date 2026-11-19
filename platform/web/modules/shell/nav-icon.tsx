@@ -10,6 +10,8 @@ import {
   BookOpen,
   CalendarCheck,
   ChartColumn,
+  FileDown,
+  FileUp,
   ClipboardList,
   History,
   House,
@@ -42,6 +44,8 @@ const ICONS = {
   shield: ShieldCheck,
   studentkey: KeyRound,
   logany: NotebookPen,
+  import: FileUp,
+  export: FileDown,
 } satisfies Record<NavIconName, React.ComponentType<LucideProps>>;
 
 export function NavIcon({ name, ...props }: { name: NavIconName } & LucideProps) {

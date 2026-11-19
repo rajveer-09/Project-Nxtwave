@@ -23,7 +23,9 @@ export type NavIcon =
   | "changelog"
   | "shield"
   | "studentkey"
-  | "logany";
+  | "logany"
+  | "import"
+  | "export";
 
 export type NavItem = {
   href: string;
@@ -44,6 +46,8 @@ const LOGGERS: readonly Role[] = ["owner", "admin", "senior_instructor", "instru
 const PANEL: readonly Role[] = ["owner", "admin", "senior_instructor"];
 const ADMINS: readonly Role[] = ["owner", "admin"];
 const SUPER_ADMIN: readonly Role[] = ["owner"];
+/** Attendance analytics: Owners and success coaches. */
+const ATTENDANCE_ANALYTICS: readonly Role[] = ["owner", "success_coach"];
 
 /** Single source for the sidebar and for route access checks. */
 export const NAV: NavSection[] = [
@@ -67,6 +71,9 @@ export const NAV: NavSection[] = [
       { href: "/admin/student-access", label: "Student access", icon: "studentkey", roles: ADMINS },
       { href: "/admin/curriculum", label: "Curriculum", icon: "curriculum", roles: PANEL },
       { href: "/admin/messages", label: "Messages", icon: "messages", roles: ADMINS },
+      { href: "/admin/attendance-imports", label: "Attendance imports", icon: "import", roles: ADMINS },
+      { href: "/admin/attendance-export", label: "Attendance export", icon: "export", roles: ADMINS },
+      { href: "/admin/attendance-analytics", label: "Attendance analytics", icon: "analytics", roles: ATTENDANCE_ANALYTICS },
       { href: "/analytics", label: "Analytics", icon: "analytics", roles: ADMINS },
     ],
   },

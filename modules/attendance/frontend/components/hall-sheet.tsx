@@ -9,10 +9,12 @@ Date : 17 Nov 2026
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarOff } from "lucide-react";
+import { CalendarOff, Search } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/common/components/empty-state";
+import { SectionCard } from "@/common/components/section-card";
 import { Button } from "@/common/ui/button";
 import { Skeleton } from "@/common/ui/skeleton";
 import { ApiError } from "@/common/lib/api-client";
@@ -23,12 +25,52 @@ import { formatDate } from "@/common/lib/dates";
 import { cn } from "@/common/lib/utils";
 
 const control =
-  "h-10 rounded-lg border border-input bg-card px-2.5 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
+  "h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
+
+/** The three choices on every row, in the attendance dashboard's order. */
+const CHOICES: { value: Mark; label: string; on: string }[] = [
+  { value: "P", label: "Present", on: "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-emerald-950" },
+  { value: "A", label: "Absent", on: "bg-red-600 text-white dark:bg-red-500 dark:text-red-950" },
+  { value: null, label: "Not marked", on: "bg-slate-600 text-white dark:bg-slate-500 dark:text-slate-950" },
+];
+
+const CHIP: Record<"P" | "A" | "none", string> = {
+  P: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+  A: "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300",
+  none: "border-border bg-muted text-muted-foreground",
+};
+
+function MarkChip({ mark }: { mark: Mark }) {
+  return (
+    <span className={cn("inline-flex h-6 min-w-7 items-center justify-center rounded-md border px-1.5 text-xs font-bold", CHIP[mark ?? "none"])}>
+      {mark ?? "–"}
+    </span>
+  );
+}
+
+function Legend({ present, absent, unmarked }: { present: number; absent: number; unmarked: number }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5">
+        <MarkChip mark="P" /> Present <b className="font-semibold text-foreground tabular">{present}</b>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <MarkChip mark="A" /> Absent <b className="font-semibold text-foreground tabular">{absent}</b>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <MarkChip mark={null} /> Not marked <b className="font-semibold text-foreground tabular">{unmarked}</b>
+      </span>
+    </p>
+  );
+}
+
+const hallLabel = (hall: string) => hall || "No hall";
 
 /**
- * Hall attendance sheet (ported from the attendance dashboard's MarkAttendance).
- * Keyboard: ↑/↓ move between students, P / A mark and move down, Delete clears.
+ * Hall attendance sheet (the attendance dashboard's MarkAttendance, in the Student Hub theme).
+ * Pick a hall, pick a date, mark each student Present / Absent / Not marked, then save.
  * Only changed rows are sent; all of them are saved or none.
+ * Keyboard: ↑/↓ (or J/K) move between students, P / A mark and move down, Delete clears.
  * savesInHub: NxtOne saves the marks to the database itself (saveAttendanceAction); otherwise they go
  * to the attendance service (or the development sample).
  * mine: an instructor's own students and their hall. The sheet opens on that hall showing only them;
@@ -48,37 +90,40 @@ export function HallSheet({
   const queryClient = useQueryClient();
   const myIds = new Set(mine?.ids ?? []);
   const [onlyMine, setOnlyMine] = useState(!!mine && mine.ids.length > 0);
-  // null until a hall is picked; "" is the students with no hall.
-  const [hall, setHall] = useState<string | null>(null);
+  // undefined until a hall is picked; "" is the students with no hall.
+  const [hall, setHall] = useState<string | undefined>(undefined);
   const [date, setDate] = useState(today);
   const [search, setSearch] = useState("");
   const [edits, setEdits] = useState<Record<string, Mark>>({});
   const [active, setActive] = useState(0);
-  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
+  const rowRefs = useRef<(HTMLLIElement | null)[]>([]);
 
   const halls = useQuery({ queryKey: ["attendance", "halls"], queryFn: attendanceApi.halls });
+  // Instructors open on their own hall; everyone else picks one.
   const myHall = mine?.hall !== null && mine?.hall !== undefined && halls.data?.halls.some((h) => h.hall === mine.hall) ? mine.hall : undefined;
-  const selectedHall = hall ?? myHall ?? halls.data?.halls[0]?.hall ?? null;
-  const hallName = selectedHall === null ? "…" : selectedHall || "No hall";
+  const selectedHall = hall ?? myHall;
+  const hallName = selectedHall === undefined ? "" : hallLabel(selectedHall);
   const sheet = useQuery({
     queryKey: ["attendance", "sheet", date, selectedHall],
     queryFn: () => attendanceApi.sheet(date, selectedHall ?? ""),
-    enabled: selectedHall !== null,
+    enabled: selectedHall !== undefined,
   });
 
   // The students in view: an instructor's own (by default) or everyone in the hall.
   const all = sheet.data?.students ?? [];
   const minesHere = all.filter((r) => myIds.has(r.niat_id)).length;
   const base = onlyMine ? all.filter((r) => myIds.has(r.niat_id)) : all;
-  const rows = base.filter(
-    (r) => !search.trim() || r.name.toLowerCase().includes(search.trim().toLowerCase()) || r.niat_id.toLowerCase().includes(search.trim().toLowerCase()),
-  );
+  const term = search.trim().toLowerCase();
+  // Search only narrows the list; edits to students not shown are kept and saved.
+  const rows = term ? base.filter((r) => r.name.toLowerCase().includes(term) || r.niat_id.toLowerCase().includes(term)) : base;
+  const markable = rows.filter((r) => r.counted);
   const current = (r: SheetRow): Mark => (r.niat_id in edits ? edits[r.niat_id] : r.status);
-  const changed = (sheet.data?.students ?? []).filter((r) => r.niat_id in edits && edits[r.niat_id] !== r.status);
+  const changed = all.filter((r) => r.niat_id in edits && edits[r.niat_id] !== r.status);
   const dirty = changed.length > 0;
   const counted = base.filter((r) => r.counted);
   const present = counted.filter((r) => current(r) === "P").length;
   const absent = counted.filter((r) => current(r) === "A").length;
+  const allNotCounted = all.length > 0 && all.every((r) => !r.counted);
 
   // Warn before leaving with unsaved marks.
   useEffect(() => {
@@ -105,10 +150,14 @@ export function HallSheet({
   });
 
   function switchTo(next: { hall?: string; date?: string }) {
+    if (next.hall !== undefined && next.hall === selectedHall) return;
     if (dirty && !window.confirm("You have unsaved marks. Discard them?")) return;
     setEdits({});
     setActive(0);
-    if (next.hall !== undefined) setHall(next.hall);
+    if (next.hall !== undefined) {
+      setHall(next.hall);
+      setSearch("");
+    }
     if (next.date !== undefined) setDate(next.date);
   }
 
@@ -123,7 +172,7 @@ export function HallSheet({
     rowRefs.current[clamped]?.focus();
   }
 
-  function onKeyDown(event: React.KeyboardEvent<HTMLTableSectionElement>) {
+  function onKeyDown(event: React.KeyboardEvent<HTMLUListElement>) {
     const row = rows[active];
     if (!row) return;
     const key = event.key.toLowerCase();
@@ -143,32 +192,50 @@ export function HallSheet({
     }
   }
 
-  const allNotCounted = !!sheet.data && sheet.data.students.length > 0 && counted.length === 0;
-
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-2.5">
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Hall
-            <select value={selectedHall ?? ""} onChange={(e) => switchTo({ hall: e.target.value })} className={cn(control, "min-w-36")} disabled={halls.isLoading}>
-              {(halls.data?.halls ?? []).map((h) => (
-                <option key={h.hall} value={h.hall}>
-                  {h.hall || "No hall"} · {h.students}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Date
-            <input type="date" value={date} max={today} onChange={(e) => e.target.value && switchTo({ date: e.target.value })} className={control} />
-          </label>
-          {mine ? (
-            <div role="group" aria-label="Students shown" className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-              Show
-              <span className="inline-flex h-10 items-center gap-0.5 rounded-lg bg-muted p-0.5">
+    <SectionCard title="Mark attendance" description="Pick a hall, then mark each student Present or Absent for the day." bodyClassName="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Hall">
+        {halls.isLoading
+          ? Array.from({ length: 10 }, (_, i) => <Skeleton key={i} className="h-10 w-24 rounded-lg" />)
+          : (halls.data?.halls ?? []).map((h) => {
+              const on = selectedHall === h.hall;
+              return (
+                <button
+                  key={h.hall || "__none"}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => switchTo({ hall: h.hall })}
+                  className={cn(
+                    "inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                    on ? "border-primary bg-primary text-primary-foreground shadow-sm" : "border-input bg-card text-foreground hover:border-accent-border hover:bg-accent",
+                  )}
+                >
+                  {hallLabel(h.hall)}
+                  <span className={cn("text-xs font-medium tabular", on ? "text-primary-foreground/75" : "text-muted-foreground")}>{h.students}</span>
+                </button>
+              );
+            })}
+        {halls.isSuccess && halls.data.halls.length === 0 ? <p className="text-sm text-muted-foreground">No active students yet.</p> : null}
+      </div>
+      {halls.isError ? <EmptyState title="Couldn't load the halls" description={halls.error.message} /> : null}
+
+      {selectedHall === undefined ? (
+        halls.isError ? null : (
+          <p className="rounded-xl border border-dashed border-border bg-surface-subtle px-4 py-8 text-center text-sm text-muted-foreground">
+            Pick a hall above to list its students.
+          </p>
+        )
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-sm font-semibold">
+              Date
+              <input type="date" value={date} max={today} onChange={(e) => e.target.value && switchTo({ date: e.target.value })} className={control} />
+            </label>
+            {mine ? (
+              <span role="group" aria-label="Students shown" className="inline-flex h-10 items-center gap-0.5 rounded-lg bg-muted p-0.5">
                 {[
-                  [true, `My students${selectedHall !== null ? ` · ${minesHere}` : ""}`],
+                  [true, `My students · ${minesHere}`],
                   [false, "Everyone in this hall"],
                 ].map(([value, text]) => (
                   <button
@@ -188,95 +255,87 @@ export function HallSheet({
                   </button>
                 ))}
               </span>
-            </div>
+            ) : null}
+            {canMark ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10"
+                  disabled={!markable.length}
+                  onClick={() => setEdits((prev) => ({ ...prev, ...Object.fromEntries(markable.map((r) => [r.niat_id, "P" as Mark])) }))}
+                >
+                  {term ? `Mark ${markable.length} shown present` : "Mark all present"}
+                </Button>
+                <Button type="button" variant="outline" className="h-10" disabled={!dirty} onClick={() => setEdits({})}>
+                  Undo changes
+                </Button>
+                <Button type="button" className="h-10 px-5 sm:ml-auto" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+                  {save.isPending ? "Saving…" : dirty ? `Save (${changed.length})` : "Save"}
+                </Button>
+              </>
+            ) : null}
+          </div>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setActive(0);
+              }}
+              placeholder={`Search ${hallName} by name or NIAT ID`}
+              aria-label={`Search students in ${hallName}`}
+              className={cn(control, "w-full pl-9")}
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-muted-foreground">
+              {hallName}: {term ? `${rows.length} of ${base.length}` : base.length} student{base.length === 1 ? "" : "s"}
+              {onlyMine ? " of yours" : ""}
+              {term ? " match the search" : ""}. Names open in a new tab, so unsaved marks stay here.
+              {canMark ? <span className="hidden md:inline"> Keys: ↑ ↓ move · P / A mark · Delete clears.</span> : null}
+            </p>
+            <Legend present={present} absent={absent} unmarked={counted.length - present - absent} />
+          </div>
+
+          {!canMark ? (
+            <p className="rounded-lg border border-border bg-surface-subtle px-4 py-3 text-[13px] text-sidebar-foreground">
+              Read only: you can see the hall&apos;s marks here. Instructors and admins mark attendance.
+            </p>
           ) : null}
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Find in hall
-            <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or NIAT ID" className={cn(control, "w-48")} />
-          </label>
-        </div>
-        <dl className="grid grid-cols-3 gap-2.5">
-          {[
-            ["Present", present, "text-accent-strong"],
-            ["Absent", absent, "text-warning"],
-            ["Not marked", counted.length - present - absent, "text-foreground"],
-          ].map(([labelText, value, tone]) => (
-            <div key={labelText as string} className="min-w-24 rounded-xl border border-border bg-card px-3.5 py-2">
-              <dt className="text-xs font-semibold text-muted-foreground">{labelText}</dt>
-              <dd className={cn("font-heading text-2xl font-semibold tabular", tone as string)}>{value}</dd>
+          {onlyMine && sheet.data && minesHere === 0 ? (
+            <p className="rounded-lg border border-border bg-surface-subtle px-4 py-3 text-[13px] text-sidebar-foreground">
+              None of your students are in {hallName}. Switch to &quot;Everyone in this hall&quot; to mark this hall
+              {myHall !== undefined && myHall !== selectedHall ? `, or pick ${hallLabel(myHall)}` : ""}.
+            </p>
+          ) : null}
+
+          {sheet.isLoading ? (
+            <div className="flex flex-col gap-2" aria-busy="true">
+              {Array.from({ length: 8 }, (_, i) => (
+                <Skeleton key={i} className="h-16 rounded-lg" />
+              ))}
             </div>
-          ))}
-        </dl>
-      </div>
-
-      {!canMark ? (
-        <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
-          Read only: you can see the hall&apos;s marks here. Instructors and admins mark attendance.
-        </p>
-      ) : null}
-      {onlyMine && sheet.data && minesHere === 0 ? (
-        <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
-          None of your students are in {hallName}. Switch to &quot;Everyone in this hall&quot; to mark this hall
-          {myHall !== undefined && myHall !== selectedHall ? `, or pick ${myHall || "No hall"}` : ""}.
-        </p>
-      ) : null}
-
-      <section aria-label={`${hallName} attendance sheet`} className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold">
-            {hallName} · {formatDate(date)} · {onlyMine ? `${base.length} of your students` : `${all.length} students`}
-          </span>
-          {canMark ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="hidden text-xs text-muted-foreground md:inline">Keys: ↑ ↓ move · P / A mark · Delete clear</span>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10"
-                disabled={!counted.some((r) => current(r) === null)}
-                onClick={() => setEdits((prev) => ({ ...prev, ...Object.fromEntries(counted.filter((r) => current(r) === null).map((r) => [r.niat_id, "P"])) }))}
+          ) : sheet.isError ? (
+            <EmptyState title="Couldn't load the sheet" description={sheet.error.message} />
+          ) : allNotCounted ? (
+            <EmptyState icon={CalendarOff} title={`${formatDate(date)} doesn't count for attendance`} description={all[0]?.reason} />
+          ) : (
+            <>
+              <ul
+                aria-label={`Attendance for ${hallName}. Use the arrow keys to move between students and P or A to mark.`}
+                onKeyDown={onKeyDown}
+                className="divide-y divide-border overflow-hidden rounded-xl border border-border"
               >
-                Mark the rest present
-              </Button>
-              <Button type="button" className="h-10 px-4" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
-                {save.isPending ? "Saving…" : dirty ? `Save ${changed.length} change${changed.length === 1 ? "" : "s"}` : "Saved"}
-              </Button>
-            </div>
-          ) : null}
-        </div>
-
-        {sheet.isLoading || halls.isLoading ? (
-          <div className="flex flex-col gap-2 p-4" aria-busy="true">
-            {Array.from({ length: 8 }, (_, i) => (
-              <Skeleton key={i} className="h-11" />
-            ))}
-          </div>
-        ) : sheet.isError || halls.isError ? (
-          <div className="p-4">
-            <EmptyState title="Couldn't load the sheet" description={(sheet.error ?? halls.error)?.message} />
-          </div>
-        ) : allNotCounted ? (
-          <div className="p-4">
-            <EmptyState icon={CalendarOff} title={`${formatDate(date)} doesn't count for attendance`} description={sheet.data?.students[0]?.reason} />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-[13px]">
-              <caption className="sr-only">Attendance for {hallName}. Use the arrow keys to move between students and P or A to mark.</caption>
-              <thead>
-                <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
-                  <th scope="col" className="border-b border-border py-2.5 pr-3 pl-4">Student</th>
-                  <th scope="col" className="border-b border-border px-3 py-2.5">College · Section</th>
-                  <th scope="col" className="border-b border-border px-3 py-2.5">Note</th>
-                  <th scope="col" className="border-b border-border py-2.5 pr-4 pl-3">Mark</th>
-                </tr>
-              </thead>
-              <tbody onKeyDown={onKeyDown}>
                 {rows.map((row, i) => {
                   const mark = current(row);
                   const edited = row.niat_id in edits && edits[row.niat_id] !== row.status;
                   return (
-                    <tr
+                    <li
                       key={row.niat_id}
                       ref={(el) => {
                         rowRefs.current[i] = el;
@@ -284,50 +343,60 @@ export function HallSheet({
                       tabIndex={i === active ? 0 : -1}
                       onFocus={() => setActive(i)}
                       aria-label={`${row.name}, ${mark === "P" ? "present" : mark === "A" ? "absent" : "not marked"}${row.counted ? "" : `, can't be marked: ${row.reason}`}`}
-                      className={cn("outline-none focus-visible:bg-accent", edited && "bg-[#FFFBF5] dark:bg-[#1F1A14]", !row.counted && "text-muted-foreground")}
+                      className={cn(
+                        "flex flex-col gap-2 px-4 py-3 outline-none transition-colors focus-visible:bg-accent sm:flex-row sm:items-center",
+                        edited ? "bg-warning-soft/60" : "hover:bg-surface-subtle",
+                      )}
                     >
-                      <td className="border-b border-muted py-2 pr-3 pl-4">
-                        <span className="font-semibold text-foreground">{row.name}</span>
-                        <div className="text-xs text-muted-foreground tabular">{row.niat_id}</div>
-                      </td>
-                      <td className="border-b border-muted px-3 py-2 text-sidebar-foreground">
-                        {row.degree} · {row.section}
-                      </td>
-                      <td className="border-b border-muted px-3 py-2 text-xs">
-                        {!row.counted ? row.reason : edited ? <span className="font-semibold text-warning">Unsaved</span> : null}
-                      </td>
-                      <td className="border-b border-muted py-1.5 pr-4 pl-3">
-                        <div role="group" aria-label={`Mark ${row.name}`} className="inline-flex overflow-hidden rounded-lg border border-input">
-                          <button
-                            type="button"
-                            tabIndex={-1}
-                            aria-pressed={mark === "P"}
-                            disabled={!canMark || !row.counted}
-                            onClick={() => setMark(row, mark === "P" ? null : "P")}
-                            className={cn("min-h-10 min-w-12 font-bold disabled:cursor-not-allowed", mark === "P" ? "bg-primary text-primary-foreground" : "bg-card text-sidebar-foreground hover:bg-muted")}
-                          >
-                            P
-                          </button>
-                          <button
-                            type="button"
-                            tabIndex={-1}
-                            aria-pressed={mark === "A"}
-                            disabled={!canMark || !row.counted}
-                            onClick={() => setMark(row, mark === "A" ? null : "A")}
-                            className={cn("min-h-10 min-w-12 border-l border-input font-bold disabled:cursor-not-allowed", mark === "A" ? "bg-[#C2560F] text-white" : "bg-card text-sidebar-foreground hover:bg-muted")}
-                          >
-                            A
-                          </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Link href={`/students/${row.niat_id}`} target="_blank" tabIndex={-1} className="truncate text-[15px] font-semibold text-foreground hover:text-primary hover:underline">
+                            {row.name}
+                          </Link>
+                          {edited ? <span className="rounded-full border border-warning-border px-2 py-px text-[11px] font-semibold text-warning">Unsaved</span> : null}
                         </div>
-                      </td>
-                    </tr>
+                        <div className="font-mono text-xs text-muted-foreground">
+                          {row.niat_id} · {row.degree} · {row.section}
+                        </div>
+                      </div>
+                      {row.counted ? (
+                        <div role="group" aria-label={`Attendance for ${row.name}`} className="inline-flex self-start overflow-hidden rounded-lg border border-input sm:self-auto">
+                          {CHOICES.map((c) => {
+                            const on = mark === c.value;
+                            return (
+                              <button
+                                key={c.label}
+                                type="button"
+                                tabIndex={-1}
+                                aria-pressed={on}
+                                disabled={!canMark}
+                                onClick={() => setMark(row, c.value)}
+                                className={cn(
+                                  "min-h-10 border-l border-input px-4 text-[13px] font-semibold transition-colors first:border-l-0 disabled:cursor-not-allowed",
+                                  on ? c.on : "bg-card text-sidebar-foreground hover:bg-muted disabled:hover:bg-card",
+                                )}
+                              >
+                                {c.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">{row.reason}</span>
+                      )}
+                    </li>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
+              </ul>
+              {term && rows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No student in {hallName} matches “{search.trim()}”.
+                </p>
+              ) : null}
+            </>
+          )}
+        </>
+      )}
+    </SectionCard>
   );
 }

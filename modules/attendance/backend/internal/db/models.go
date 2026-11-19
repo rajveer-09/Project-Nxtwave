@@ -27,6 +27,7 @@ type Attendance struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	UpdatedBy pgtype.Int8        `json:"updated_by"`
 	Category  pgtype.Text        `json:"category"`
+	MarkedBy  pgtype.Text        `json:"marked_by"`
 }
 
 type CalendarDay struct {
@@ -114,6 +115,7 @@ type Student struct {
 	DroppedOn  pgtype.Date        `json:"dropped_on"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	SheetOrder pgtype.Int4        `json:"sheet_order"`
 }
 
 type StudentPeriod struct {
