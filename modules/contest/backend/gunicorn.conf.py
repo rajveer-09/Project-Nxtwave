@@ -47,4 +47,10 @@ logconfig_dict = {
     "handlers": {"stdout": {"class": "logging.StreamHandler", "formatter": "plain", "filters": ["rid"],
                             "stream": "ext://sys.stdout"}},
     "root": {"level": "INFO", "handlers": ["stdout"]},
+    # Gunicorn merges this dict into its defaults one level deep, so its own loggers must be
+    # listed here: the defaults point them at handlers this "handlers" key replaces.
+    "loggers": {
+        "gunicorn.error": {"level": "INFO", "handlers": ["stdout"], "propagate": False},
+        "gunicorn.access": {"level": "INFO", "handlers": ["stdout"], "propagate": False},
+    },
 }
