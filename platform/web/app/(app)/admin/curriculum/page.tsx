@@ -6,6 +6,7 @@ Date : 17 Nov 2026
 
 */
 
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { usingSampleData } from "@/common/data/roster";
@@ -24,6 +25,12 @@ async function Content() {
   return <CurriculumAdmin structure={structure} questions={questions} queue={queue} />;
 }
 
+/** Read when the page is opened, not at build time. */
+async function SamplePill() {
+  await connection();
+  return usingSampleData() ? <StatusPill>Sample data</StatusPill> : null;
+}
+
 export default function CurriculumPage() {
   return (
     <>
@@ -31,7 +38,11 @@ export default function CurriculumPage() {
         eyebrow="Admin panel"
         title="Curriculum & question bank"
         description="The roadmap instructors follow when they log interactions: levels, topics, subtopics, steps and questions. Changes apply to new interactions; past logs keep what was asked."
-        actions={usingSampleData() ? <StatusPill>Sample data</StatusPill> : null}
+        actions={
+          <Suspense fallback={null}>
+            <SamplePill />
+          </Suspense>
+        }
       />
       <Suspense fallback={<Skeleton className="h-[560px] rounded-xl" />}>
         <Content />

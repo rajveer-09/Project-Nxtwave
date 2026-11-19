@@ -7,6 +7,7 @@ Date : 17 Nov 2026
 */
 
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { BarList } from "@/common/components/bar-list";
 import { StatusPill } from "@/common/components/chips";
@@ -25,7 +26,12 @@ import { collegePerformance, contestPerformance, type ContestRow } from "@nxtone
 
 export const metadata = { title: "Contests" };
 
-const connected = !!(process.env.CONTEST_API_ORIGIN && process.env.CONTEST_JWT_SECRET);
+/** Read when the page is opened, not at build time (the one-container image sets the origin at start). */
+async function ServicePill() {
+  await connection();
+  if (process.env.CONTEST_API_ORIGIN && process.env.CONTEST_JWT_SECRET) return null;
+  return <StatusPill>Sample contest service · NxtRank not connected</StatusPill>;
+}
 const fmt = (n: number) => n.toLocaleString("en-IN");
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part * 100) / whole)}%` : "—");
 const shortTitle = (t: string) => t.replace(/^(Weekly|Biweekly) Contest /, "$1 ");
@@ -190,7 +196,11 @@ export default function ContestsPage({ searchParams }: PageProps<"/contests">) {
       <PageHeader
         eyebrow="LeetCode contests · scanned automatically"
         title="Contests"
-        actions={connected ? null : <StatusPill>Sample contest service · NxtRank not connected</StatusPill>}
+        actions={
+          <Suspense fallback={null}>
+            <ServicePill />
+          </Suspense>
+        }
       />
       <Suspense fallback={<Skeleton className="h-[480px] rounded-xl" />}>
         <Content searchParams={searchParams} />

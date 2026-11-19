@@ -7,6 +7,8 @@ Date : 18 Nov 2026
 */
 
 import { ChartNoAxesCombined, ShieldCheck, Sparkles } from "lucide-react";
+import { connection } from "next/server";
+import { Suspense } from "react";
 import { Brand } from "@/common/components/brand";
 import { ThemeToggle } from "@/common/components/theme";
 import { authMode, devSessionAllowed } from "@/common/auth/config";
@@ -21,11 +23,24 @@ const POINTS = [
 ];
 
 /**
+ * The form reads the server's settings when the page is opened, not when it is built: a build
+ * without settings (e.g. a Docker image) would otherwise ship the form switched off for good.
+ */
+async function SignInForm() {
+  await connection();
+  return (
+    <>
+      <PasswordForm enabled={authMode() === "database"} />
+      {devSessionAllowed() ? <DevRolePicker /> : null}
+    </>
+  );
+}
+
+/**
  * Landing + sign-in. A Student / Staff choice, then NIAT ID or work email and password. First-time
  * sign-ins use the default first password and choose their own next. Static apart from the form.
  */
 export default function LoginPage() {
-  const database = authMode() === "database";
   return (
     <div className="flex min-h-app flex-col bg-background lg:flex-row">
       {/* ---- Left: what NxtOne is */}
@@ -73,8 +88,9 @@ export default function LoginPage() {
             <p className="text-[15px] text-muted-foreground">Students sign in with their NIAT ID, staff with their work email.</p>
           </div>
 
-          <PasswordForm enabled={database} />
-          {devSessionAllowed() ? <DevRolePicker /> : null}
+          <Suspense fallback={<PasswordForm enabled={false} />}>
+            <SignInForm />
+          </Suspense>
 
           <p className="text-center text-xs text-muted-foreground">Trouble signing in? Staff: ask your admin. Students: ask your instructor.</p>
         </div>
