@@ -15,6 +15,8 @@ const repoRoot = join(__dirname, "..", "..");
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
+  // Docker image (platform/web/Dockerfile) builds a self-contained server; Vercel and local builds don't.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   // Each module's screens are a workspace package (modules/<module>/frontend), compiled with the app.
   transpilePackages: ["@nxtone/attendance-ui", "@nxtone/contest-ui", "@nxtone/interactions-ui"],
   outputFileTracingRoot: repoRoot,

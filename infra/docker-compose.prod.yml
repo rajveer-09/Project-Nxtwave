@@ -1,0 +1,92 @@
+#
+# Author : Rajveer Sharma
+# Date : 19 Nov 2026
+# @ Nxtwave
+#
+# Production on one server: the web app and the module APIs, all against the combined Neon
+# database (no local Postgres). For local development use docker-compose.yml instead.
+#
+# 1. Settings: one env file per service in infra/prod/ (git-ignored, never commit them):
+#      infra/prod/web.env           from platform/web/.env.example
+#      infra/prod/interactions.env  from modules/interactions/backend/.env.example
+#      infra/prod/contest.env       from modules/contest/backend/.env.example
+#      infra/prod/attendance.env    from modules/attendance/backend/.env.example (only with --profile attendance)
+#    The web app reaches the APIs inside this network, so web.env's *_API_ORIGIN values are set
+#    below; each *_JWT_SECRET in web.env must equal that service's IDENTITY_JWT_SECRET.
+# 2. Database migrations: apply new files in platform/db/core/migrations as the owner role first.
+# 3. From the repo root:
+#      docker compose -f infra/docker-compose.prod.yml up -d --build
+#      docker compose -f infra/docker-compose.prod.yml --profile worker up -d --build      ...plus the LeetCode scan worker
+#      docker compose -f infra/docker-compose.prod.yml --profile attendance up -d --build  ...plus the attendance API
+# Only the web app is published (:3000); put HTTPS (a reverse proxy or load balancer) in front of it.
+
+name: nxtone
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: platform/web/Dockerfile
+    env_file: prod/web.env
+    environment:
+      INTERACTIONS_API_ORIGIN: http://interactions-api:8090
+      CONTEST_API_ORIGIN: http://contest-api:8000
+    depends_on:
+      interactions-api:
+        condition: service_healthy
+      contest-api:
+        condition: service_healthy
+    ports: ["3000:3000"]
+    restart: unless-stopped
+
+  interactions-api:
+    build: ../modules/interactions/backend
+    env_file: prod/interactions.env
+    environment:
+      PORT: "8090"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  contest-api:
+    build: ../modules/contest/backend
+    env_file: prod/contest.env
+    environment:
+      APP_ENV: production
+      FORWARDED_ALLOW_IPS: "*"
+    # Google roster sheet key, if GOOGLE_APPLICATION_CREDENTIALS is set to /secrets/google.json:
+    # volumes:
+    #   - ./prod/contest-google.json:/secrets/google.json:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  # Scans LeetCode. Exactly one replica, ever.
+  contest-worker:
+    build: ../modules/contest/backend
+    profiles: ["worker"]
+    command: ["python", "-m", "app.cli", "worker"]
+    env_file: prod/contest.env
+    environment:
+      APP_ENV: production
+    depends_on:
+      contest-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # The web app reads attendance straight from the database until this API verifies identity
+  # tokens; then add ATTENDANCE_API_ORIGIN: http://attendance-api:8080 to the web service.
+  attendance-api:
+    build: ../modules/attendance/backend
+    profiles: ["attendance"]
+    env_file: prod/attendance.env
+    environment:
+      APP_ENV: production
+      PORT: "8080"
+    restart: unless-stopped

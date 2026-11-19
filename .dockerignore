@@ -1,0 +1,50 @@
+#
+# Author : Rajveer Sharma
+# Date : 19 Nov 2026
+# @ Nxtwave
+#
+# Build context for the root Dockerfile (everything in one container) and platform/web/Dockerfile.
+# Each module backend's own Dockerfile builds from its folder with its own .dockerignore.
+
+# Secrets and personal data never enter an image
+**/.env
+**/.env.*
+!**/.env.example
+infra/prod/
+platform/db/migration/out/
+**/*.csv
+**/*.xlsx
+**/*.xls
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/*.dump
+**/*.pem
+**/*.key
+**/credentials/
+**/*service-account*.json
+
+# Installed and built output (rebuilt inside the image)
+**/node_modules
+**/.next
+**/dist
+**/*.tsbuildinfo
+coverage/
+.lighthouseci/
+**/.venv
+**/__pycache__
+**/*.egg-info
+modules/contest/backend/data/
+modules/contest/backend/results/
+
+# Not part of any image
+.git/
+.github/
+.claude/
+.vscode/
+.idea/
+infra/*
+!infra/container/
+modules/attendance/backend/
+**/*.log
+**/*.md
