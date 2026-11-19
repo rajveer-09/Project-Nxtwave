@@ -12,26 +12,36 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { PageHeader } from "@/common/components/page-header";
 import { cn } from "@/common/lib/utils";
+import { ExportView } from "./export-view";
 import { ImportAttendance } from "./import-attendance";
 import { ImportCalendar } from "./import-calendar";
 import { ImportStudents } from "./import-students";
 
-type Tab = "students" | "attendance" | "calendar";
+type Tab = "students" | "attendance" | "calendar" | "export";
 const TABS: { id: Tab; label: string }[] = [
   { id: "students", label: "Import students" },
   { id: "attendance", label: "Import attendance" },
   { id: "calendar", label: "Import calendar" },
+  { id: "export", label: "Export" },
 ];
+const isTab = (v: string | null): v is Tab => TABS.some((t) => t.id === v);
 
-/** Attendance imports in the Admin panel. All three cards stay mounted, so switching tabs keeps an open preview. */
+/**
+ * Attendance data in the Admin panel: the three imports plus the export, one page.
+ * All panels stay mounted, so switching tabs keeps an open preview.
+ */
 export function ImportsView() {
   const params = useSearchParams();
   const initial = params.get("tab");
-  const [tab, setTab] = useState<Tab>(initial === "attendance" || initial === "calendar" ? initial : "students");
+  const [tab, setTab] = useState<Tab>(isTab(initial) ? initial : "students");
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader eyebrow="Admin panel" title="Attendance imports" description="Upload a .xlsx or .csv sheet, check the preview, then confirm. Nothing is saved before you confirm." />
-      <div className="inline-flex self-start rounded-lg bg-muted p-0.5" role="tablist" aria-label="Import type">
+      <PageHeader
+        eyebrow="Admin panel"
+        title="Attendance data"
+        description="Bring sheets in or take attendance out. Imports show a preview first; nothing is saved before you confirm."
+      />
+      <div className="inline-flex max-w-full flex-wrap self-start rounded-lg bg-muted p-0.5" role="tablist" aria-label="Import or export">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -55,6 +65,9 @@ export function ImportsView() {
       </div>
       <div role="tabpanel" id="import-panel-calendar" aria-labelledby="import-tab-calendar" hidden={tab !== "calendar"}>
         <ImportCalendar />
+      </div>
+      <div role="tabpanel" id="import-panel-export" aria-labelledby="import-tab-export" hidden={tab !== "export"}>
+        <ExportView embedded />
       </div>
     </div>
   );

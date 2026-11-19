@@ -6,25 +6,9 @@ Date : 19 Nov 2026
 
 */
 
-import { connection } from "next/server";
-import { Suspense } from "react";
-import { Skeleton } from "@/common/ui/skeleton";
-import { requireAccess } from "@/common/auth/guard";
-import { ImportsView } from "@nxtone/attendance-ui/components/imports-view";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Attendance imports" };
-
-async function Content() {
-  await connection();
-  // Owners and admins (nav.ts), as in the attendance dashboard; the service checks it again.
-  await requireAccess("/admin/attendance-imports");
-  return <ImportsView />;
-}
-
+/** Imports now live on the Attendance data page; keep old links working. */
 export default function AttendanceImportsPage() {
-  return (
-    <Suspense fallback={<Skeleton className="h-[520px] rounded-xl" />}>
-      <Content />
-    </Suspense>
-  );
+  redirect("/admin/attendance-data");
 }

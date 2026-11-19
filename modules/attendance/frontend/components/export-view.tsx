@@ -46,7 +46,8 @@ function valueTone(v: string) {
 /** Tab-separated values only (no IDs or names), one line per student. */
 const valuesTSV = (deg: ExportDegree) => deg.rows.map((r) => r.values.join("\t")).join("\n");
 
-export function ExportView() {
+/** `embedded` drops the page header when the view sits inside the Attendance data tabs. */
+export function ExportView({ embedded = false }: { embedded?: boolean } = {}) {
   // Blank means "today" (IST, decided by the service).
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -85,18 +86,23 @@ export function ExportView() {
   const span = data ? (data.from === data.to ? formatDate(data.from) : `${formatDate(data.from)} – ${formatDate(data.to)}`) : "";
   const unmarked = data?.degrees.reduce((n, d) => n + d.unmarked, 0) ?? 0;
 
+  const downloadButton = (
+    <Button className="h-10 px-4" onClick={download} disabled={!data || busy}>
+      <FileSpreadsheet className="size-4" /> {busy ? "Preparing…" : "Download Excel"}
+    </Button>
+  );
+  const blurb = "Download or copy the saved attendance, in your master sheet's row order, as a backup.";
+
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Admin panel"
-        title="Attendance export"
-        description="Download or copy the saved attendance, in your master sheet's row order, as a backup."
-        actions={
-          <Button className="h-10 px-4" onClick={download} disabled={!data || busy}>
-            <FileSpreadsheet className="size-4" /> {busy ? "Preparing…" : "Download Excel"}
-          </Button>
-        }
-      />
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">{blurb}</p>
+          {downloadButton}
+        </div>
+      ) : (
+        <PageHeader eyebrow="Admin panel" title="Attendance export" description={blurb} actions={downloadButton} />
+      )}
 
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4" aria-label="Dates to export">
         <div className="flex flex-wrap items-end gap-2">
