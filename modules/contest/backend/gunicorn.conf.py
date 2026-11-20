@@ -22,6 +22,10 @@ worker_class = "uvicorn_worker.UvicornWorker"  # uses uvloop + httptools when in
 # Each worker opens its own connection pool after forking; never share one across forks.
 preload_app = False
 
+# No gunicornc control socket (Gunicorn 25.1+): unused, and it needs a writable $HOME, which the
+# container's user doesn't have ("Control server error: Permission denied"). Older versions ignore it.
+control_socket_disable = True
+
 timeout = 60            # a worker stuck this long is killed and replaced
 graceful_timeout = 20   # finish in-flight requests on reload/stop
 keepalive = 5           # the web app's proxy reuses upstream connections
