@@ -1,0 +1,88 @@
+#
+# Author : Rajveer Sharma
+# Date : 21 Nov 2026
+# @ Nxtwave
+#
+# Render Blueprint for the backend: the interactions API and the contest API, each its own web
+# service in Singapore (next to the Supabase database and the Vercel web app in sin1).
+# The web app (platform/web) is deployed on Vercel; it calls these services server-to-server with
+# signed identity tokens, so they need no CORS and accept nothing without a valid token.
+#
+# Render → New → Blueprint → this repository and branch. Render asks for every `sync: false`
+# value once (never commit them):
+#   interactions  DATABASE_URL         interactions_svc on the Supabase pooler (:6543), with
+#                                      ?uselibpqcompat=true&sslmode=require
+#                 IDENTITY_JWT_SECRET  = INTERACTIONS_JWT_SECRET on Vercel
+#   contest       DATABASE_URL         contest_svc on the Supabase pooler (:6543), with ?sslmode=require
+#                 IDENTITY_JWT_SECRET  = CONTEST_JWT_SECRET on Vercel
+#                 SECRET_KEY           signs the contest API's own session cookies
+# Then set INTERACTIONS_API_ORIGIN and CONTEST_API_ORIGIN on Vercel to the two https URLs Render shows.
+#
+# Use a paid plan: a free service sleeps when idle, and its first request after that takes longer
+# than the web app waits (30 s).
+
+services:
+  - type: web
+    name: nxtone-interactions-api
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerContext: ./modules/interactions/backend
+    dockerfilePath: ./modules/interactions/backend/Dockerfile
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - modules/interactions/backend/**
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: IDENTITY_JWT_SECRET
+        sync: false
+      - key: MIGRATE_ON_START
+        value: "true"
+
+  - type: web
+    name: nxtone-contest-api
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerContext: ./modules/contest/backend
+    dockerfilePath: ./modules/contest/backend/Dockerfile
+    healthCheckPath: /api/health
+    buildFilter:
+      paths:
+        - modules/contest/backend/**
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: IDENTITY_JWT_SECRET
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: APP_ENV
+        value: production
+      - key: COOKIE_SECURE
+        value: "true"
+      # Only Render's proxy reaches the container, so its X-Forwarded-* headers are trusted.
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      # Gunicorn workers; each holds a small connection pool. Two fit the starter plan's memory.
+      - key: WEB_CONCURRENCY
+        value: "2"
+
+  # The LeetCode scan worker: exactly one copy, ever. Uncomment to run it (a paid background worker).
+  # - type: worker
+  #   name: nxtone-contest-worker
+  #   runtime: docker
+  #   region: singapore
+  #   plan: starter
+  #   dockerContext: ./modules/contest/backend
+  #   dockerfilePath: ./modules/contest/backend/Dockerfile
+  #   dockerCommand: python -m app.cli worker
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       sync: false
+  #     - key: SECRET_KEY
+  #       sync: false
+  #     - key: APP_ENV
+  #       value: production
