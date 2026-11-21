@@ -32,9 +32,10 @@ def make_engine(database_url: str) -> Engine:
 
         return engine
     connect_args = {}
-    if url.host and "-pooler" in url.host:
-        # Neon's pooled endpoint runs PgBouncer in transaction mode: don't rely on
-        # server-side prepared statements surviving between transactions.
+    if url.host and ("-pooler" in url.host or ".pooler." in url.host or url.port == 6543):
+        # Pooled endpoints run in transaction mode (Neon's PgBouncer "-pooler" hosts, Supabase's
+        # Supavisor "*.pooler.supabase.com" / port 6543): don't rely on server-side prepared
+        # statements surviving between transactions.
         connect_args["prepare_threshold"] = None
     # small warm pool per process; pre_ping avoids errors after the database restarts or idles
     # orjson parses JSON columns several times faster than the standard library

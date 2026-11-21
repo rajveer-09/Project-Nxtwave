@@ -5,7 +5,8 @@
 # @ Nxtwave
 #
 # One image for both processes:
-#   API:    the default command (migrate, then Gunicorn on :8000)
+#   API:    the default command (migrate, then Gunicorn on $BIND, else 0.0.0.0:$PORT, else :8000;
+#           hosts such as Render set PORT)
 #   worker: python -m app.cli worker   (exactly one replica)
 
 FROM python:3.12-slim
@@ -14,8 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     TZ=Asia/Kolkata \
-    APP_ENV=production \
-    BIND=0.0.0.0:8000
+    APP_ENV=production
 
 WORKDIR /srv/contest
 
@@ -28,4 +28,4 @@ RUN pip install --no-cache-dir -e ".[prod]" \
 
 USER contest
 EXPOSE 8000
-CMD ["sh", "-c", "python -m app.cli init-db && exec gunicorn -c gunicorn.conf.py 'app.api.app:create_app()'"]
+CMD ["sh", "-c", "export BIND=\"${BIND:-0.0.0.0:${PORT:-8000}}\" && python -m app.cli init-db && exec gunicorn -c gunicorn.conf.py 'app.api.app:create_app()'"]

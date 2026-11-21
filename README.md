@@ -218,6 +218,18 @@ Every change to who teaches or coaches a student, to a student's class (college,
 - Deploy the web app and the services in Singapore, next to the database (`platform/web/vercel.json` pins `sin1`). Most of a cold database read is the network round trip, not the query.
 - Real users' Core Web Vitals are logged as JSON lines by `/api/vitals`. CI runs Lighthouse on the sign-in page and fails if it gets slower than the budget in `platform/web/lighthouserc.json`.
 
+## Deploy
+
+Everything runs in Singapore, next to the database.
+
+| Part | Where | Settings |
+|---|---|---|
+| Database | Supabase (Postgres) | Apps connect through the transaction pooler (`aws-0-ap-southeast-1.pooler.supabase.com:6543`) as their own service roles |
+| Web app | Vercel, Root Directory `platform/web` (`vercel.json`: `sin1`, installs the workspace from the repo root) | `WEB_DATABASE_URL`, `APP_BASE_URL`, `GOOGLE_ALLOWED_DOMAIN`, `INTERACTIONS_API_ORIGIN` + `INTERACTIONS_JWT_SECRET`, `CONTEST_API_ORIGIN` + `CONTEST_JWT_SECRET` |
+| Interactions API, contest API | Render, from the Blueprint `render.yaml` (one Docker web service each) | Listed at the top of `render.yaml` |
+
+Each `*_JWT_SECRET` on Vercel equals that service's `IDENTITY_JWT_SECRET` on Render. Node connections to the pooler need `?uselibpqcompat=true&sslmode=require`; the contest API's need `?sslmode=require`. The root `Dockerfile` still runs all three in one container, for a single-host deploy.
+
 ## Branches
 
 - `master`: production
