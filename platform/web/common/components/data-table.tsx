@@ -101,7 +101,14 @@ export function DataTable<TData, TValue>({
           {table.getRowModel().rows.map((row) => (
             <tr key={row.id} className="hover:bg-surface-subtle">
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className={cn("border-b border-muted px-3 py-3 align-middle first:pl-5 last:pr-5")}>
+                <td
+                  key={cell.id}
+                  className={cn(
+                    "border-b border-muted px-3 py-3 align-middle first:pl-5 last:pr-5",
+                    // Optional per-column cell classes: columnDef.meta = { cellClassName: "..." }.
+                    (cell.column.columnDef.meta as { cellClassName?: string } | undefined)?.cellClassName,
+                  )}
+                >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}

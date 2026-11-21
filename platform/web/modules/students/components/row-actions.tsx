@@ -10,7 +10,7 @@ Date : 18 Nov 2026
 
 import { History, NotebookPen } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { EmptyState } from "@/common/components/empty-state";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/common/ui/dialog";
 import { Skeleton } from "@/common/ui/skeleton";
@@ -31,6 +31,26 @@ const TONE: Record<string, string> = { Cleared: "text-accent-strong", "Needs rev
  */
 const label = "hidden @[78rem]:inline";
 
+/**
+ * A row button with its name as a tooltip, shown only while the button is icon-only:
+ * when its text is on screen the tooltip would just repeat it.
+ */
+function NamedButton({ name, icon, render }: { name: string; icon: React.ReactNode; render: React.ReactElement }) {
+  const [open, setOpen] = useState(false);
+  const text = useRef<HTMLSpanElement>(null);
+  return (
+    <Tooltip open={open} onOpenChange={(next) => setOpen(next && !!text.current && getComputedStyle(text.current).display === "none")}>
+      <TooltipTrigger render={render}>
+        {icon}
+        <span ref={text} className={label}>
+          {name}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{name}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** History (interactions so far, in a pop-up) and Log interaction, at the end of a Students row. */
 export function StudentRowActions({ niatId, name, logHref }: { niatId: string; name: string; logHref: string | null }) {
   const [open, setOpen] = useState(false);
@@ -50,27 +70,17 @@ export function StudentRowActions({ niatId, name, logHref }: { niatId: string; n
 
   return (
     <div className="flex items-center justify-end gap-1.5">
-      <Tooltip>
-        <TooltipTrigger
-          render={<button type="button" className={button} onClick={show} aria-label={`Interaction history of ${name}`} />}
-        >
-          <History aria-hidden="true" className="size-3.5" />
-          <span className={label}>History</span>
-        </TooltipTrigger>
-        <TooltipContent>History</TooltipContent>
-      </Tooltip>
+      <NamedButton
+        name="History"
+        icon={<History aria-hidden="true" className="size-3.5" />}
+        render={<button type="button" className={button} onClick={show} aria-label={`Interaction history of ${name}`} />}
+      />
       {logHref ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Link href={logHref} className={cn(button, "border-primary/40 text-primary")} aria-label={`Log an interaction for ${name}`} />
-            }
-          >
-            <NotebookPen aria-hidden="true" className="size-3.5" />
-            <span className={label}>Log interaction</span>
-          </TooltipTrigger>
-          <TooltipContent>Log interaction</TooltipContent>
-        </Tooltip>
+        <NamedButton
+          name="Log interaction"
+          icon={<NotebookPen aria-hidden="true" className="size-3.5" />}
+          render={<Link href={logHref} className={cn(button, "border-primary/40 text-primary")} aria-label={`Log an interaction for ${name}`} />}
+        />
       ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[85vh] gap-4 overflow-y-auto p-6 sm:max-w-2xl">

@@ -10,7 +10,7 @@ Date : 14 Nov 2026
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { IntentLink } from "@/common/components/intent-link";
-import { FlagChip } from "@/common/components/chips";
+import { FlagLegend, StudentFlags } from "@/common/components/student-flags";
 import { DataTable } from "@/common/components/data-table";
 import type { AtRiskStudent } from "@/modules/home/sample-data";
 import { cn } from "@/common/lib/utils";
@@ -70,15 +70,15 @@ const columns: ColumnDef<AtRiskStudent>[] = [
   },
   {
     id: "flags",
-    header: "Why flagged",
-    enableSorting: false,
-    cell: ({ row }) => (
-      <div className="flex flex-wrap gap-1.5">
-        {row.original.flags.map((flag) => (
-          <FlagChip key={flag}>{flag}</FlagChip>
-        ))}
-      </div>
+    header: () => (
+      <span className="inline-flex items-center gap-1">
+        Why flagged <FlagLegend />
+      </span>
     ),
+    enableSorting: false,
+    // The whole cell is the flags' hover/click target (StudentFlags fills it; padding matches the last column's).
+    meta: { cellClassName: "relative" },
+    cell: ({ row }) => <StudentFlags flags={row.original.flags} name={row.original.name} className="pr-5 pl-3" />,
   },
 ];
 

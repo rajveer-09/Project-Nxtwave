@@ -14,7 +14,7 @@ import { TAGS } from "@/common/data/cache";
 import type { BarListItem } from "@/common/components/bar-list";
 import { getRoster, usingSampleData } from "@/common/data/roster";
 import { getDb } from "@/common/db/pool";
-import { FLAG_LABEL, RISK_THRESHOLDS } from "@/common/domain/risk";
+import { flagsWithDetail, RISK_THRESHOLDS } from "@/common/domain/risk";
 import { STANDINGS, type Standing } from "@/common/domain/standing";
 import type { RosterStudent } from "@/common/sample-data/roster";
 import { formatDate, todayIst } from "@/common/lib/dates";
@@ -244,7 +244,7 @@ async function loadHomeData(): Promise<HomeData> {
     attendance30d: s.attendance30d,
     lastInteractionDays: s.lastInteractionDays,
     contestsAttended: s.contestsAttended,
-    flags: s.flags.map((f) => (f === "contests" ? `Missed ${s.risk.contestAbsentStreak} contests` : f === "level" ? `L${s.level} for ${s.risk.weeksAtLevel} weeks` : FLAG_LABEL[f])),
+    flags: flagsWithDetail(s.flags, s.risk),
   }));
 
   // ---- distributions
