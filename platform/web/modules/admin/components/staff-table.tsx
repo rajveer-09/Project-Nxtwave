@@ -16,8 +16,6 @@ import { Button } from "@/common/ui/button";
 import { changeRoleAction, deactivateAction, deleteStaffAction, reactivateAction, resetPasswordAction } from "@/modules/admin/actions";
 import type { StaffListRow } from "@/modules/admin/staff-data";
 
-const MODULE_LABEL: Record<string, string> = { platform: "NxtOne", attendance: "Attendance", logs: "Interactions", contest: "Contests" };
-const MODULE_ROLE_LABEL: Record<string, string> = { ...ROLE_LABEL, viewer: "Viewer" };
 const roleName = (r: Role | null) => (r ? ROLE_LABEL[r] : "No access");
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "—";
@@ -146,7 +144,6 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
               ) : null}
               <th scope="col" className="border-b border-border px-5 py-2.5 font-semibold">Person</th>
               <th scope="col" className="border-b border-border px-3 py-2.5 font-semibold">NxtOne role</th>
-              <th scope="col" className="border-b border-border px-3 py-2.5 font-semibold">Module roles</th>
               <th scope="col" className="border-b border-border px-3 py-2.5 font-semibold">Students</th>
               {mode === "deactivated" ? (
                 <th scope="col" className="border-b border-border px-3 py-2.5 font-semibold">Deactivated by</th>
@@ -197,21 +194,6 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
                       <span className="font-medium">{roleName(row.role)}</span>
                     )}
                   </td>
-                  <td className="border-b border-muted px-3 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {row.roles.filter((r) => r.module !== "platform").length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        row.roles
-                          .filter((r) => r.module !== "platform")
-                          .map((r) => (
-                            <span key={r.module} className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-sidebar-foreground">
-                              {MODULE_LABEL[r.module] ?? r.module}: {MODULE_ROLE_LABEL[r.role] ?? r.role}
-                            </span>
-                          ))
-                      )}
-                    </div>
-                  </td>
                   <td className="border-b border-muted px-3 py-3 tabular">{row.studentsAssigned || "—"}</td>
                   {mode === "deactivated" ? (
                     <td className="border-b border-muted px-3 py-3">
@@ -253,7 +235,7 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
             })}
             {!rows.length ? (
               <tr>
-                <td colSpan={7} className="px-5 py-6 text-center text-muted-foreground">
+                <td colSpan={6}className="px-5 py-6 text-center text-muted-foreground">
                   {mode === "deactivated" ? "Nobody is deactivated." : "Nobody here."}
                 </td>
               </tr>

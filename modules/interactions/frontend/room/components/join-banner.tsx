@@ -9,7 +9,6 @@ Date : 19 Nov 2026
 "use client";
 
 import { Code2 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Open = { id: string; createdBy: string };
@@ -51,9 +50,14 @@ export function JoinBanner({ initial }: { initial: Open[] }) {
           <b>{room.createdBy}</b> opened a code room for you.
         </span>
       </span>
-      <Link href={`/room/${room.id}`} className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90">
+      <a
+        href={`/room/${room.id}`}
+        target="_blank"
+        rel="noopener"
+        className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90"
+      >
         Join code room
-      </Link>
+      </a>
     </div>
   );
 }

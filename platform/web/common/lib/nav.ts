@@ -54,6 +54,8 @@ export const NAV: NavSection[] = [
   {
     items: [
       { href: "/", label: "Home", icon: "home", roles: EVERYONE },
+      // Senior instructors see every student under Students, and their own here.
+      { href: "/my-students", label: "My students", icon: "students", roles: ["senior_instructor"] },
       { href: "/students", label: "Students", icon: "students", roles: EVERYONE },
       { href: "/attendance", label: "Attendance", icon: "attendance", roles: EVERYONE },
       { href: "/interactions", label: "Interactions", icon: "interactions", roles: EVERYONE },
