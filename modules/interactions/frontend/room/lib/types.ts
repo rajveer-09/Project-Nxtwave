@@ -7,6 +7,7 @@ Date : 19 Nov 2026
 */
 
 import { z } from "zod";
+import { hasEmoji } from "./emoji";
 
 /** Languages shown in the room (labels only: nothing is compiled or run). */
 export const LANGUAGES = [
@@ -20,7 +21,21 @@ export const LANGUAGES = [
 export type Language = (typeof LANGUAGES)[number]["value"];
 const languageValues = LANGUAGES.map((l) => l.value) as [Language, ...Language[]];
 
-export const MAX_CODE = 200_000;
+/**
+ * One pad's limits: plenty for interview code, small enough that a huge paste (by hand or by an
+ * extension) can't freeze the editor or flood the live sync. The editor refuses more; so does the API.
+ */
+export const MAX_CODE = 50_000;
+export const MAX_LINES = 2_000;
+export const LIMIT_MESSAGE = `The code room holds up to ${MAX_LINES.toLocaleString("en-IN")} lines and ${MAX_CODE.toLocaleString("en-IN")} characters.`;
+export const EMOJI_MESSAGE = "Emoji aren't allowed in the code room.";
+
+/** Lines in `text` (without splitting it into an array). */
+export function lineCount(text: string): number {
+  let n = 1;
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) n++;
+  return n;
+}
 
 /** The room's code pad (stored as the room's one problem row). */
 export type RoomProblem = { id: string; language: Language; code: string; version: number; updatedBy: string | null; updatedAt: string };
@@ -46,7 +61,16 @@ export type RoomViewer = { kind: "staff"; name: string } | { kind: "student"; na
 
 /** Everything a client can ask the room to do (POST /api/rooms/[id]). */
 export const roomOp = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("code"), problemId: z.string().uuid(), base: z.number().int().min(0), code: z.string().max(MAX_CODE) }),
+  z.object({
+    op: z.literal("code"),
+    problemId: z.string().uuid(),
+    base: z.number().int().min(0),
+    code: z
+      .string()
+      .max(MAX_CODE, LIMIT_MESSAGE)
+      .refine((code) => lineCount(code) <= MAX_LINES, LIMIT_MESSAGE)
+      .refine((code) => !hasEmoji(code), EMOJI_MESSAGE),
+  }),
   z.object({ op: z.literal("language"), problemId: z.string().uuid(), language: z.enum(languageValues) }),
   z.object({ op: z.literal("close") }),
   z.object({ op: z.literal("reopen") }),

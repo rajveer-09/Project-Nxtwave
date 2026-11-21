@@ -7,7 +7,6 @@ Date : 19 Nov 2026
 */
 
 import { Code2 } from "lucide-react";
-import Link from "next/link";
 import { roomsForStudent } from "@nxtone/interactions-ui/room/data";
 import { roomName } from "@nxtone/interactions-ui/room/lib/types";
 
@@ -37,9 +36,10 @@ export async function RoomsList({ niatId, title = "Code rooms" }: { niatId: stri
                 <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-accent-foreground">Open</span>
               )}
             </span>
-            <Link href={`/room/${r.id}`} className="font-semibold text-primary hover:text-accent-strong">
+            {/* The room opens in a new tab, so this page stays where it was. */}
+            <a href={`/room/${r.id}`} target="_blank" rel="noopener" className="font-semibold text-primary hover:text-accent-strong">
               {r.closedAt ? "View code →" : "Open room →"}
-            </Link>
+            </a>
           </li>
         ))}
       </ul>

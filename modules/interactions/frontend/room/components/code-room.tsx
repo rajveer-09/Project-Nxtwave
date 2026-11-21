@@ -23,6 +23,8 @@ type Sync = "live" | "saving" | "offline";
 const POLL_MS = 700;
 const HIDDEN_POLL_MS = 3000;
 const PUSH_DELAY_MS = 250;
+/** Wait after the server says "too many requests" (429). */
+const RETRY_MS = 2000;
 
 function fromProblem(p: RoomProblem): Local {
   return { text: p.code, base: p.code, baseVersion: p.version };
@@ -50,6 +52,7 @@ export function CodeRoom({ initial, viewer, shareUrl }: { initial: RoomState; vi
   const [locals, setLocals] = useState<Record<string, Local>>(() => Object.fromEntries(initial.problems.map((p) => [p.id, fromProblem(p)])));
   const [sync, setSync] = useState<Sync>("live");
   const [error, setError] = useState<string | null>(null);
+  const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [, tick] = useState(0);
 
@@ -108,6 +111,12 @@ export function CodeRoom({ initial, viewer, shareUrl }: { initial: RoomState; vi
         updateLocals((prev) => ({ ...prev, [id]: { ...prev[id], base: sent, baseVersion: body.problemVersion! } }));
         if (localsRef.current[id].text !== sent) dirty.current.add(id);
         setError(null);
+      } else if (status === 429) {
+        // Too many saves at once: keep the text and send it again shortly.
+        dirty.current.add(id);
+        pushing.current = false;
+        setTimeout(() => void flushRef.current(), RETRY_MS);
+        return;
       } else if (status === 409 && body.conflict) {
         const theirs = body.conflict;
         updateLocals((prev) => {
@@ -140,8 +149,10 @@ export function CodeRoom({ initial, viewer, shareUrl }: { initial: RoomState; vi
     let stop = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
+      let wait = 0;
       try {
         const res = await fetch(`/api/rooms/${room.id}?v=${versionRef.current}`, { cache: "no-store" });
+        if (res.status === 429) wait = RETRY_MS;
         if (res.status === 200) {
           const body = (await res.json()) as { room: RoomState };
           if (!stop) absorb(body.room);
@@ -154,7 +165,7 @@ export function CodeRoom({ initial, viewer, shareUrl }: { initial: RoomState; vi
       } catch {
         setSync("offline");
       }
-      if (!stop) timer = setTimeout(poll, document.hidden ? HIDDEN_POLL_MS : POLL_MS);
+      if (!stop) timer = setTimeout(poll, Math.max(wait, document.hidden ? HIDDEN_POLL_MS : POLL_MS));
     };
     timer = setTimeout(poll, POLL_MS);
     return () => {
@@ -176,6 +187,14 @@ export function CodeRoom({ initial, viewer, shareUrl }: { initial: RoomState; vi
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  /** A short-lived message from the editor (emoji removed, too much code); saving doesn't clear it. */
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notice = useCallback((message: string) => {
+    setEditorNotice(message);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setEditorNotice(null), 5000);
   }, []);
 
   function typed(id: string, text: string) {
@@ -260,6 +279,11 @@ export function CodeRoom({ initial, viewer, shareUrl }: { initial: RoomState; vi
           {error}
         </p>
       ) : null}
+      {editorNotice ? (
+        <p role="alert" className="border-b border-warning-border bg-warning-soft px-4 py-2.5 text-[13px] font-medium text-warning sm:px-6">
+          {editorNotice}
+        </p>
+      ) : null}
 
       <section aria-label="Code" className="flex min-h-[60vh] min-w-0 flex-1 flex-col gap-3 p-4 sm:px-6">
         {current && local ? (
@@ -282,10 +306,10 @@ export function CodeRoom({ initial, viewer, shareUrl }: { initial: RoomState; vi
                 </select>
               </label>
             </div>
-            <CodeEditor key={current.id} value={local.text} onChange={(text) => typed(current.id, text)} readOnly={closed} label={`Code for ${name}`} />
+            <CodeEditor key={current.id} value={local.text} onChange={(text) => typed(current.id, text)} onRejected={notice} readOnly={closed} label={`Code for ${name}`} />
             <p className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
               <span>{current.updatedBy && current.code ? `Last saved edit by ${current.updatedBy} · ${timeAgo(current.updatedAt)}` : "No code yet"}</span>
-              {closed ? null : <span>Saved automatically as you type · Tab indents · Esc then Tab leaves the editor</span>}
+              {closed ? null : <span>Saved automatically as you type · No emoji · Tab indents · Esc then Tab leaves the editor</span>}
             </p>
           </>
         ) : (

@@ -8,8 +8,10 @@ Date : 19 Nov 2026
 
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
-import { mapCaret } from "@nxtone/interactions-ui/room/lib/merge";
+import { useLayoutEffect, useMemo, useRef } from "react";
+import { hasEmoji, stripEmoji } from "@nxtone/interactions-ui/room/lib/emoji";
+import { diffHunk, mapCaret } from "@nxtone/interactions-ui/room/lib/merge";
+import { EMOJI_MESSAGE, LIMIT_MESSAGE, MAX_CODE, MAX_LINES, lineCount } from "@nxtone/interactions-ui/room/lib/types";
 import { cn } from "@/common/lib/utils";
 
 const INDENT = "    ";
@@ -18,14 +20,33 @@ const INDENT = "    ";
  * Plain code editor: a monospace text area with line numbers. Tab indents (Shift+Tab outdents),
  * Enter keeps the indentation. Press Esc, then Tab, to move focus out. Text changed by the other
  * person is applied in place, keeping the caret where it was in the text.
+ *
+ * Guards: emoji are removed as they're typed or pasted, and a change that would take the pad past
+ * MAX_CODE characters or MAX_LINES lines is undone (a paste is refused before it's inserted), with
+ * `onRejected` saying why. Changes made by scripts or extensions go through the same check.
  */
-export function CodeEditor({ value, onChange, readOnly, label }: { value: string; onChange: (value: string) => void; readOnly?: boolean; label: string }) {
+export function CodeEditor({
+  value,
+  onChange,
+  onRejected,
+  readOnly,
+  label,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onRejected?: (message: string) => void;
+  readOnly?: boolean;
+  label: string;
+}) {
   const area = useRef<HTMLTextAreaElement>(null);
   const gutter = useRef<HTMLDivElement>(null);
   const escaped = useRef(false);
+  /** The last text that passed the guards: what a refused change goes back to. */
+  const accepted = useRef(value);
 
   // Remote changes: replace the text without losing the caret.
   useLayoutEffect(() => {
+    accepted.current = value;
     const el = area.current;
     if (!el || el.value === value) return;
     const before = el.value;
@@ -35,7 +56,47 @@ export function CodeEditor({ value, onChange, readOnly, label }: { value: string
     if (focused) el.setSelectionRange(mapCaret(before, value, start), mapCaret(before, value, end));
   }, [value]);
 
-  const emit = () => area.current && onChange(area.current.value);
+  const emit = () => {
+    const el = area.current;
+    if (!el) return;
+    let text = el.value;
+    if (hasEmoji(text)) {
+      const caret = stripEmoji(text.slice(0, el.selectionEnd)).length;
+      text = stripEmoji(text);
+      el.value = text;
+      el.setSelectionRange(caret, caret);
+      onRejected?.(EMOJI_MESSAGE);
+    }
+    if (text.length > MAX_CODE || lineCount(text) > MAX_LINES) {
+      const back = accepted.current;
+      const at = diffHunk(back, text)?.start ?? back.length;
+      el.value = back;
+      el.setSelectionRange(at, at);
+      onRejected?.(LIMIT_MESSAGE);
+      return;
+    }
+    if (text === accepted.current) return;
+    accepted.current = text;
+    onChange(text);
+  };
+
+  /** Checks a paste before the browser inserts it: a huge one never reaches the page. */
+  function onPaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const el = event.currentTarget;
+    const pasted = event.clipboardData.getData("text/plain");
+    const { selectionStart: s, selectionEnd: e, value: text } = el;
+    if (text.length - (e - s) + pasted.length > MAX_CODE || lineCount(text.slice(0, s)) + lineCount(pasted) + lineCount(text.slice(e)) - 2 > MAX_LINES) {
+      event.preventDefault();
+      onRejected?.(LIMIT_MESSAGE);
+      return;
+    }
+    if (hasEmoji(pasted)) {
+      event.preventDefault();
+      el.setRangeText(stripEmoji(pasted), s, e, "end");
+      emit();
+      onRejected?.(EMOJI_MESSAGE);
+    }
+  }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     const el = event.currentTarget;
@@ -86,22 +147,23 @@ export function CodeEditor({ value, onChange, readOnly, label }: { value: string
     }
   }
 
-  const lines = Math.max(1, value.split("\n").length);
+  // Line numbers as one block of text (one element per line made long pads slow to type in).
+  const lines = useMemo(() => lineCount(value), [value]);
+  const numbers = useMemo(() => Array.from({ length: lines }, (_, i) => i + 1).join("\n"), [lines]);
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card font-mono text-[13.5px] leading-6">
       <div
         ref={gutter}
         aria-hidden="true"
-        className="w-12 shrink-0 overflow-hidden border-r border-border bg-surface-subtle py-3 pr-2.5 text-right text-muted-foreground/70 select-none"
+        className="w-12 shrink-0 overflow-hidden border-r border-border bg-surface-subtle py-3 pr-2.5 text-right whitespace-pre text-muted-foreground/70 select-none"
       >
-        {Array.from({ length: lines }, (_, i) => (
-          <div key={i}>{i + 1}</div>
-        ))}
+        {numbers}
       </div>
       <textarea
         ref={area}
         defaultValue={value}
         onInput={emit}
+        onPaste={onPaste}
         onKeyDown={onKeyDown}
         onScroll={(e) => {
           if (gutter.current) gutter.current.scrollTop = e.currentTarget.scrollTop;
