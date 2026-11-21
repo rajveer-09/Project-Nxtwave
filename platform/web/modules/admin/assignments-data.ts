@@ -15,6 +15,7 @@ import { platformRole } from "@/common/auth/core/sessions";
 import type { Db } from "@/common/auth/core/db";
 import { hasPanel, type SessionUser } from "@/common/auth/roles";
 import { getRoster } from "@/common/data/roster";
+import { toCsv } from "@/common/lib/csv";
 import { withChange, type ChangeSource } from "@/common/db/change";
 import { getDb } from "@/common/db/pool";
 
@@ -278,6 +279,47 @@ async function readTable(fileName: string, data: Buffer): Promise<string[][]> {
   throw new Error("unsupported");
 }
 
+/**
+ * Blank import file: the header the importer reads, plus example rows. The examples use
+ * made-up NIAT IDs, so if someone uploads them by mistake they are skipped as "Not on the roster".
+ */
+export function assignmentTemplateCsv(): string {
+  return toCsv(
+    ["NIAT ID", "Instructor", "Coach"],
+    [
+      ["EXAMPLE-1", "instructor.email@nxtwave.co.in", ""],
+      ["EXAMPLE-2", "INS012", "none"],
+      ["EXAMPLE-3", "", "Coach Full Name"],
+    ],
+  );
+}
+
+/**
+ * Every student with their current instructor and coach, ready to edit and upload again.
+ * A person is written by name, or by email when two active people share the name. A person who
+ * is no longer active is left blank (blank = leave as is), so re-uploading the file unchanged
+ * gives no errors. Student and Class are for reading only; the importer ignores those columns.
+ */
+export async function assignmentsCsv(user: SessionUser): Promise<{ ok: true; csv: string } | { ok: false; error: string }> {
+  if (!hasPanel(user.role)) return { ok: false, error: "Only admins and senior instructors change assignments." };
+  const [roster, options] = await Promise.all([getRoster(), staffOptions()]);
+  const cell = (name: string, list: StaffOption[]) => {
+    if (!name || name === "Unassigned") return "";
+    if (!list.length) return name; // sample data: no staff table to check against
+    const same = list.filter((o) => o.name.toLowerCase() === name.toLowerCase()); // how the importer matches names
+    if (same.length === 1) return name;
+    const exact = same.filter((o) => o.name === name);
+    return exact.length === 1 ? exact[0].email : "";
+  };
+  return {
+    ok: true,
+    csv: toCsv(
+      ["NIAT ID", "Student", "Class", "Instructor", "Coach"],
+      roster.map((s) => [s.niatId, s.name, `${s.college} · ${s.section} · ${s.hall}`, cell(s.instructor, options.instructor), cell(s.coach, options.coach)]),
+    ),
+  };
+}
+
 /** Matches a cell to a person: email, instructor code (e.g. INS012) or exact full name. */
 function resolveStaff(value: string, options: StaffOption[]): { staff: StaffOption | null; error: string | null } {
   const v = value.trim().toLowerCase();
@@ -303,8 +345,8 @@ export async function previewAssignmentImport(user: SessionUser, fileName: strin
   const niatCol = col(HEADERS.niat);
   const insCol = col(HEADERS.instructor);
   const coachCol = col(HEADERS.coach);
-  if (niatCol < 0) return { ok: false, error: 'Add a "NIAT ID" column.' };
-  if (insCol < 0 && coachCol < 0) return { ok: false, error: 'Add an "Instructor" and/or a "Coach" column (email, instructor code or full name).' };
+  if (niatCol < 0) return { ok: false, error: 'Add a "NIAT ID" column, or use "Download blank template" above.' };
+  if (insCol < 0 && coachCol < 0) return { ok: false, error: 'Add an "Instructor" and/or a "Coach" column (email, instructor code or full name), or use "Download blank template" above.' };
   if (table.length - 1 > 3000) return { ok: false, error: "Up to 3,000 rows per file." };
 
   const roster = new Map((await getRoster()).map((s) => [s.niatId, s]));
