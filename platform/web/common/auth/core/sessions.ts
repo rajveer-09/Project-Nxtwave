@@ -34,16 +34,13 @@ type StaffRow = {
 };
 
 /**
- * Platform role: the 'platform' row if present, otherwise the highest staff role
- * across modules. 'viewer' alone gives no platform access.
+ * NxtOne role: the 'platform' row, set on Staff & roles. Other modules' rows are history from the
+ * old apps and give no access (migration 20261121000001 gave everyone who relied on them their own
+ * NxtOne role). No platform row: no access.
  */
 export function platformRole(roles: { module: string; role: string }[]): Role | null {
   const platform = roles.find((r) => r.module === "platform");
-  if (platform && (PLATFORM_ROLE_ORDER as string[]).includes(platform.role)) return platform.role as Role;
-  for (const role of PLATFORM_ROLE_ORDER) {
-    if (roles.some((r) => r.role === role)) return role;
-  }
-  return null;
+  return platform && (PLATFORM_ROLE_ORDER as string[]).includes(platform.role) ? (platform.role as Role) : null;
 }
 
 function toUser(row: StaffRow): SessionUser | null {
