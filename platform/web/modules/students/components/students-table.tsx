@@ -24,9 +24,11 @@ function SortHeader({
   sortKey,
   query,
   params,
+  basePath,
 }: {
   label: string;
   sortKey: SortKey;
+  basePath: string;
   query: StudentQuery;
   params: SearchParamsRecord;
 }) {
@@ -41,7 +43,7 @@ function SortHeader({
       className="border-b border-border px-3 py-2.5 font-semibold first:pl-5"
     >
       <Link
-        href={withParams("/students", params, { sort: sortKey, dir: nextDir })}
+        href={withParams(basePath, params, { sort: sortKey, dir: nextDir })}
         scroll={false}
         className="-mx-1 inline-flex min-h-8 items-center gap-1 rounded-md px-1 hover:text-foreground"
       >
@@ -65,14 +67,20 @@ export function StudentsTable({
   query,
   params,
   viewer,
+  basePath = "/students",
+  hideInstructor = false,
 }: {
   rows: RosterStudent[];
   query: StudentQuery;
   params: SearchParamsRecord;
   /** Instructors only see their own students, so the Instructor column is left out for them. */
   viewer: SessionUser;
+  /** The list's page, for the sort links. */
+  basePath?: string;
+  /** Leave out the Instructor column (a senior instructor's own students). */
+  hideInstructor?: boolean;
 }) {
-  const showInstructor = viewer.role !== "instructor";
+  const showInstructor = viewer.role !== "instructor" && !hideInstructor;
   return (
     // @container: the row buttons show their text only when this area is at least 78rem wide
     // (row-actions.tsx); below that they're icon-only, so the table needs less width.
@@ -81,14 +89,14 @@ export function StudentsTable({
         <caption className="sr-only">Students</caption>
         <thead>
           <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
-            <SortHeader label="Student" sortKey="name" query={query} params={params} />
+            <SortHeader label="Student" sortKey="name" query={query} params={params} basePath={basePath} />
             <Th>College · Section</Th>
             <Th>Hall</Th>
             {showInstructor ? <Th>Instructor</Th> : null}
-            <SortHeader label="Attendance · 30d" sortKey="attendance" query={query} params={params} />
-            <SortHeader label="Level" sortKey="level" query={query} params={params} />
-            <SortHeader label="LeetCode" sortKey="rating" query={query} params={params} />
-            <SortHeader label="Last interaction" sortKey="interaction" query={query} params={params} />
+            <SortHeader label="Attendance · 30d" sortKey="attendance" query={query} params={params} basePath={basePath} />
+            <SortHeader label="Level" sortKey="level" query={query} params={params} basePath={basePath} />
+            <SortHeader label="LeetCode" sortKey="rating" query={query} params={params} basePath={basePath} />
+            <SortHeader label="Last interaction" sortKey="interaction" query={query} params={params} basePath={basePath} />
             <Th>Flags</Th>
             <th scope="col" className="border-b border-border py-2.5 pr-5 pl-3 text-right font-semibold">
               <span className="sr-only">Actions</span>
