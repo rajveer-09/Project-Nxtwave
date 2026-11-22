@@ -13,6 +13,8 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { StatusPill } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
+import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
 import { Button } from "@/common/ui/button";
 import { Skeleton } from "@/common/ui/skeleton";
 import { cn } from "@/common/lib/utils";
@@ -25,6 +27,7 @@ export function Inbox() {
   const queryClient = useQueryClient();
   const q = useQuery({ queryKey: inboxKey, queryFn: messagesApi.inbox, refetchInterval: INBOX_POLL_MS });
   const [open, setOpen] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [pending, startTransition] = useTransition();
 
   function act(id: string, ack: boolean) {
@@ -40,48 +43,56 @@ export function Inbox() {
   if (q.isError) return <EmptyState title="Couldn't load your messages" description={q.error.message} />;
   if (!q.data?.messages.length) return <EmptyState title="No messages yet" description="Messages from admins show here and on the bell." />;
 
+  const match = searchMatcher(query);
+  const shown = q.data.messages.filter((m) => match(m.subject, m.fromName, m.body));
   return (
-    <ul className="flex flex-col gap-3">
-      {q.data.messages.map((m) => {
-        const expanded = open === m.id;
-        return (
-          <li key={m.id} className={cn("overflow-hidden rounded-xl border bg-card", m.readAt ? "border-border" : "border-accent-border")}>
-            <button
-              type="button"
-              aria-expanded={expanded}
-              onClick={() => {
-                setOpen(expanded ? null : m.id);
-                if (!m.readAt) act(m.id, false);
-              }}
-              className="flex min-h-14 w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left hover:bg-surface-subtle"
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className={cn(m.readAt ? "font-semibold" : "font-bold")}>
-                  {!m.readAt ? <span className="mr-2 inline-block size-2 rounded-full bg-primary align-middle" aria-label="Unread" /> : null}
-                  {m.subject}
+    <div className="flex flex-col gap-3">
+      {q.data.messages.length > 5 ? (
+        <SearchField label="Search messages" placeholder="Subject, sender or text" value={query} onChange={setQuery} className="w-full max-w-80" />
+      ) : null}
+      {!shown.length ? <EmptyState title={`No message matches “${query.trim()}”`} /> : null}
+      <ul className="flex flex-col gap-3">
+        {shown.map((m) => {
+          const expanded = open === m.id;
+          return (
+            <li key={m.id} className={cn("overflow-hidden rounded-xl border bg-card", m.readAt ? "border-border" : "border-accent-border")}>
+              <button
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => {
+                  setOpen(expanded ? null : m.id);
+                  if (!m.readAt) act(m.id, false);
+                }}
+                className="flex min-h-14 w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left hover:bg-surface-subtle"
+              >
+                <span className="flex min-w-0 flex-col">
+                  <span className={cn(m.readAt ? "font-semibold" : "font-bold")}>
+                    {!m.readAt ? <span className="mr-2 inline-block size-2 rounded-full bg-primary align-middle" aria-label="Unread" /> : null}
+                    {m.subject}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {m.fromName} · {timeAgo(m.createdAt)}
+                  </span>
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  {m.fromName} · {timeAgo(m.createdAt)}
+                <span className="flex items-center gap-2">
+                  {m.priority !== "normal" ? <StatusPill tone={m.priority === "urgent" ? "warning" : "accent"}>{PRIORITY_INFO[m.priority].label}</StatusPill> : null}
+                  {m.requireAck ? <StatusPill tone={m.ackAt ? "accent" : "warning"}>{m.ackAt ? "Acknowledged" : "Needs acknowledgement"}</StatusPill> : null}
                 </span>
-              </span>
-              <span className="flex items-center gap-2">
-                {m.priority !== "normal" ? <StatusPill tone={m.priority === "urgent" ? "warning" : "accent"}>{PRIORITY_INFO[m.priority].label}</StatusPill> : null}
-                {m.requireAck ? <StatusPill tone={m.ackAt ? "accent" : "warning"}>{m.ackAt ? "Acknowledged" : "Needs acknowledgement"}</StatusPill> : null}
-              </span>
-            </button>
-            {expanded ? (
-              <div className="flex flex-col gap-3 border-t border-muted px-4 py-3">
-                <p className="text-sm whitespace-pre-line">{m.body}</p>
-                {m.requireAck && !m.ackAt ? (
-                  <Button className="h-10 self-start" disabled={pending} onClick={() => act(m.id, true)}>
-                    Acknowledge
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-          </li>
-        );
-      })}
-    </ul>
+              </button>
+              {expanded ? (
+                <div className="flex flex-col gap-3 border-t border-muted px-4 py-3">
+                  <p className="text-sm whitespace-pre-line">{m.body}</p>
+                  {m.requireAck && !m.ackAt ? (
+                    <Button className="h-10 self-start" disabled={pending} onClick={() => act(m.id, true)}>
+                      Acknowledge
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

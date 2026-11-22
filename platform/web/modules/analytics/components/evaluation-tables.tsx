@@ -14,6 +14,7 @@ import { useState } from "react";
 import { DataTable } from "@/common/components/data-table";
 import { STANDING_LABEL, type Standing } from "@/common/domain/standing";
 import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
 
 const num = (value: number, tone?: "good" | "warn") => (
   <span className={value === 0 ? "text-muted-foreground/60 tabular" : tone === "good" ? "font-semibold text-accent-strong tabular" : tone === "warn" ? "font-semibold text-warning tabular" : "tabular"}>
@@ -38,8 +39,8 @@ const instructorColumns: ColumnDef<InstructorRow, unknown>[] = [
 /** Interactions each instructor took: today, last 3 and 7 days, the chosen dates, and all-time outcomes. */
 export function InstructorMetrics({ rows }: { rows: InstructorRow[] }) {
   const [query, setQuery] = useState("");
-  const needle = query.trim().toLowerCase();
-  const shown = needle ? rows.filter((r) => r.name.toLowerCase().includes(needle)) : rows;
+  const match = searchMatcher(query);
+  const shown = rows.filter((r) => match(r.name));
   return (
     <div className="flex flex-col gap-3">
       <div className="px-5">
@@ -90,8 +91,8 @@ const studentColumns: ColumnDef<StudentRow, unknown>[] = [
 /** Every student's interactions (all time), most first; the name opens their page and history. */
 export function StudentInteractions({ rows }: { rows: StudentRow[] }) {
   const [query, setQuery] = useState("");
-  const needle = query.trim().toLowerCase();
-  const shown = needle ? rows.filter((r) => r.name.toLowerCase().includes(needle) || r.niatId.toLowerCase().includes(needle)) : rows;
+  const match = searchMatcher(query);
+  const shown = rows.filter((r) => match(r.name, r.niatId));
   return (
     <div className="flex flex-col gap-3">
       <div className="px-5">

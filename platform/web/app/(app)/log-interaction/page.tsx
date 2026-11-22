@@ -11,7 +11,6 @@ import { Suspense } from "react";
 import { EmptyState } from "@/common/components/empty-state";
 import { PageHeader } from "@/common/components/page-header";
 import { SectionCard } from "@/common/components/section-card";
-import { Button } from "@/common/ui/button";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
 import { formatDate, todayIst } from "@/common/lib/dates";
@@ -19,6 +18,7 @@ import type { SearchParamsRecord } from "@/common/lib/url";
 import { questionBank as loadQuestionBank } from "@nxtone/interactions-ui/curriculum/data";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 import { InteractionForm, type FormStudent } from "@nxtone/interactions-ui/components/interaction-form";
+import { StudentLookup } from "@nxtone/interactions-ui/components/student-lookup";
 import { listInteractions } from "@nxtone/interactions-ui/data";
 import { canLogFor } from "@nxtone/interactions-ui/lib/permissions";
 import { fullFormStudent } from "@nxtone/interactions-ui/my-students-data";
@@ -30,8 +30,6 @@ import { STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
 export const metadata = { title: "Log interaction" };
 
 const NIAT = /^N\d{2}H\d{2}[AB]\d{4}$/;
-const field =
-  "h-11 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground uppercase tabular focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
 /**
  * The page for logging an interaction: type a student's NIAT ID (instructors also reach it from the
@@ -46,17 +44,8 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   const raw = typeof params.niat === "string" ? params.niat.trim().toUpperCase() : "";
   const today = todayIst();
 
-  const lookup = (
-    <form method="get" action="/log-interaction" className="flex flex-wrap items-end gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5">
-      <label className="flex flex-[1_1_260px] flex-col gap-1 text-xs font-medium text-muted-foreground">
-        Student’s NIAT ID
-        <input name="niat" defaultValue={raw} required autoFocus={!raw} placeholder="e.g. N24H01A0031" maxLength={11} autoComplete="off" spellCheck={false} className={field} />
-      </label>
-      <Button type="submit" className="h-11 px-5">
-        Find student
-      </Button>
-    </form>
-  );
+  // Re-mounted per student (key) so the box shows the ID just opened.
+  const lookup = <StudentLookup key={raw} initial={raw} autoFocus={!raw} />;
 
   // What this person logged for students who aren't theirs (their own work, so they may see it).
   const forOthers = await listInteractions({ takenBy: user.name, othersOnly: true, limit: 10 });
@@ -81,7 +70,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
     return (
       <>
         {lookup}
-        <EmptyState title="Type a NIAT ID to start" description="Your own students open with their attendance, last test and contests. For anyone else's student you're saved as the person who took it." />
+        <EmptyState title="Type a name or NIAT ID to start" description="Your own students open with their attendance, last test and contests. For anyone else's student you're saved as the person who took it." />
         {recent}
       </>
     );
@@ -92,7 +81,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
     return (
       <>
         {lookup}
-        <EmptyState title={NIAT.test(raw) ? `No active student with NIAT ID ${raw}` : "That isn't a NIAT ID"} description="Check the ID, e.g. N24H01A0031." />
+        <EmptyState title={NIAT.test(raw) ? `No active student with NIAT ID ${raw}` : "That isn't a NIAT ID"} description="Type part of the name or ID and pick the student from the list." />
         {recent}
       </>
     );
@@ -149,7 +138,7 @@ export default function LogInteractionPage({ searchParams }: PageProps<"/log-int
       <PageHeader
         eyebrow="Interactions"
         title="Log interaction"
-        description="Type the student's NIAT ID. For someone else's student you're recorded as the person who took it."
+        description="Type the student's name or NIAT ID. For someone else's student you're recorded as the person who took it."
       />
       <Suspense fallback={<Skeleton className="h-[480px] rounded-xl" />}>
         <Content searchParams={searchParams} />

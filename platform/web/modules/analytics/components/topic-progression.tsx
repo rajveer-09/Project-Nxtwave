@@ -11,6 +11,7 @@ Date : 19 Nov 2026
 import { useState } from "react";
 import { Dropdown } from "@/common/components/dropdown";
 import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
 
 export type TopicLevel = { level: number; title: string; students: number; topics: { topic: string; count: number }[] };
 
@@ -19,10 +20,10 @@ export function TopicProgression({ levels }: { levels: TopicLevel[] }) {
   const [level, setLevel] = useState("all");
   const [query, setQuery] = useState("");
   const chosen = level === "all" ? null : levels.find((l) => String(l.level) === level) ?? null;
-  const needle = query.trim().toLowerCase();
+  const match = searchMatcher(query);
   const rows = (chosen ? [chosen] : levels)
     .flatMap((l) => l.topics.map((t) => ({ ...t, level: l.level })))
-    .filter((t) => !needle || t.topic.toLowerCase().includes(needle));
+    .filter((t) => match(t.topic));
 
   return (
     <div className="flex flex-col gap-3">

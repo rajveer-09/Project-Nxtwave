@@ -11,6 +11,7 @@ Date : 19 Nov 2026
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
 import { STANDING_HINT, STANDING_LABEL, STANDINGS, type Standing } from "@/common/domain/standing";
 import { cn } from "@/common/lib/utils";
 
@@ -54,10 +55,10 @@ export function MyStudents({ students, overdueDays }: { students: MyStudent[]; o
   }, [students]);
 
   const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const match = searchMatcher(query);
     return students
       .filter((s) => (filter === "all" ? true : filter === "overdue" ? s.overdue : s.standing === filter))
-      .filter((s) => !q || s.name.toLowerCase().includes(q) || s.niatId.toLowerCase().includes(q) || s.topic.toLowerCase().includes(q))
+      .filter((s) => match(s.name, s.niatId, s.topic))
       .sort((a, b) => Number(b.overdue) - Number(a.overdue) || (b.lastInteractionDays ?? 1e9) - (a.lastInteractionDays ?? 1e9) || a.name.localeCompare(b.name));
   }, [students, query, filter]);
 

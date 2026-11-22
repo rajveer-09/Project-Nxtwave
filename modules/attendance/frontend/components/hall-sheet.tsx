@@ -22,6 +22,7 @@ import { attendanceApi } from "@nxtone/attendance-ui/api";
 import { saveAttendanceAction } from "@nxtone/attendance-ui/actions";
 import type { Mark, SheetRow } from "@nxtone/attendance-ui/types";
 import { formatDate } from "@/common/lib/dates";
+import { searchMatcher } from "@/common/lib/search";
 import { cn } from "@/common/lib/utils";
 
 const control =
@@ -113,9 +114,10 @@ export function HallSheet({
   const all = sheet.data?.students ?? [];
   const minesHere = all.filter((r) => myIds.has(r.niat_id)).length;
   const base = onlyMine ? all.filter((r) => myIds.has(r.niat_id)) : all;
-  const term = search.trim().toLowerCase();
+  const match = searchMatcher(search);
+  const term = search.trim();
   // Search only narrows the list; edits to students not shown are kept and saved.
-  const rows = term ? base.filter((r) => r.name.toLowerCase().includes(term) || r.niat_id.toLowerCase().includes(term)) : base;
+  const rows = base.filter((r) => match(r.name, r.niat_id));
   const markable = rows.filter((r) => r.counted);
   const current = (r: SheetRow): Mark => (r.niat_id in edits ? edits[r.niat_id] : r.status);
   const changed = all.filter((r) => r.niat_id in edits && edits[r.niat_id] !== r.status);

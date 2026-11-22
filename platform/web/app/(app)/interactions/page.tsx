@@ -31,6 +31,7 @@ import { SectionCard } from "@/common/components/section-card";
 import { LiveForm } from "@/common/components/live-form";
 import { Dropdown } from "@/common/components/dropdown";
 import { asOptions } from "@/common/lib/options";
+import { searchMatcher } from "@/common/lib/search";
 import { DateRange } from "@/common/components/date-range";
 import { DailyBars } from "@/common/components/charts";
 import { eachDay, parseRange, shortDay } from "@/common/lib/range";
@@ -62,8 +63,16 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   // Activity for the chosen dates (and, for admins, one person who took the interactions)
   const range = parseRange(params, today, 30);
   const takenBy = typeof params.by === "string" && params.by ? params.by : null;
+  const q = typeof params.q === "string" ? params.q.slice(0, 100) : "";
+  const match = searchMatcher(q);
   const people = [...new Set(all.map((it) => it.takenBy))].sort();
-  const inRange = all.filter((it) => it.date >= range.from && it.date <= range.to && (!takenBy || it.takenBy === takenBy));
+  const inRange = all.filter(
+    (it) =>
+      it.date >= range.from &&
+      it.date <= range.to &&
+      (!takenBy || it.takenBy === takenBy) &&
+      match(it.studentName, it.niatId, it.takenBy, it.topics.join(" "), it.subtopics.join(" ")),
+  );
   const recent = inRange.slice(0, 40);
   const codeRooms = await roomsByInteraction(recent.map((it) => it.id));
   const perDay = new Map<string, number>();
@@ -123,10 +132,20 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
 
       <SectionCard
         title="Interactions"
-        description={`${shortDay(range.from)} – ${shortDay(range.to)}${takenBy ? ` · taken by ${takenBy}` : ""}`}
+        description={`${shortDay(range.from)} – ${shortDay(range.to)}${takenBy ? ` · taken by ${takenBy}` : ""}${q.trim() ? ` · matching “${q.trim()}”` : ""}`}
       >
         <div className="flex flex-col gap-4">
           <LiveForm className="flex flex-wrap items-end gap-3" aria-label="Filter interactions">
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+              Search
+              <input
+                type="search"
+                name="q"
+                defaultValue={q}
+                placeholder="Student, NIAT ID, topic or instructor"
+                className="h-10 w-72 rounded-lg border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              />
+            </label>
             <DateRange from={range.from} to={range.to} today={today} />
             {!logging || user.role === "senior_instructor" ? (
               <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">

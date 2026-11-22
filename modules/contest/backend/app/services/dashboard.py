@@ -92,10 +92,10 @@ def contest_list(
     past = [end <= now_ts]
     if contest_type:
         past.append(Contest.contest_type == contest_type)
-    if q and q.strip():
-        needle = q.strip().lower()
-        past.append(or_(func.lower(Contest.title).contains(needle, autoescape=True),
-                        Contest.slug.contains(needle, autoescape=True)))
+    # Every word typed must be in the title or slug, in any order ("weekly 475", "475 weekly").
+    for word in (q or "").lower().replace("-", " ").split()[:8]:
+        past.append(or_(func.lower(Contest.title).contains(word, autoescape=True),
+                        Contest.slug.contains(word, autoescape=True)))
     if show == "with_data":
         past.append(has_results)
     elif show == "without_data":

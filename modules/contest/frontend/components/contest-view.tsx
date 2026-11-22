@@ -16,6 +16,8 @@ import { toast } from "sonner";
 import { BarList } from "@/common/components/bar-list";
 import { StatusPill } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
+import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
 import { Button } from "@/common/ui/button";
 import { Skeleton } from "@/common/ui/skeleton";
 import { contestApi, contestDate, mmss, pct } from "@nxtone/contest-ui/api";
@@ -37,6 +39,9 @@ export function ContestView({ slug, canReview, hasStudents }: { slug: string; ca
   const [scope, setScope] = useState<ContestScope>(hasStudents ? "mine" : "all");
   const detail = useQuery({ queryKey: ["contests", "detail", slug, scope], queryFn: () => contestApi.detail(slug, scope) });
   const results = useQuery({ queryKey: ["contests", "results", slug, scope], queryFn: () => contestApi.results(slug, scope) });
+  const [query, setQuery] = useState("");
+  const match = searchMatcher(query);
+  const shownRows = (results.data?.rows ?? []).filter((r) => match(r.name, r.roll_no, r.leetcode_handle, r.college, r.extra.section));
 
   const review = useMutation({
     mutationFn: async (action: "publish" | "discard") => {
@@ -201,7 +206,12 @@ export function ContestView({ slug, canReview, hasStudents }: { slug: string; ca
           <section aria-label="Results" className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
               <h2 className="text-base font-semibold">College leaderboard</h2>
-              <span className="text-xs text-muted-foreground">{results.data?.rows.length ?? 0} students</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <SearchField label="Search results" placeholder="Name, NIAT ID, handle or section" value={query} onChange={setQuery} className="w-64" />
+                <span className="text-xs text-muted-foreground">
+                  {query.trim() ? `${shownRows.length} of ${results.data?.rows.length ?? 0}` : (results.data?.rows.length ?? 0)} students
+                </span>
+              </div>
             </div>
             {results.isLoading ? (
               <Skeleton className="m-4 h-60" />
@@ -223,7 +233,14 @@ export function ContestView({ slug, canReview, hasStudents }: { slug: string; ca
                     </tr>
                   </thead>
                   <tbody>
-                    {results.data?.rows.map((r) => (
+                    {!shownRows.length && query.trim() ? (
+                      <tr>
+                        <td colSpan={7 + (results.data?.labels.length ?? 0)} className="px-4 py-6 text-center text-muted-foreground">
+                          No student matches “{query.trim()}”.
+                        </td>
+                      </tr>
+                    ) : null}
+                    {shownRows.map((r) => (
                       <tr key={r.student_id} className={cn(r.status !== "solved" && r.status !== "zero" && "text-muted-foreground")}>
                         <td className="border-b border-muted py-2.5 pr-2.5 pl-4 font-bold tabular">{r.college_rank ? `#${r.college_rank}` : "—"}</td>
                         <td className="border-b border-muted px-2.5 py-2.5">

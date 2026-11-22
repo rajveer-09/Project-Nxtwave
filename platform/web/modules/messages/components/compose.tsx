@@ -15,7 +15,8 @@ import { toast } from "sonner";
 import { Button } from "@/common/ui/button";
 import { Dropdown } from "@/common/components/dropdown";
 import { asOptions } from "@/common/lib/options";
-import { ROLES, type Role } from "@/common/auth/roles";
+import { searchMatcher } from "@/common/lib/search";
+import { ROLE_LABEL, ROLES, type Role } from "@/common/auth/roles";
 import { cn } from "@/common/lib/utils";
 import { sendMessageAction } from "../actions";
 import { sentKey } from "../api";
@@ -41,7 +42,8 @@ export function Compose({ directory, senderId, colleges, halls }: { directory: D
 
   const audience: Audience = mode === "roles" ? { mode, roles, college, hall } : { mode, ids };
   const recipients = resolveAudience(audience, directory, senderId);
-  const people = directory.filter((s) => s.active && s.id !== senderId && (!q.trim() || s.name.toLowerCase().includes(q.trim().toLowerCase())));
+  const match = searchMatcher(q);
+  const people = directory.filter((s) => s.active && s.id !== senderId && match(s.name, ROLE_LABEL[s.role]));
   const roleCount = (r: Role) => resolveAudience({ mode: "roles", roles: [r], college, hall }, directory, senderId).length;
 
   function send() {
