@@ -1,13 +1,7 @@
 "use client"
 
-import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 import { cn } from "cn"
-import { zoomAnchor } from "@/common/lib/zoom-anchor"
-
-/** The trigger, so the tooltip can be placed against it under the page zoom (common/lib/zoom-anchor.ts). */
-type TriggerSlot = { element: HTMLElement | null; setElement: (el: HTMLElement | null) => void }
-const TriggerContext = React.createContext<TriggerSlot | null>(null)
 
 function TooltipProvider({
   delay = 0,
@@ -23,19 +17,11 @@ function TooltipProvider({
 }
 
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  const [element, setElement] = React.useState<HTMLElement | null>(null)
-  const slot = React.useMemo(() => ({ element, setElement }), [element])
-  return (
-    <TriggerContext.Provider value={slot}>
-      <TooltipPrimitive.Root data-slot="tooltip" {...props} />
-    </TriggerContext.Provider>
-  )
+  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
-function TooltipTrigger({ ref, ...props }: TooltipPrimitive.Trigger.Props) {
-  const slot = React.useContext(TriggerContext)
-  // A caller's own ref wins (the tooltip then uses Base UI's default placement).
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" ref={ref ?? slot?.setElement} {...props} />
+function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
 function TooltipContent({
@@ -44,20 +30,26 @@ function TooltipContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
+  showArrow = true,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
-  const element = React.useContext(TriggerContext)?.element
-  const anchor = React.useMemo(() => (element ? zoomAnchor(() => element) : undefined), [element])
+  > & {
+    /** false for a card-style tooltip (e.g. restyled like a popover) that shouldn't point at its trigger. */
+    showArrow?: boolean
+  }) {
   return (
-    <TooltipPrimitive.Portal>
+    // The desktop UI is scaled with CSS zoom on <html> (globals.css). The positioning library
+    // measures on-screen pixels, but the offset it sets on the positioner would be scaled by the
+    // zoom again, leaving the tooltip short of its trigger (further off the further right/down
+    // the trigger is). The portal undoes the zoom so that offset lands where it was measured, and
+    // the popup re-applies it so the tooltip is the same size as the rest of the UI. (The zoom
+    // must not be on the positioner itself: the library then measures it wrongly.)
+    <TooltipPrimitive.Portal className="[zoom:calc(1/var(--ui-zoom))]">
       <TooltipPrimitive.Positioner
-        anchor={anchor}
-        positionMethod="fixed"
         align={align}
         alignOffset={alignOffset}
         side={side}
@@ -67,13 +59,13 @@ function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "z-50 [zoom:var(--ui-zoom)] inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}
         >
           {children}
-          <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
+          {showArrow ? <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" /> : null}
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>

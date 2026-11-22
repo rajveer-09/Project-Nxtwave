@@ -48,6 +48,14 @@ export function riskFlags(input: RiskInput): FlagKey[] {
   return flags;
 }
 
+/** A flag with its reason spelled out from the student's own numbers (for display). */
+export type FlagWithDetail = { key: FlagKey; detail: string };
+
+/** Pairs each of a student's flags with its human-readable reason (flagDetail). */
+export function flagsWithDetail(flags: FlagKey[], input: RiskInput): FlagWithDetail[] {
+  return flags.map((key) => ({ key, detail: flagDetail(key, input) }));
+}
+
 /** Human-readable reason, e.g. for the flags banner on the Student page. */
 export function flagDetail(key: FlagKey, input: RiskInput): string {
   switch (key) {

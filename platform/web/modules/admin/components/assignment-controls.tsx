@@ -12,7 +12,7 @@ import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useConfirm } from "@/common/components/confirm";
 import { Dropdown } from "@/common/components/dropdown";
-import { Button } from "@/common/ui/button";
+import { Button, buttonVariants } from "@/common/ui/button";
 import { applyImportAction, assignAction, previewImportAction } from "@/modules/admin/actions";
 import type { ImportPreview, StaffOption } from "@/modules/admin/assignments-data";
 
@@ -95,6 +95,17 @@ export function ImportPanel() {
   const shown = preview?.rows.filter((r) => r.error || r.instructor || r.coach) ?? [];
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        <a href="/api/admin/assignments/export" download className={buttonVariants({ variant: "outline" })}>
+          Download current assignments
+        </a>
+        <a href="/api/admin/assignments/template" download className={buttonVariants({ variant: "outline" })}>
+          Download blank template
+        </a>
+      </div>
+      <p className="-mt-1 text-xs text-muted-foreground">
+        Easiest way: download the current assignments, change only the cells you need, and upload the file here.
+      </p>
       <form action={check} className="flex flex-wrap items-center gap-3">
         <input
           ref={fileRef}

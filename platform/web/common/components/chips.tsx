@@ -8,20 +8,6 @@ Date : 14 Nov 2026
 
 import { cn } from "@/common/lib/utils";
 
-/** Orange risk flag, e.g. "Attendance < 75%". Orange (not red) is the single risk colour. */
-export function FlagChip({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium whitespace-nowrap text-warning",
-        className,
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
 export type PillTone = "accent" | "warning" | "neutral";
 
 const PILL_TONE: Record<PillTone, string> = {
