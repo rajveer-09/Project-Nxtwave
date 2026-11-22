@@ -6,7 +6,10 @@ Date : 17 Nov 2026
 
 */
 
+import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
+import { flushAll } from './rooms/hub.ts';
+import { attachRoomSockets } from './rooms/socket.ts';
 import { createApp } from './app.ts';
 import { loadIdentityKey } from './auth.ts';
 import { closePool, getPool } from './db/pool.ts';
@@ -25,11 +28,16 @@ async function main() {
   const server = serve({ fetch: createApp().fetch, port, hostname }, () => {
     console.log(`interactions-api listening on ${hostname}:${port}`);
   });
+  // Live code rooms (WebSockets on the same port).
+  attachRoomSockets(server as Server);
 
   const stop = () => {
-    server.close(() => {
-      void closePool().finally(() => process.exit(0));
-    });
+    // Save rooms first, so nothing typed in the last seconds is lost.
+    void flushAll().finally(() =>
+      server.close(() => {
+        void closePool().finally(() => process.exit(0));
+      }),
+    );
     setTimeout(() => process.exit(1), 10_000).unref();
   };
   process.on('SIGTERM', stop);
