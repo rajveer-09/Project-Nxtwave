@@ -43,7 +43,7 @@ export const ENTITY_LABEL: Record<string, string> = {
 };
 
 // Curriculum rows (platform/db/core/migrations/20261118000005): field = kind of item, action = what happened.
-const CURRICULUM_ACTION: Record<string, string> = { added: "added", renamed: "renamed", archived: "archived", restored: "restored", edited: "changed" };
+const CURRICULUM_ACTION: Record<string, string> = { added: "added", renamed: "renamed", archived: "archived", restored: "restored", edited: "changed", deleted: "deleted" };
 const capital = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
 
 export type ChangeFilter = { q?: string; source?: string; entity?: string; from?: string; to?: string; page?: number };

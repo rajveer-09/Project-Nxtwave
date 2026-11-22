@@ -18,6 +18,7 @@ import {
   addStep,
   addSubtopic,
   addTopic,
+  deleteLevel,
   moveSubtopic,
   moveTopic,
   renameSubtopic,
@@ -112,6 +113,7 @@ export async function undoDecisionAction(key: string): Promise<ActionResult> {
 const structureEdit = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("addLevel"), title: z.string().max(80) }),
   z.object({ kind: z.literal("levelTitle"), level: z.number().int().min(0).max(MAX_LEVEL), title: z.string().max(80) }),
+  z.object({ kind: z.literal("deleteLevel"), level: z.number().int().min(0).max(MAX_LEVEL) }),
   z.object({
     kind: z.literal("addTopic"),
     level: z.number().int().min(0).max(MAX_LEVEL),
@@ -150,6 +152,8 @@ export async function structureAction(input: StructureEdit): Promise<ActionResul
         return addLevel(user, e.title);
       case "levelTitle":
         return setLevelTitle(user, e.level, e.title);
+      case "deleteLevel":
+        return deleteLevel(user, e.level);
       case "addTopic":
         return addTopic(user, e.level, e.name, e.maxStep, e.required);
       case "updateTopic":

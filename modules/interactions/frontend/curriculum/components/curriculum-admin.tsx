@@ -8,7 +8,7 @@ Date : 17 Nov 2026
 
 "use client";
 
-import { ArrowLeft, ArrowRight, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { useConfirm } from "@/common/components/confirm";
@@ -245,11 +245,36 @@ function RoadmapEditor({ structure, questions }: { structure: Structure; questio
               </h2>
               <span className="text-xs text-muted-foreground">Topics in teaching order · instructors pick from these when logging</span>
             </div>
-            {open?.kind !== "levelTitle" ? (
-              <Button variant="ghost" className="h-9 text-primary" onClick={() => setOpen({ kind: "levelTitle" })}>
-                <Pencil aria-hidden="true" className="size-3.5" /> {lvl.title ? "Edit title" : "Add title"}
-              </Button>
-            ) : null}
+            <div className="flex flex-wrap gap-1">
+              {open?.kind !== "levelTitle" ? (
+                <Button variant="ghost" className="h-9 text-primary" onClick={() => setOpen({ kind: "levelTitle" })}>
+                  <Pencil aria-hidden="true" className="size-3.5" /> {lvl.title ? "Edit title" : "Add title"}
+                </Button>
+              ) : null}
+              {/* Only the last level, so the others keep their numbers; the server also refuses a level in use. */}
+              {lvl.level > 0 && lvl.level === nextLevel - 1 ? (
+                <Button
+                  variant="ghost"
+                  className="h-9 text-destructive hover:bg-destructive/10"
+                  disabled={pending}
+                  onClick={() => {
+                    const all = lvl.topics.map((x) => (x.archived ? `${x.name} (archived)` : x.name));
+                    const qs = questions.filter((q) => q.level === lvl.level).length;
+                    ask({
+                      title: `Delete ${levelName(lvl.level)}?`,
+                      description: `Its topics, subtopics and questions are deleted with it, and this can't be undone. A level can only be deleted while no student is at it and no interaction was logged at it; otherwise archive its topics instead.`,
+                      items: [...(all.length ? all.map((n) => `Topic · ${n}`) : ["No topics"]), `${qs} question${qs === 1 ? "" : "s"}`],
+                      confirmLabel: `Delete ${levelName(lvl.level)}`,
+                      danger: true,
+                      action: edit({ kind: "deleteLevel", level: lvl.level }),
+                      onSuccess: () => pickLevel(lvl.level - 1),
+                    });
+                  }}
+                >
+                  <Trash2 aria-hidden="true" className="size-3.5" /> Delete level
+                </Button>
+              ) : null}
+            </div>
           </div>
           {open?.kind === "levelTitle" ? (
             <NameForm
