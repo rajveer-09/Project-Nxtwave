@@ -11,7 +11,9 @@ import { randomBytes } from "node:crypto";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { authMode, STUDENT_COOKIE } from "@/common/auth/config";
+import { authMode, STUDENT_COOKIE, VIEW_AS_STUDENT_COOKIE } from "@/common/auth/config";
+import { isAdminRole, type Role } from "@/common/auth/roles";
+import { getRealSessionUser } from "@/common/auth/session";
 import type { Db } from "@/common/auth/core/db";
 import { DUMMY_HASH, hashPassword, isFirstPassword, needsRehash, verifyPassword } from "@/common/auth/core/password";
 import { FAILURE_WINDOW_MINUTES, MAX_FAILURES } from "@/common/auth/core/login";
@@ -28,7 +30,13 @@ export { STUDENT_COOKIE };
 export const STUDENT_SESSION_HOURS = 24 * 7;
 export const NIAT_ID = /^N\d{2}H\d{2}[AB]\d{4}$/;
 
-export type StudentUser = { niatId: string; name: string; mustChangePassword: boolean };
+export type StudentUser = {
+  niatId: string;
+  name: string;
+  mustChangePassword: boolean;
+  /** Set while an admin or super admin views the portal as this student (read-only): who is really signed in. */
+  viewedBy?: { id: string; name: string; role: Role };
+};
 
 export const studentCookieOptions = {
   httpOnly: true,
@@ -52,12 +60,32 @@ export async function studentByToken(db: Db, token: string | undefined | null): 
   return r ? { niatId: r.niat_id, name: r.full_name, mustChangePassword: r.must_change_password } : null;
 }
 
-/** Looked up once per request. */
+/**
+ * Looked up once per request. A student's own session first; otherwise "view as student": an admin
+ * or super admin (staff session) viewing an active student's portal, read-only. The cookie only
+ * names the student: who may view is checked here on every request.
+ */
 export const getOptionalStudent = cache(async (): Promise<StudentUser | null> => {
   const store = await cookies();
   if (authMode() !== "database") return null;
-  return studentByToken(getDb(), store.get(STUDENT_COOKIE)?.value);
+  const own = await studentByToken(getDb(), store.get(STUDENT_COOKIE)?.value);
+  if (own) return own;
+  const niatId = store.get(VIEW_AS_STUDENT_COOKIE)?.value?.toUpperCase();
+  if (!niatId || !NIAT_ID.test(niatId)) return null;
+  const staff = await getRealSessionUser();
+  if (!staff || staff.mustSetPassword || !isAdminRole(staff.role)) return null;
+  const student = await activeStudent(niatId);
+  return student ? { ...student, mustChangePassword: false, viewedBy: { id: staff.id, name: staff.name, role: staff.role } } : null;
 });
+
+/** An active student by NIAT ID (whether or not they have signed in yet), or null. */
+export async function activeStudent(niatId: string): Promise<{ niatId: string; name: string } | null> {
+  const { rows } = await getDb().query<{ niat_id: string; full_name: string }>(
+    "SELECT niat_id, full_name FROM core.students WHERE niat_id = $1 AND status = 'active'",
+    [niatId.toUpperCase()],
+  );
+  return rows[0] ? { niatId: rows[0].niat_id, name: rows[0].full_name } : null;
+}
 
 /** The signed-in student; anyone else goes to the student sign-in. */
 export async function requireStudent(): Promise<StudentUser> {

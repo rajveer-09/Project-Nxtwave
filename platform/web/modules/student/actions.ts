@@ -11,7 +11,7 @@ Date : 18 Nov 2026
 import type { Pool } from "pg";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { authMode } from "@/common/auth/config";
+import { authMode, VIEW_AS_STUDENT_COOKIE } from "@/common/auth/config";
 import { hashPassword, passwordPolicyError, verifyPassword } from "@/common/auth/core/password";
 import { clientIp } from "@/common/auth/request";
 import {
@@ -26,6 +26,12 @@ import { getDb } from "@/common/db/pool";
 
 export async function studentSignOut() {
   const store = await cookies();
+  // Viewing as a student: "sign out" just ends that and goes back to the student's page.
+  const viewing = store.get(VIEW_AS_STUDENT_COOKIE)?.value;
+  if (viewing && !store.get(STUDENT_COOKIE)?.value) {
+    store.delete(VIEW_AS_STUDENT_COOKIE);
+    redirect(`/students/${encodeURIComponent(viewing)}`);
+  }
   if (authMode() === "database") await deleteStudentSession(getDb(), store.get(STUDENT_COOKIE)?.value);
   store.delete(STUDENT_COOKIE);
   redirect("/login");
@@ -39,6 +45,7 @@ export type PasswordState = { error: string | null; done: boolean };
  */
 export async function changeOwnPassword(_prev: PasswordState, formData: FormData): Promise<PasswordState> {
   const student = await requireStudent();
+  if (student.viewedBy) return { error: `You're viewing as ${student.name}, so nothing can be saved.`, done: false };
   const current = String(formData.get("current") ?? "");
   const next = String(formData.get("next") ?? "");
   const confirm = String(formData.get("confirm") ?? "");

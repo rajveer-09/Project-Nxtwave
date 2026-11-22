@@ -17,6 +17,7 @@ import { Brand } from "@/common/components/brand";
 import { SideNavLinks, SideNavLinksFallback } from "@/modules/shell/side-nav";
 import { ProfileMenu } from "@/modules/shell/profile-menu";
 import { MessageBell, UrgentBanner } from "@/modules/messages/components/notifications";
+import { ViewAsBanner } from "@/modules/shell/view-as";
 
 /**
  * App frame: sidebar (role-based) + main content. The sidebar stacks above the
@@ -57,6 +58,9 @@ export async function AppShell({ user, children }: { user: SessionUser; children
         <ProfileMenu name={user.name} role={ROLE_LABEL[user.role]} initials={initials(user.name)} />
       </SidebarFrame>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-6 px-4 py-7 sm:px-8 sm:pb-12">
+        {user.viewedBy ? (
+          <ViewAsBanner name={user.name} role={ROLE_LABEL[user.role]} by={user.viewedBy.name} backTo="/admin/staff" className="sticky top-0 z-40 -mx-4 -mt-7 sm:-mx-8" />
+        ) : null}
         <UrgentBanner />
         {/* No page-change animation: the next page simply appears. */}
         <div className="flex min-w-0 flex-col gap-6">{children}</div>

@@ -20,6 +20,8 @@ import { studentChanges } from "@/modules/admin/change-log-data";
 import { ChangeTable } from "@/modules/admin/components/change-table";
 import { getStudent, type StudentDetail } from "@/modules/students/data";
 import { RoomsList } from "@nxtone/interactions-ui/room/components/rooms-list";
+import { usingSampleData } from "@/common/data/roster";
+import { ViewAsButton } from "@/modules/shell/view-as";
 
 export const metadata = { title: "Student" };
 
@@ -79,9 +81,15 @@ async function StudentContent({ params }: { params: Promise<{ niatId: string }> 
 
   return (
     <>
-      <Link href="/students" className="flex min-h-8 items-center text-[13px] font-semibold text-primary hover:text-accent-strong">
-        ← All students
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link href="/students" className="flex min-h-8 items-center text-[13px] font-semibold text-primary hover:text-accent-strong">
+          ← All students
+        </Link>
+        {/* Admins and super admins: see this student's own portal, read-only. */}
+        {isAdminRole(user.role) && !usingSampleData() ? (
+          <ViewAsButton niatId={d.student.niatId} name={d.student.name} label="View as student" variant="outline" />
+        ) : null}
+      </div>
       <ProfileHeader d={d} />
       <FlagsBanner d={d} />
       <Snapshot d={d} />

@@ -10,6 +10,7 @@ import { applyOp, loadRoom, roomAccess, roomHead, roomsAvailable } from "@nxtone
 import { MAX_CODE, roomOp } from "@nxtone/interactions-ui/room/lib/types";
 import { clientIp } from "@/common/auth/request";
 import { rateLimit } from "@/common/lib/rate-limit";
+import { viewOnly } from "@/common/auth/session";
 
 /**
  * A code room's live channel. GET ?v=<version>: 204 while nothing changed, else the whole room.
@@ -72,6 +73,8 @@ export async function POST(request: Request, ctx: RouteContext<"/api/rooms/[id]"
   }
   const checked = await check(ctx);
   if ("error" in checked) return checked.error;
+  const blocked = await viewOnly(); // "view as" is read-only
+  if (blocked) return json({ error: blocked.error }, 403);
   const raw = await request.text().catch(() => "");
   if (raw.length > MAX_BODY_BYTES) return json({ error: "That's more code than a room holds." }, 413);
   let payload: unknown;

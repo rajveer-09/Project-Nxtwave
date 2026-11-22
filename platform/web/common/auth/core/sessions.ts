@@ -58,6 +58,18 @@ const STAFF_WITH_ROLES = `
   FROM core.staff s
   LEFT JOIN core.staff_roles r ON r.staff_id = s.id`;
 
+/** An active staff member as a session user (for "view as"), or null. */
+export async function findActiveStaffById(db: Db, staffId: string): Promise<SessionUser | null> {
+  if (!/^\d{1,18}$/.test(staffId)) return null;
+  const { rows } = await db.query<StaffRow>(
+    `${STAFF_WITH_ROLES}
+     WHERE s.id = $1 AND s.active AND s.left_on IS NULL AND s.deleted_at IS NULL
+     GROUP BY s.id`,
+    [staffId],
+  );
+  return rows[0] ? toUser(rows[0]) : null;
+}
+
 export async function findActiveStaffByEmail(db: Db, email: string) {
   const { rows } = await db.query<StaffRow & { password_hash: string | null }>(
     `${STAFF_WITH_ROLES.replace("SELECT s.id,", "SELECT s.id, s.password_hash,")}

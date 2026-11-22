@@ -17,6 +17,7 @@ import { listChanges } from "@/modules/admin/change-log-data";
 import { listStaff } from "@/modules/admin/staff-data";
 import { ChangeTable } from "@/modules/admin/components/change-table";
 import { StaffTable } from "@/modules/admin/components/staff-table";
+import { usingSampleData } from "@/common/data/roster";
 
 export const metadata = { title: "Super admin" };
 
@@ -79,7 +80,7 @@ async function Content() {
         const list = rows.filter((r) => r.active && r.role === g.role);
         return (
           <SectionCard key={g.title} title={`${g.title} · ${list.length}`} description={g.description} bodyClassName="px-0 pb-2">
-            <StaffTable rows={list} roles={roles} mode="active" />
+            <StaffTable rows={list} roles={roles} mode="active" viewerRole={usingSampleData() ? undefined : user.role} />
           </SectionCard>
         );
       })}

@@ -10,7 +10,7 @@ Date : 17 Nov 2026
 
 import { z } from "zod";
 import { ROLES } from "@/common/auth/roles";
-import { getSessionUser } from "@/common/auth/session";
+import { getSessionUser, viewOnly } from "@/common/auth/session";
 import { PRIORITIES } from "./audience";
 import { markRead, sendMessage } from "./data";
 
@@ -29,6 +29,8 @@ const sendSchema = z.object({
 });
 
 export async function sendMessageAction(input: unknown): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = sendSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the recipients, subject and message." };
@@ -39,6 +41,8 @@ export async function sendMessageAction(input: unknown): Promise<ActionResult> {
 }
 
 export async function markReadAction(id: string, acknowledge = false): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const result = await markRead(user, String(id), !!acknowledge);
   return result.ok ? { ok: true } : result;
