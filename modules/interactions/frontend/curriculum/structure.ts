@@ -137,6 +137,47 @@ export function setLevelTitle(user: SessionUser, level: number, rawTitle: string
   });
 }
 
+/**
+ * Deletes the last level with its topics, subtopics and questions, but only if nothing ever used it:
+ * no student is at it and no interaction was logged at it (logs and progress keep level numbers, so a
+ * used level, or one in the middle, stays; archive its topics instead). One change-log entry records
+ * it (migration 20261122000002).
+ */
+export function deleteLevel(user: SessionUser, level: number) {
+  return edit(user, async (db) => {
+    const { rows } = await db.query<{ last: number | null }>("SELECT max(level) AS last FROM core.curriculum_levels");
+    const last = rows[0].last;
+    if (last === null || level !== last) return fail(`Only the last level (Level ${last}) can be deleted, so the others keep their numbers.`);
+    if (level === 0) return fail("Level 0 can't be deleted.");
+    const used = await db.query<{ students: number; interactions: number }>(
+      `SELECT (SELECT count(*)::int FROM logs.students WHERE level = $1) AS students,
+              (SELECT count(*)::int FROM logs.interactions WHERE COALESCE(level, 0) = $1) AS interactions`,
+      [level],
+    );
+    const { students, interactions } = used.rows[0];
+    if (students || interactions) {
+      const why = [students ? `${students} student${students === 1 ? " is" : "s are"} at it now` : "", interactions ? `${interactions} interaction${interactions === 1 ? " was" : "s were"} logged at it` : ""]
+        .filter(Boolean)
+        .join(" and ");
+      return fail(`Level ${level} is in use (${why}), so it stays. Archive its topics instead.`);
+    }
+    const counts = await db.query<{ topics: number; questions: number }>(
+      `SELECT (SELECT count(*)::int FROM core.curriculum_topics WHERE level = $1) AS topics,
+              (SELECT count(*)::int FROM core.curriculum_questions WHERE level = $1) AS questions`,
+      [level],
+    );
+    const { topics, questions } = counts.rows[0];
+    const summary = `with ${topics} topic${topics === 1 ? "" : "s"} and ${questions} question${questions === 1 ? "" : "s"}`;
+    await db.query("SELECT set_config('app.deleted_summary', $1, true)", [summary]);
+    await db.query("UPDATE core.curriculum_questions SET tweak_of = NULL WHERE tweak_of IN (SELECT id FROM core.curriculum_questions WHERE level = $1)", [level]);
+    await db.query("DELETE FROM core.curriculum_questions WHERE level = $1", [level]);
+    await db.query("DELETE FROM core.curriculum_subtopics WHERE topic_id IN (SELECT id FROM core.curriculum_topics WHERE level = $1)", [level]);
+    await db.query("DELETE FROM core.curriculum_topics WHERE level = $1", [level]);
+    await db.query("DELETE FROM core.curriculum_levels WHERE level = $1", [level]);
+    return { ok: true, message: `Deleted Level ${level} ${summary}.` };
+  });
+}
+
 export function addTopic(user: SessionUser, level: number, rawName: string, maxStep: string | null, required: boolean) {
   return edit(user, async (db) => {
     const name = cleanName(rawName);
