@@ -52,6 +52,14 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA logs TO interactions_svc;
 GRANT ALL ON SCHEMA logs TO web_svc;
 GRANT ALL ON ALL TABLES IN SCHEMA logs TO web_svc;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA logs TO web_svc;
+-- Live code rooms: the interactions service syncs the code over WebSockets and saves it
+-- (migration 20261122000001; the tables exist only once the core migrations have run).
+DO $$
+BEGIN
+  IF to_regclass('core.code_rooms') IS NOT NULL THEN
+    GRANT SELECT, UPDATE ON core.code_rooms, core.code_room_problems TO interactions_svc;
+  END IF;
+END $$;
 GRANT ALL ON SCHEMA attendance TO attendance_svc;
 GRANT ALL ON ALL TABLES IN SCHEMA attendance TO attendance_svc;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA attendance TO attendance_svc;

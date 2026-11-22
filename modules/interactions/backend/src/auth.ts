@@ -30,6 +30,12 @@ export function loadIdentityKey(): void {
   key = new TextEncoder().encode(secret);
 }
 
+/** The shared key, for other signed tokens from the web app (code room tickets: rooms/ticket.ts). */
+export function identityKey(): Uint8Array {
+  if (!key) throw new Error('loadIdentityKey() was not called');
+  return key;
+}
+
 export class AuthError extends Error {
   readonly status: 401 | 403;
   constructor(message: string, status: 401 | 403) {

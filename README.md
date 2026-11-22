@@ -230,6 +230,10 @@ Everything runs in Singapore, next to the database.
 
 Each `*_JWT_SECRET` on Vercel equals that service's `IDENTITY_JWT_SECRET` on Render. Node connections to the pooler need `?uselibpqcompat=true&sslmode=require`; the contest API's need `?sslmode=require`. The root `Dockerfile` still runs all three in one container, for a single-host deploy.
 
+Code rooms sync live over a WebSocket to the interactions service (`modules/interactions/backend/src/rooms`, `/rooms/socket`); the web app hands out a short-lived ticket (`/api/rooms/[id]/ticket`) and falls back to polling when sockets are off (`CODE_ROOM_SOCKETS=off` on Vercel) or unreachable.
+
+On Render's free plan a service sleeps after 15 idle minutes, and all free services share 750 hours a month. A free scheduler (cron-job.org, time zone Asia/Kolkata) keeps them awake during working hours: `GET <interactions>/health` every 10 minutes 07:00–19:50 daily (this also counts as database activity for Supabase), and `GET <contest>/api/health` every 10 minutes 09:00–17:50 Monday–Saturday; about 650 hours a month. Outside those hours a service wakes on the first request (about a minute; the pages say so and retry).
+
 ## Branches
 
 - `master`: production

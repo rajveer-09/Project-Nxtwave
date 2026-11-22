@@ -17,6 +17,7 @@ import {
 } from './db/queries.ts';
 import type { Actor, InstructorRole, InteractionLog, NewInstructorInput } from './types.ts';
 import { refreshCurriculum } from './domain/curriculum.ts';
+import { roomStats } from './rooms/hub.ts';
 
 /*
  * Same routes, permissions and responses as the original Instructor_Evaluation app/api routes,
@@ -65,7 +66,8 @@ export function createApp() {
   app.get('/health', async (c) => {
     try {
       await getPool().query('SELECT 1');
-      return c.json({ ok: true });
+      // Memory and live rooms, to watch load on the free instance (512 MB).
+      return c.json({ ok: true, rssMb: Math.round(process.memoryUsage().rss / 1_048_576), ...roomStats() });
     } catch {
       return c.json({ ok: false }, 503);
     }
