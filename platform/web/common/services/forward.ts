@@ -99,8 +99,11 @@ export async function forwardToService(request: Request, service: ServiceConfig,
       redirect: "manual",
       signal: AbortSignal.timeout(30_000),
     });
-  } catch {
-    return json(502, `The ${service.name} service didn't respond.`);
+  } catch (err) {
+    // Usually a free-tier service waking from sleep (about a minute): 504 after the 30 s wait,
+    // 502 if it couldn't be reached. Pages retry both by themselves (modules/shell/query-provider.tsx).
+    const timedOut = err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError");
+    return json(timedOut ? 504 : 502, `The ${service.name} service is starting up. This page tries again by itself.`);
   }
 
   const out = new Headers();

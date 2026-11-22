@@ -45,7 +45,7 @@ export async function callService<T>(
       signal: AbortSignal.timeout(30_000),
     });
   } catch {
-    return { ok: false, status: 502, error: `The ${service.name} service didn't respond.` };
+    return { ok: false, status: 502, error: `The ${service.name} service is starting up. Try again in a minute.` };
   }
   const data = (await res.json().catch(() => null)) as (T & { error?: unknown }) | null;
   if (!res.ok) {

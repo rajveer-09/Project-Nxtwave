@@ -19,6 +19,15 @@ import { contestApi, contestDate, pct } from "@nxtone/contest-ui/api";
 import type { ContestListItem } from "@nxtone/contest-ui/types";
 import { cn } from "@/common/lib/utils";
 
+/** Shown while the contests service wakes from sleep (the free plan sleeps it when idle). */
+export function WakingNote() {
+  return (
+    <p role="status" className="text-[13px] text-muted-foreground">
+      Contests are starting up. This can take a minute; the page fills in by itself.
+    </p>
+  );
+}
+
 export function stateLabel(c: Pick<ContestListItem, "state" | "in_review" | "final_at">): { text: string; tone: PillTone } {
   if (c.in_review) return { text: "Scan waiting for review", tone: "warning" };
   switch (c.state) {
@@ -122,6 +131,7 @@ export function ContestsList({ defaultScope = "all" }: { defaultScope?: ContestS
       <section aria-label="Contests" className="overflow-hidden rounded-xl border border-border bg-card">
         {query.isLoading ? (
           <div className="flex flex-col gap-2 p-4">
+            {query.failureCount ? <WakingNote /> : null}
             {Array.from({ length: 6 }, (_, i) => (
               <Skeleton key={i} className="h-12" />
             ))}

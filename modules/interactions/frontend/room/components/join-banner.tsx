@@ -31,9 +31,9 @@ export function JoinBanner({ initial }: { initial: Open[] }) {
           // offline: try again next time
         }
       }
-      if (!stop) timer = setTimeout(poll, 8000);
+      if (!stop) timer = setTimeout(poll, 30_000);
     };
-    timer = setTimeout(poll, 8000);
+    timer = setTimeout(poll, 30_000);
     return () => {
       stop = true;
       clearTimeout(timer);
