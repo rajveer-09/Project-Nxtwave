@@ -11,12 +11,11 @@ Date : 18 Nov 2026
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useConfirm } from "@/common/components/confirm";
+import { Dropdown } from "@/common/components/dropdown";
 import { Button } from "@/common/ui/button";
 import { applyImportAction, assignAction, previewImportAction } from "@/modules/admin/actions";
 import type { ImportPreview, StaffOption } from "@/modules/admin/assignments-data";
 
-const select =
-  "h-9 w-full min-w-44 rounded-lg border border-input bg-card px-2.5 pr-8 text-[13px] text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60";
 
 /** Instructor or coach picker for one student; asks to confirm (with before → after) before saving. */
 export function AssignSelect({ niatId, student, kind, current, options }: { niatId: string; student: string; kind: "instructor" | "coach"; current: string; options: StaffOption[] }) {
@@ -27,12 +26,16 @@ export function AssignSelect({ niatId, student, kind, current, options }: { niat
   const none = kind === "coach" ? "No coach" : "Unassigned";
   return (
     <>
-      <select
+      <Dropdown
         aria-label={`${label} for ${student}`}
-        className={select}
+        className="h-9 w-full min-w-44 text-[13px]"
         value={value}
-        onChange={(e) => {
-          const next = e.target.value;
+        searchPlaceholder={kind === "coach" ? "Search coaches…" : "Search instructors…"}
+        options={[
+          { value: "", label: kind === "coach" ? "No coach" : current && current !== "Unassigned" && !currentId ? `${current} (inactive)` : "Unassigned" },
+          ...options.map((o) => ({ value: o.id, label: o.name })),
+        ]}
+        onValueChange={(next) => {
           setValue(next);
           const to = options.find((o) => o.id === next)?.name ?? none;
           ask({
@@ -47,14 +50,7 @@ export function AssignSelect({ niatId, student, kind, current, options }: { niat
             onCancel: () => setValue(currentId),
           });
         }}
-      >
-        <option value="">{kind === "coach" ? "No coach" : current && current !== "Unassigned" && !currentId ? `${current} (inactive)` : "Unassigned"}</option>
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.name}
-          </option>
-        ))}
-      </select>
+      />
       {dialog}
     </>
   );

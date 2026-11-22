@@ -12,7 +12,9 @@ import { ArrowLeft, ArrowRight, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { useConfirm } from "@/common/components/confirm";
+import { Dropdown } from "@/common/components/dropdown";
 import { EmptyState } from "@/common/components/empty-state";
+import { asOptions } from "@/common/lib/options";
 import { Button } from "@/common/ui/button";
 import { cn } from "@/common/lib/utils";
 import { addQuestionAction, archiveQuestionAction, decideAction, structureAction, undoDecisionAction, updateQuestionAction, type StructureEdit } from "../actions";
@@ -550,16 +552,16 @@ function TopicForm({
         {level > 0 ? (
           <label className={cn(label, "flex-[1_1_220px]")}>
             Steps for this topic
-            <select value={maxStep} onChange={(e) => setMaxStep(e.target.value)} className={input}>
-              <option value="">Every step</option>
-              {structure.steps
-                .filter((s) => !s.archived)
-                .map((s) => (
-                  <option key={s.code} value={s.code}>
-                    Up to {s.code} · {s.label}
-                  </option>
-                ))}
-            </select>
+            <Dropdown
+              value={maxStep}
+              onValueChange={setMaxStep}
+              className="w-full font-normal"
+              searchPlaceholder="Search steps…"
+              options={[
+                { value: "", label: "Every step" },
+                ...structure.steps.filter((s) => !s.archived).map((s) => ({ value: s.code, label: `Up to ${s.code} · ${s.label}` })),
+              ]}
+            />
           </label>
         ) : null}
       </div>
@@ -1047,59 +1049,48 @@ function QueueCard({ item, structure }: { item: QueueItem; structure: Structure 
         <div className="flex flex-wrap items-end gap-2.5 border-t border-muted pt-3">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Level
-            <select
-              value={level}
-              onChange={(e) => {
-                const n = Number(e.target.value);
+            <Dropdown
+              value={String(level)}
+              onValueChange={(v) => {
+                const n = Number(v);
                 setLevel(n);
                 const first = liveTopics(structure, n)[0];
                 setTopic(first?.name ?? "");
                 setSubtopic(first ? (subtopicNames(structure, n, first.name)[0] ?? null) : null);
               }}
-              className={cn(input, "w-28")}
-            >
-              {levels.map((l) => (
-                <option key={l.level} value={l.level}>
-                  {levelName(l.level)}
-                </option>
-              ))}
-            </select>
+              className="w-28"
+              options={levels.map((l) => ({ value: String(l.level), label: levelName(l.level) }))}
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Topic
-            <select
+            <Dropdown
               value={t?.name ?? ""}
-              onChange={(e) => {
-                setTopic(e.target.value);
-                setSubtopic(subtopicNames(structure, level, e.target.value)[0] ?? null);
+              onValueChange={(v) => {
+                setTopic(v);
+                setSubtopic(subtopicNames(structure, level, v)[0] ?? null);
               }}
-              className={cn(input, "w-44")}
-            >
-              {topics.map((x) => (
-                <option key={x.id}>{x.name}</option>
-              ))}
-            </select>
+              className="w-44"
+              searchPlaceholder="Search topics…"
+              options={topics.map((x) => ({ value: x.name, label: x.name }))}
+            />
           </label>
           {subs.length ? (
             <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
               Subtopic
-              <select value={validSub ?? ""} onChange={(e) => setSubtopic(e.target.value)} className={cn(input, "w-48")}>
-                {subs.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
+              <Dropdown value={validSub ?? ""} onValueChange={setSubtopic} className="w-48" searchPlaceholder="Search subtopics…" options={asOptions(subs)} />
             </label>
           ) : null}
           {stepOptions.length && level > 0 ? (
             <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
               Step
-              <select value={validStep} onChange={(e) => setStep(e.target.value)} className={cn(input, "w-52")}>
-                {stepOptions.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    {s.code} · {s.label}
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                value={validStep}
+                onValueChange={setStep}
+                className="w-52"
+                searchPlaceholder="Search steps…"
+                options={stepOptions.map((s) => ({ value: s.code, label: `${s.code} · ${s.label}` }))}
+              />
             </label>
           ) : null}
           <div className="ml-auto flex flex-wrap gap-2">

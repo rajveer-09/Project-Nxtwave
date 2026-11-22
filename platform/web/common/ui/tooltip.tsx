@@ -1,7 +1,13 @@
 "use client"
 
+import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 import { cn } from "cn"
+import { zoomAnchor } from "@/common/lib/zoom-anchor"
+
+/** The trigger, so the tooltip can be placed against it under the page zoom (common/lib/zoom-anchor.ts). */
+type TriggerSlot = { element: HTMLElement | null; setElement: (el: HTMLElement | null) => void }
+const TriggerContext = React.createContext<TriggerSlot | null>(null)
 
 function TooltipProvider({
   delay = 0,
@@ -17,11 +23,19 @@ function TooltipProvider({
 }
 
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+  const [element, setElement] = React.useState<HTMLElement | null>(null)
+  const slot = React.useMemo(() => ({ element, setElement }), [element])
+  return (
+    <TriggerContext.Provider value={slot}>
+      <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+    </TriggerContext.Provider>
+  )
 }
 
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+function TooltipTrigger({ ref, ...props }: TooltipPrimitive.Trigger.Props) {
+  const slot = React.useContext(TriggerContext)
+  // A caller's own ref wins (the tooltip then uses Base UI's default placement).
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" ref={ref ?? slot?.setElement} {...props} />
 }
 
 function TooltipContent({
@@ -37,9 +51,13 @@ function TooltipContent({
     TooltipPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
+  const element = React.useContext(TriggerContext)?.element
+  const anchor = React.useMemo(() => (element ? zoomAnchor(() => element) : undefined), [element])
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
+        anchor={anchor}
+        positionMethod="fixed"
         align={align}
         alignOffset={alignOffset}
         side={side}

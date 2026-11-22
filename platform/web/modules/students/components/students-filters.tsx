@@ -11,13 +11,11 @@ Date : 16 Nov 2026
 import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { Dropdown } from "@/common/components/dropdown";
 import { STANDING_LABEL, STANDINGS } from "@/common/domain/standing";
 import { withParams } from "@/common/lib/url";
 
 type Options = { sections: string[]; halls: string[]; instructors: string[] };
-
-const selectClass =
-  "h-10 rounded-lg border border-input bg-card px-2.5 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
 /** Search box (debounced) and dropdown filters, all stored in the URL. */
 export function StudentsFilters({ options, hide = [] }: { options: Options; /** Filters that can't narrow this person's list (an instructor's students share one college, section and hall). */ hide?: string[] }) {
@@ -69,18 +67,13 @@ export function StudentsFilters({ options, hide = [] }: { options: Options; /** 
       {selects.map((select) => (
         <label key={select.key} className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           {select.label}
-          <select
+          <Dropdown
             value={params.get(select.key) ?? ""}
-            onChange={(event) => go({ [select.key]: event.target.value || null })}
-            className={selectClass}
-          >
-            <option value="">{select.all}</option>
-            {select.values.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => go({ [select.key]: value || null })}
+            options={[{ value: "", label: select.all }, ...select.values]}
+            searchPlaceholder={`Search ${select.label.toLowerCase()}s…`}
+            className="min-w-28"
+          />
         </label>
       ))}
     </div>

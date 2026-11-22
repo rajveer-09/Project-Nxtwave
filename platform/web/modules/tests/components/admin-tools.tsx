@@ -13,6 +13,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { createWeeklyTest, unlockTestResults } from "@/modules/tests/actions";
 import { Button } from "@/common/ui/button";
+import { Dropdown } from "@/common/components/dropdown";
 import { BANDS, type Band } from "@/modules/tests/types";
 
 const input =
@@ -68,13 +69,13 @@ export function NewTestForm({ formats, suggestedName, today }: { formats: { id: 
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Result format
-          <select value={formatId} onChange={(e) => setFormatId(e.target.value)} className={input}>
-            {formats.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name} · v{f.version}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            value={formatId}
+            onValueChange={setFormatId}
+            options={formats.map((f) => ({ value: f.id, label: `${f.name} · v${f.version}` }))}
+            searchPlaceholder="Search formats…"
+            className="w-full"
+          />
         </label>
       </div>
       <fieldset className="flex flex-wrap items-center gap-2">

@@ -10,6 +10,7 @@ Date : 18 Nov 2026
 
 import { useState } from "react";
 import { useConfirm } from "@/common/components/confirm";
+import { Dropdown } from "@/common/components/dropdown";
 import { ROLE_LABEL, type Role } from "@/common/auth/roles";
 import { Button } from "@/common/ui/button";
 import { addStaffAction } from "@/modules/admin/actions";
@@ -58,13 +59,7 @@ export function AddStaffForm({ roles }: { roles: Role[] }) {
       </label>
       <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
         Role
-        <select value={role} onChange={(e) => setRole(e.target.value as Role)} className={`${input} pr-8`}>
-          {roles.map((r) => (
-            <option key={r} value={r}>
-              {ROLE_LABEL[r]}
-            </option>
-          ))}
-        </select>
+        <Dropdown value={role} onValueChange={(r) => setRole(r as Role)} options={roles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))} className="w-44" />
       </label>
       <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
         First password (optional)

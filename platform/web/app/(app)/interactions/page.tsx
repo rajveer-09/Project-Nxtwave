@@ -29,6 +29,8 @@ import { RISK_THRESHOLDS } from "@/common/domain/risk";
 import type { SearchParamsRecord } from "@/common/lib/url";
 import { SectionCard } from "@/common/components/section-card";
 import { LiveForm } from "@/common/components/live-form";
+import { Dropdown } from "@/common/components/dropdown";
+import { asOptions } from "@/common/lib/options";
 import { DateRange } from "@/common/components/date-range";
 import { DailyBars } from "@/common/components/charts";
 import { eachDay, parseRange, shortDay } from "@/common/lib/range";
@@ -129,14 +131,13 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
             {!logging || user.role === "senior_instructor" ? (
               <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
                 Taken by
-                <select name="by" defaultValue={takenBy ?? ""} className="h-10 rounded-lg border border-input bg-card px-2.5 pr-8 text-sm text-foreground">
-                  <option value="">Everyone</option>
-                  {people.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown
+                  name="by"
+                  defaultValue={takenBy ?? ""}
+                  options={[{ value: "", label: "Everyone" }, ...asOptions(people)]}
+                  searchPlaceholder="Search people…"
+                  className="w-56"
+                />
               </label>
             ) : null}
           </LiveForm>

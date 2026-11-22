@@ -9,6 +9,7 @@ Date : 18 Nov 2026
 import Link from "next/link";
 import { Suspense } from "react";
 import { LiveForm } from "@/common/components/live-form";
+import { Dropdown } from "@/common/components/dropdown";
 import { PageHeader } from "@/common/components/page-header";
 import { SectionCard } from "@/common/components/section-card";
 import { Skeleton } from "@/common/ui/skeleton";
@@ -62,25 +63,21 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Type
-          <select name="entity" defaultValue={filter.entity ?? ""} className={`${field} pr-8`}>
-            <option value="">All</option>
-            {ENTITIES.map((e) => (
-              <option key={e} value={e}>
-                {ENTITY_LABEL[e]}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            name="entity"
+            defaultValue={filter.entity ?? ""}
+            options={[{ value: "", label: "All" }, ...ENTITIES.map((e) => ({ value: e, label: ENTITY_LABEL[e] }))]}
+            className="w-44"
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           From
-          <select name="source" defaultValue={filter.source ?? ""} className={`${field} pr-8`}>
-            <option value="">Anywhere</option>
-            {SOURCES.map((s) => (
-              <option key={s} value={s}>
-                {SOURCE_LABEL[s]}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            name="source"
+            defaultValue={filter.source ?? ""}
+            options={[{ value: "", label: "Anywhere" }, ...SOURCES.map((s) => ({ value: s, label: SOURCE_LABEL[s] }))]}
+            className="w-44"
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           On or after

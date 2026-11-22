@@ -14,6 +14,7 @@ import { CodeEditor } from "@nxtone/interactions-ui/room/components/code-editor"
 import { merge3 } from "@nxtone/interactions-ui/room/lib/merge";
 import { LANGUAGES, roomName, type Language, type RoomOp, type RoomProblem, type RoomState, type RoomViewer } from "@nxtone/interactions-ui/room/lib/types";
 import { Button } from "@/common/ui/button";
+import { Dropdown } from "@/common/components/dropdown";
 import { cn } from "@/common/lib/utils";
 
 /** The pad's text as this person sees it, and the server version it was last in step with. */
@@ -292,18 +293,13 @@ export function CodeRoom({ initial, viewer, shareUrl }: { initial: RoomState; vi
               <h2 className="text-base font-semibold">{name}</h2>
               <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 Language
-                <select
+                <Dropdown
                   value={current.language}
                   disabled={closed}
-                  onChange={(e) => void act({ op: "language", problemId: current.id, language: e.target.value as Language })}
-                  className="h-8 rounded-lg border border-input bg-card px-2 text-[13px] text-foreground"
-                >
-                  {LANGUAGES.map((l) => (
-                    <option key={l.value} value={l.value}>
-                      {l.label}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(v) => void act({ op: "language", problemId: current.id, language: v as Language })}
+                  options={LANGUAGES.map((l) => ({ value: l.value, label: l.label }))}
+                  className="h-8 w-36 px-2.5 text-[13px]"
+                />
               </label>
             </div>
             <CodeEditor key={current.id} value={local.text} onChange={(text) => typed(current.id, text)} onRejected={notice} readOnly={closed} label={`Code for ${name}`} />

@@ -14,7 +14,9 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Dropdown } from "@/common/components/dropdown";
 import { EmptyState } from "@/common/components/empty-state";
+import { asOptions } from "@/common/lib/options";
 import { PageHeader } from "@/common/components/page-header";
 import { Button } from "@/common/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/common/ui/sheet";
@@ -192,35 +194,29 @@ export function AnalyticsView() {
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select className={control} aria-label="Degree" value={degree} onChange={(e) => setParam({ degree: e.target.value || null, hall: null, section: null })}>
-            <option value="">All degrees</option>
-            {a?.options.degrees.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-          <select
-            className={control}
+          <Dropdown
+            aria-label="Degree"
+            className="w-full sm:w-40"
+            value={degree}
+            onValueChange={(v) => setParam({ degree: v || null, hall: null, section: null })}
+            options={[{ value: "", label: "All degrees" }, ...asOptions(a?.options.degrees ?? [])]}
+          />
+          <Dropdown
             aria-label="Hall"
+            className="w-full sm:w-40"
             value={hall === undefined ? "" : hall || NO_HALL}
-            onChange={(e) => setParam({ hall: e.target.value === "" ? null : e.target.value === NO_HALL ? "" : e.target.value })}
-          >
-            <option value="">All halls</option>
-            {halls.map((h) => (
-              <option key={h || NO_HALL} value={h || NO_HALL}>
-                {hallLabel(h)}
-              </option>
-            ))}
-          </select>
-          <select className={control} aria-label="Section" value={section} onChange={(e) => setParam({ section: e.target.value || null })}>
-            <option value="">All sections</option>
-            {sections.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+            onValueChange={(v) => setParam({ hall: v === "" ? null : v === NO_HALL ? "" : v })}
+            options={[{ value: "", label: "All halls" }, ...halls.map((h) => ({ value: h || NO_HALL, label: hallLabel(h) }))]}
+            searchPlaceholder="Search halls…"
+          />
+          <Dropdown
+            aria-label="Section"
+            className="w-full sm:w-40"
+            value={section}
+            onValueChange={(v) => setParam({ section: v || null })}
+            options={[{ value: "", label: "All sections" }, ...asOptions(sections)]}
+            searchPlaceholder="Search sections…"
+          />
           <Button
             variant="ghost"
             className="h-10"
@@ -365,13 +361,13 @@ function AnalyticsDrill({ a, query, drill, onClose }: { a: Analytics; query: Ana
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or NIAT ID" aria-label="Search students" className={cn(control, "flex-1 sm:w-auto")} />
           {sorts.length > 1 ? (
-            <select aria-label="Sort" className={control} value={sortIndex} onChange={(e) => setSortIndex(Number(e.target.value))}>
-              {sorts.map((s, i) => (
-                <option key={s.label} value={i}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <Dropdown
+              aria-label="Sort"
+              className="w-full sm:w-48"
+              value={String(sortIndex)}
+              onValueChange={(v) => setSortIndex(Number(v))}
+              options={sorts.map((s, i) => ({ value: String(i), label: s.label }))}
+            />
           ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">

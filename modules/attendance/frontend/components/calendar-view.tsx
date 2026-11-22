@@ -11,6 +11,7 @@ Date : 17 Nov 2026
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { Dropdown } from "@/common/components/dropdown";
 import { EmptyState } from "@/common/components/empty-state";
 import { Skeleton } from "@/common/ui/skeleton";
 import { attendanceApi } from "@nxtone/attendance-ui/api";
@@ -59,13 +60,12 @@ export function CalendarView({ today }: { today: string }) {
         </div>
         <label className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
           Show the calendar for
-          <select value={view} onChange={(e) => setView(e.target.value)} className="h-10 rounded-lg border border-input bg-card px-2.5 text-sm text-foreground">
-            {(q.data?.applies_to ?? ["ALL", "BITS", "CDU"]).map((v) => (
-              <option key={v} value={v}>
-                {v === "ALL" ? "Everyone" : v}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            value={view}
+            onValueChange={setView}
+            options={(q.data?.applies_to ?? ["ALL", "BITS", "CDU"]).map((v) => ({ value: v, label: v === "ALL" ? "Everyone" : v }))}
+            className="w-36"
+          />
         </label>
       </div>
 

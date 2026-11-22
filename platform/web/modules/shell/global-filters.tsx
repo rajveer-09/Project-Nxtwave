@@ -10,6 +10,8 @@ Date : 14 Nov 2026
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
+import { Dropdown } from "@/common/components/dropdown";
+import { asOptions } from "@/common/lib/options";
 
 /**
  * College / section / hall filters kept in the URL query string, so links and the
@@ -41,18 +43,12 @@ export function GlobalFilters() {
       {FILTERS.map((filter) => (
         <label key={filter.key} className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           {filter.label}
-          <select
+          <Dropdown
             value={params.get(filter.key) ?? ""}
-            onChange={(event) => update(filter.key, event.target.value)}
-            className="h-10 min-w-32 rounded-lg border border-input bg-card px-2.5 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-          >
-            <option value="">{filter.all}</option>
-            {filter.options.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => update(filter.key, value)}
+            options={[{ value: "", label: filter.all }, ...asOptions(filter.options)]}
+            className="min-w-32"
+          />
         </label>
       ))}
     </div>

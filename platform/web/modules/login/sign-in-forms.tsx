@@ -11,6 +11,7 @@ Date : 14 Nov 2026
 import { useSearchParams } from "next/navigation";
 import { Suspense, useActionState, useState } from "react";
 import { Button } from "@/common/ui/button";
+import { Dropdown } from "@/common/components/dropdown";
 import { ROLE_LABEL, ROLES } from "@/common/auth/roles";
 import { cn } from "@/common/lib/utils";
 import { devSignIn, passwordSignIn, setOwnPassword, type SetPasswordState, type SignInState } from "@/modules/login/actions";
@@ -134,13 +135,7 @@ export function DevRolePicker() {
     <form action={devSignIn} className="flex flex-col gap-3 rounded-xl border border-dashed border-input bg-card p-4">
       <label className="flex flex-col gap-1.5 text-[13px] font-medium">
         Development: sign in as
-        <select name="role" defaultValue="owner" className={inputClass}>
-          {ROLES.map((role) => (
-            <option key={role} value={role}>
-              {ROLE_LABEL[role]}
-            </option>
-          ))}
-        </select>
+        <Dropdown name="role" defaultValue="owner" options={ROLES.map((role) => ({ value: role, label: ROLE_LABEL[role] }))} className="h-11 w-full text-[15px]" />
       </label>
       <Button type="submit" size="lg" className="h-11 text-[15px] font-semibold">
         Continue

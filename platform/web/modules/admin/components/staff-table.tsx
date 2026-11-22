@@ -11,6 +11,7 @@ Date : 18 Nov 2026
 import { useState } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { useConfirm } from "@/common/components/confirm";
+import { Dropdown } from "@/common/components/dropdown";
 import { ROLE_LABEL, type Role } from "@/common/auth/roles";
 import { Button } from "@/common/ui/button";
 import { changeRoleAction, deactivateAction, deleteStaffAction, reactivateAction, resetPasswordAction } from "@/modules/admin/actions";
@@ -19,8 +20,6 @@ import type { StaffListRow } from "@/modules/admin/staff-data";
 const roleName = (r: Role | null) => (r ? ROLE_LABEL[r] : "No access");
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "—";
-const select =
-  "h-9 rounded-lg border border-input bg-card px-2.5 pr-8 text-[13px] text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60";
 
 /**
  * Staff list with multi-select. Every change opens a confirmation with a preview first.
@@ -174,22 +173,18 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
                   </td>
                   <td className="border-b border-muted px-3 py-3">
                     {editable && mode === "active" && roles.length ? (
-                      <select
+                      <Dropdown
                         aria-label={`Role for ${row.name}`}
-                        className={select}
+                        className="h-9 w-44 text-[13px]"
                         value={row.role ?? ""}
-                        onChange={(e) => {
-                          const next = e.target.value as Role;
-                          if (next && next !== row.role) changeRole(row, next);
+                        onValueChange={(next) => {
+                          if (next && next !== row.role) changeRole(row, next as Role);
                         }}
-                      >
-                        {row.role === null ? <option value="">No access</option> : null}
-                        {roles.map((r) => (
-                          <option key={r} value={r}>
-                            {ROLE_LABEL[r]}
-                          </option>
-                        ))}
-                      </select>
+                        options={[
+                          ...(row.role === null ? [{ value: "", label: "No access" }] : []),
+                          ...roles.map((r) => ({ value: r, label: ROLE_LABEL[r] })),
+                        ]}
+                      />
                     ) : (
                       <span className="font-medium">{roleName(row.role)}</span>
                     )}

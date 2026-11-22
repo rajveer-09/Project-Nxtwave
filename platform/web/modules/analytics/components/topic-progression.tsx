@@ -9,7 +9,8 @@ Date : 19 Nov 2026
 "use client";
 
 import { useState } from "react";
-import { SearchField, selectClass } from "@/common/components/search-field";
+import { Dropdown } from "@/common/components/dropdown";
+import { SearchField } from "@/common/components/search-field";
 
 export type TopicLevel = { level: number; title: string; students: number; topics: { topic: string; count: number }[] };
 
@@ -26,17 +27,13 @@ export function TopicProgression({ levels }: { levels: TopicLevel[] }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
-        <label>
-          <span className="sr-only">Show topics of</span>
-          <select value={level} onChange={(event) => setLevel(event.target.value)} className={selectClass}>
-            <option value="all">All topics</option>
-            {levels.map((l) => (
-              <option key={l.level} value={l.level}>
-                L{l.level} topics
-              </option>
-            ))}
-          </select>
-        </label>
+        <Dropdown
+          aria-label="Show topics of"
+          value={level}
+          onValueChange={setLevel}
+          options={[{ value: "all", label: "All topics" }, ...levels.map((l) => ({ value: String(l.level), label: `L${l.level} topics` }))]}
+          className="w-36"
+        />
         <SearchField label="Search topic" value={query} onChange={setQuery} className="min-w-40 flex-1" />
       </div>
       {chosen ? (

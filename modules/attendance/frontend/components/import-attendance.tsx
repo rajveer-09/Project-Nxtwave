@@ -11,6 +11,7 @@ Date : 19 Nov 2026
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { Dropdown } from "@/common/components/dropdown";
 import { SectionCard } from "@/common/components/section-card";
 import { Button } from "@/common/ui/button";
 import { formatDate } from "@/common/lib/dates";
@@ -409,11 +410,17 @@ function UnsupportedValues({ preview, valueMap, onValueMap }: { preview: Attenda
                 <span className="text-xs text-muted-foreground">
                   {u.cells} cell{u.cells === 1 ? "" : "s"}
                 </span>
-                <select aria-label={`Map ${u.value}`} className={`${control} ml-auto h-9 text-xs`} value={draft[u.value] ?? ""} onChange={(e) => setDraft({ ...draft, [u.value]: e.target.value as "" | "P" | "A" })}>
-                  <option value="">Leave unmarked (skip)</option>
-                  <option value="P">Map to Present</option>
-                  <option value="A">Map to Absent</option>
-                </select>
+                <Dropdown
+                  aria-label={`Map ${u.value}`}
+                  className="ml-auto h-9 w-52 text-xs"
+                  value={draft[u.value] ?? ""}
+                  onValueChange={(v) => setDraft({ ...draft, [u.value]: v as "" | "P" | "A" })}
+                  options={[
+                    { value: "", label: "Leave unmarked (skip)" },
+                    { value: "P", label: "Map to Present" },
+                    { value: "A", label: "Map to Absent" },
+                  ]}
+                />
               </li>
             ))}
           </ul>
@@ -547,28 +554,34 @@ function MissingDateSuggestions({ missing, upload, onSaved }: { missing: Missing
       <div className="mt-3 grid gap-2 sm:grid-cols-4 sm:items-end">
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Save selected as
-          <select
-            className={control}
+          <Dropdown
+            className="w-full"
             value={dayType}
-            onChange={(e) => {
-              const v = e.target.value as "holiday" | "exam" | "exam_prep";
+            onValueChange={(next) => {
+              const v = next as "holiday" | "exam" | "exam_prep";
               setDayType(v);
               if (v === "exam" && appliesTo === "ALL") setAppliesTo("BITS");
               if (label === "Holiday" || label === "Exam" || label === "Exam preparation") setLabel(v === "exam" ? "Exam" : v === "exam_prep" ? "Exam preparation" : "Holiday");
             }}
-          >
-            <option value="holiday">Holiday</option>
-            <option value="exam">Exam (one degree)</option>
-            <option value="exam_prep">Exam preparation</option>
-          </select>
+            options={[
+              { value: "holiday", label: "Holiday" },
+              { value: "exam", label: "Exam (one degree)" },
+              { value: "exam_prep", label: "Exam preparation" },
+            ]}
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Applies to
-          <select className={control} value={appliesTo} onChange={(e) => setAppliesTo(e.target.value)}>
-            {dayType !== "exam" ? <option value="ALL">All degrees</option> : null}
-            <option value="BITS">BITS only</option>
-            <option value="CDU">CDU only</option>
-          </select>
+          <Dropdown
+            className="w-full"
+            value={appliesTo}
+            onValueChange={setAppliesTo}
+            options={[
+              ...(dayType !== "exam" ? [{ value: "ALL", label: "All degrees" }] : []),
+              { value: "BITS", label: "BITS only" },
+              { value: "CDU", label: "CDU only" },
+            ]}
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Label

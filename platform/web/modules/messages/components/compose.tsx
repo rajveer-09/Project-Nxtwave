@@ -13,6 +13,8 @@ import { Send } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/common/ui/button";
+import { Dropdown } from "@/common/components/dropdown";
+import { asOptions } from "@/common/lib/options";
 import { ROLES, type Role } from "@/common/auth/roles";
 import { cn } from "@/common/lib/utils";
 import { sendMessageAction } from "../actions";
@@ -107,21 +109,22 @@ export function Compose({ directory, senderId, colleges, halls }: { directory: D
             <div className="flex flex-wrap gap-3">
               <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
                 College (instructors)
-                <select value={college ?? ""} onChange={(e) => setCollege(e.target.value || null)} className={cn(input, "w-40")}>
-                  <option value="">All colleges</option>
-                  {colleges.map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </select>
+                <Dropdown
+                  value={college ?? ""}
+                  onValueChange={(v) => setCollege(v || null)}
+                  options={[{ value: "", label: "All colleges" }, ...asOptions(colleges)]}
+                  className="w-40"
+                />
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
                 Hall (instructors)
-                <select value={hall ?? ""} onChange={(e) => setHall(e.target.value || null)} className={cn(input, "w-36")}>
-                  <option value="">All halls</option>
-                  {halls.map((h) => (
-                    <option key={h}>{h}</option>
-                  ))}
-                </select>
+                <Dropdown
+                  value={hall ?? ""}
+                  onValueChange={(v) => setHall(v || null)}
+                  options={[{ value: "", label: "All halls" }, ...asOptions(halls)]}
+                  searchPlaceholder="Search halls…"
+                  className="w-36"
+                />
               </label>
             </div>
           </>

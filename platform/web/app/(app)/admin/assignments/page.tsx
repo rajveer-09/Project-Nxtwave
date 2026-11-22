@@ -9,6 +9,8 @@ Date : 18 Nov 2026
 import Link from "next/link";
 import { Suspense } from "react";
 import { LiveForm } from "@/common/components/live-form";
+import { Dropdown } from "@/common/components/dropdown";
+import { asOptions } from "@/common/lib/options";
 import { StatusPill } from "@/common/components/chips";
 import { PageHeader } from "@/common/components/page-header";
 import { SectionCard } from "@/common/components/section-card";
@@ -72,25 +74,23 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Instructor
-          <select name="instructor" defaultValue={instructor ?? ""} className={`${field} pr-8`}>
-            <option value="">Anyone</option>
-            {instructors.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            name="instructor"
+            defaultValue={instructor ?? ""}
+            options={[{ value: "", label: "Anyone" }, ...asOptions(instructors)]}
+            searchPlaceholder="Search instructors…"
+            className="w-52"
+          />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Hall
-          <select name="hall" defaultValue={hall ?? ""} className={`${field} pr-8`}>
-            <option value="">Any</option>
-            {halls.map((h) => (
-              <option key={h} value={h}>
-                {h}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            name="hall"
+            defaultValue={hall ?? ""}
+            options={[{ value: "", label: "Any" }, ...asOptions(halls)]}
+            searchPlaceholder="Search halls…"
+            className="w-36"
+          />
         </label>
         <Link href="/admin/assignments" className="flex h-10 items-center px-2 text-sm font-semibold text-primary hover:text-accent-strong">
           Clear

@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { logInteraction } from "@nxtone/interactions-ui/actions";
 import { RoomPanel } from "@nxtone/interactions-ui/room/components/room-panel";
 import { Button } from "@/common/ui/button";
+import { Dropdown } from "@/common/components/dropdown";
 import { QuestionTitle } from "@nxtone/interactions-ui/curriculum/components/question-title";
 import { liveTopics, reachedSteps, subtopicNames, topicNames, type Structure } from "@nxtone/interactions-ui/curriculum/lib/structure";
 import { clearInteractionDraft, interactionDraftKey, loadInteractionDraft, saveInteractionDraft } from "@nxtone/interactions-ui/lib/draft";
@@ -90,6 +91,7 @@ const input =
 const area =
   "w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-invalid:border-warning-strong";
 const label = "flex flex-col gap-1.5 text-[13px] font-medium";
+const dropdown = "h-11 w-full font-normal aria-invalid:border-warning-strong";
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   return message ? (
@@ -485,20 +487,16 @@ export function InteractionForm({
         ) : (
         <label className={cn(label, "flex-[2_1_240px]")}>
           Student
-          <select
+          <Dropdown
             value={niatId}
-            onChange={(event) => setNiatId(event.target.value)}
+            onValueChange={setNiatId}
             aria-invalid={!!errors.niatId}
             aria-describedby="err-student"
-            className={input}
-          >
-            <option value="">Pick one of your students…</option>
-            {students.map((s) => (
-              <option key={s.niatId} value={s.niatId}>
-                {s.name} · {s.niatId}
-              </option>
-            ))}
-          </select>
+            className={dropdown}
+            placeholder="Pick one of your students…"
+            searchPlaceholder="Search name or NIAT ID…"
+            options={[{ value: "", label: "Pick one of your students…" }, ...students.map((s) => ({ value: s.niatId, label: `${s.name} · ${s.niatId}` }))]}
+          />
           <FieldError id="err-student" message={errors.niatId} />
         </label>
         )}
@@ -515,15 +513,15 @@ export function InteractionForm({
         ) : (
         <label className={cn(label, "flex-[1_1_170px]")}>
           Taken by
-          <select value={f.takenBy} onChange={(e) => set("takenBy", e.target.value)} aria-invalid={!!errors.takenBy} aria-describedby="err-taken" className={input}>
-            <option value="">Pick…</option>
-            {instructors.map((name) => (
-              <option key={name} value={name}>
-                {name}
-                {name === userName ? " (you)" : ""}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            value={f.takenBy}
+            onValueChange={(v) => set("takenBy", v)}
+            aria-invalid={!!errors.takenBy}
+            aria-describedby="err-taken"
+            className={dropdown}
+            searchPlaceholder="Search instructors…"
+            options={[{ value: "", label: "Pick…" }, ...instructors.map((name) => ({ value: name, label: name === userName ? `${name} (you)` : name }))]}
+          />
           <FieldError id="err-taken" message={errors.takenBy} />
         </label>
         )}
@@ -605,14 +603,12 @@ export function InteractionForm({
             <legend className="mb-2 text-[13px] font-semibold">What was covered</legend>
             <label className={cn(label, "max-w-48")}>
               Level
-              <select value={f.level} onChange={(e) => changeLevel(Number(e.target.value))} className={input}>
-                {levelOptions.map((l) => (
-                  <option key={l.level} value={l.level}>
-                    {levelName(l.level)}
-                    {l.title ? ` · ${l.title}` : ""}
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                value={String(f.level)}
+                onValueChange={(v) => changeLevel(Number(v))}
+                className={dropdown}
+                options={levelOptions.map((l) => ({ value: String(l.level), label: `${levelName(l.level)}${l.title ? ` · ${l.title}` : ""}` }))}
+              />
             </label>
             <div role="group" aria-label="Topic" className="flex flex-col gap-1.5">
               <span className="text-[13px] font-medium">Topic <span className="font-normal text-muted-foreground">· one per interaction</span></span>

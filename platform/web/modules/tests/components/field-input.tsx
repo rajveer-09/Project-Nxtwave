@@ -10,6 +10,8 @@ Date : 17 Nov 2026
 
 import type { FormatField, ResultValue } from "@/modules/tests/types";
 import { cn } from "@/common/lib/utils";
+import { Dropdown } from "@/common/components/dropdown";
+import { asOptions } from "@/common/lib/options";
 
 const box =
   "rounded-lg border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60";
@@ -89,14 +91,14 @@ export function FieldInput({
       );
     case "single":
       return (
-        <select aria-label={aria} disabled={disabled} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value || null)} className={cn(box, "h-10 w-full")}>
-          <option value="">Choose…</option>
-          {(field.options ?? []).map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+        <Dropdown
+          aria-label={aria}
+          disabled={disabled}
+          value={typeof value === "string" ? value : ""}
+          onValueChange={(v) => onChange(v || null)}
+          options={[{ value: "", label: "Choose…" }, ...asOptions(field.options ?? [])]}
+          className="w-full"
+        />
       );
     case "multi": {
       const picked = Array.isArray(value) ? value : [];
