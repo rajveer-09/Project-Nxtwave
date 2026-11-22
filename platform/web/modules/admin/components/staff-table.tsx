@@ -12,7 +12,10 @@ import { useState } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { useConfirm } from "@/common/components/confirm";
 import { Dropdown } from "@/common/components/dropdown";
-import { ROLE_LABEL, type Role } from "@/common/auth/roles";
+import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
+import { canViewAs, ROLE_LABEL, type Role } from "@/common/auth/roles";
+import { ViewAsButton } from "@/modules/shell/view-as";
 import { Button } from "@/common/ui/button";
 import { changeRoleAction, deactivateAction, deleteStaffAction, reactivateAction, resetPasswordAction } from "@/modules/admin/actions";
 import type { StaffListRow } from "@/modules/admin/staff-data";
@@ -27,10 +30,25 @@ const when = (iso: string | null) =>
  * - "deactivated": super admins' list; Reactivate or Delete (one or selected)
  * - "readonly":    no controls
  */
-export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRow[]; roles: Role[]; mode?: "active" | "deactivated" | "readonly" }) {
+export function StaffTable({
+  rows,
+  roles,
+  mode = "active",
+  viewerRole,
+}: {
+  rows: StaffListRow[];
+  roles: Role[];
+  mode?: "active" | "deactivated" | "readonly";
+  /** The person looking (database mode only): admins and super admins get "View as" on people ranked below them. */
+  viewerRole?: Role;
+}) {
   const { ask, dialog } = useConfirm();
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const selectable = mode !== "readonly" ? rows.filter((r) => r.editable) : [];
+  const [query, setQuery] = useState("");
+  const match = searchMatcher(query);
+  const shown = rows.filter((r) => match(r.name, r.email, r.instructorCode, roleName(r.role)));
+  // "Select everyone" and bulk actions cover the people shown by the search.
+  const selectable = mode !== "readonly" ? shown.filter((r) => r.editable) : [];
   const chosen = selectable.filter((r) => picked.has(r.id));
   const allPicked = selectable.length > 0 && chosen.length === selectable.length;
   const toggle = (id: string) => setPicked((prev) => {
@@ -94,6 +112,12 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
 
   return (
     <div className="flex flex-col">
+      {rows.length > 6 ? (
+        <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-3">
+          <SearchField label="Search staff" placeholder="Name, email, instructor code or role" value={query} onChange={setQuery} className="w-full max-w-80" />
+          {query.trim() ? <span className="text-[13px] text-muted-foreground">{shown.length} of {rows.length}</span> : null}
+        </div>
+      ) : null}
       {selectable.length ? (
         <div className="flex min-h-12 flex-wrap items-center gap-3 border-b border-border px-5 py-2 text-[13px]">
           <span className="text-muted-foreground">{chosen.length ? `${chosen.length} selected` : "Select people to act on several at once"}</span>
@@ -153,7 +177,7 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
+            {shown.map((row) => {
               const editable = mode !== "readonly" && row.editable;
               return (
                 <tr key={row.id} className={picked.has(row.id) ? "bg-accent/40" : undefined}>
@@ -202,6 +226,9 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
                   )}
                   <td className="border-b border-muted px-5 py-3">
                     <div className="flex items-center justify-end gap-2">
+                      {viewerRole && mode !== "deactivated" && row.active && row.role && canViewAs(viewerRole, row.role) ? (
+                        <ViewAsButton staffId={row.id} name={row.name} />
+                      ) : null}
                       {mode === "readonly" || !editable ? (
                         row.active ? <StatusPill tone="accent">Active</StatusPill> : <StatusPill>Deactivated</StatusPill>
                       ) : mode === "active" ? (
@@ -228,10 +255,10 @@ export function StaffTable({ rows, roles, mode = "active" }: { rows: StaffListRo
                 </tr>
               );
             })}
-            {!rows.length ? (
+            {!shown.length ? (
               <tr>
                 <td colSpan={6}className="px-5 py-6 text-center text-muted-foreground">
-                  {mode === "deactivated" ? "Nobody is deactivated." : "Nobody here."}
+                  {rows.length ? `Nobody matches “${query.trim()}”.` : mode === "deactivated" ? "Nobody is deactivated." : "Nobody here."}
                 </td>
               </tr>
             ) : null}

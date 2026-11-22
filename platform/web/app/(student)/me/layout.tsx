@@ -13,6 +13,7 @@ import { ProfileMenu } from "@/modules/shell/profile-menu";
 import { initials } from "@/common/auth/roles";
 import { getOptionalStudent } from "@/common/auth/student/session";
 import { studentSignOut } from "@/modules/student/actions";
+import { ViewAsBanner } from "@/modules/shell/view-as";
 
 /** Who is signed in, and sign out. */
 async function Who() {
@@ -21,10 +22,20 @@ async function Who() {
   return <ProfileMenu variant="header" name={student.name} role={student.niatId} initials={initials(student.name)} signOutAction={studentSignOut} />;
 }
 
+/** While an admin views the portal as this student: who, read-only, and the way back. */
+async function Viewing() {
+  const student = await getOptionalStudent();
+  if (!student?.viewedBy) return null;
+  return <ViewAsBanner name={student.name} role={`Student · ${student.niatId}`} by={student.viewedBy.name} backTo={`/students/${student.niatId}`} />;
+}
+
 /** The student portal frame: brand, who is signed in, sign out. No staff navigation. */
 export default function StudentLayout({ children }: LayoutProps<"/me">) {
   return (
     <div className="min-h-app bg-background">
+      <Suspense fallback={null}>
+        <Viewing />
+      </Suspense>
       <header className="sticky top-0 z-20 border-b border-border bg-card/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-8">
           <Link href="/me" aria-label="NxtOne home">

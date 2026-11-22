@@ -55,7 +55,7 @@ async function StaffContent() {
         }
         bodyClassName="px-0 pb-2"
       >
-        <StaffTable rows={rows} roles={roles} mode={roles.length && !sample ? "active" : "readonly"} />
+        <StaffTable rows={rows} roles={roles} mode={roles.length && !sample ? "active" : "readonly"} viewerRole={sample ? undefined : user.role} />
       </SectionCard>
     </>
   );

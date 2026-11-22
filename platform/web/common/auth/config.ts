@@ -33,6 +33,15 @@ export const OAUTH_COOKIE = "nx_oauth";
  */
 export const LOGIN_SCOPED_PREFIX = "nx_login_";
 
+/**
+ * "View as": the staff id an admin or super admin is looking at NxtOne as (read-only; see
+ * common/auth/session.ts). Login-scoped, so signing in or out ends it; it also expires after an hour.
+ */
+export const VIEW_AS_COOKIE = `${LOGIN_SCOPED_PREFIX}view_as`;
+/** The same for a student: the NIAT ID whose portal (/me) an admin or super admin is viewing, read-only. */
+export const VIEW_AS_STUDENT_COOKIE = `${LOGIN_SCOPED_PREFIX}view_as_student`;
+export const VIEW_AS_MINUTES = 60;
+
 /** Names of the login-scoped cookies among these, to delete at sign-in / sign-out. */
 export function loginScopedCookieNames(all: { name: string }[]): string[] {
   return all.map((c) => c.name).filter((name) => name.startsWith(LOGIN_SCOPED_PREFIX));

@@ -8,7 +8,7 @@ Date : 16 Nov 2026
 
 "use server";
 
-import { getSessionUser } from "@/common/auth/session";
+import { getSessionUser, viewOnly } from "@/common/auth/session";
 import { createInteraction } from "@nxtone/interactions-ui/data";
 import { attachRoom } from "@nxtone/interactions-ui/room/data";
 
@@ -21,6 +21,8 @@ export type LogResult =
  * room used during it (roomId) is attached to the saved interaction and ended.
  */
 export async function logInteraction(payload: unknown, roomId?: string | null): Promise<LogResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const result = await createInteraction(payload, user);
   if (!result.ok) return result;

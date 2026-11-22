@@ -224,12 +224,14 @@ const toMessage = (r: MessageRow) => ({
   createdAt: new Date(r.created_at).toISOString(),
 });
 
-/** The signed-in person's messages; fetching them counts as delivery. */
+/** The signed-in person's messages; fetching them counts as delivery (not while an admin views as them). */
 export async function inbox(user: SessionUser): Promise<InboxItem[]> {
   if (fromDb()) {
     if (!/^\d+$/.test(user.id)) return [];
     const db = getDb();
-    await db.query("UPDATE core.message_recipients SET delivered_at = now() WHERE staff_id = $1 AND delivered_at IS NULL", [user.id]);
+    if (!user.viewedBy) {
+      await db.query("UPDATE core.message_recipients SET delivered_at = now() WHERE staff_id = $1 AND delivered_at IS NULL", [user.id]);
+    }
     const { rows } = await db.query<MessageRow & { read_at: string | null; acked_at: string | null }>(
       `SELECT ${MESSAGE_COLUMNS}, r.read_at, r.acked_at
        FROM core.message_recipients r JOIN core.messages m ON m.id = r.message_id

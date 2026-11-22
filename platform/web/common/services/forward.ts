@@ -58,6 +58,10 @@ function json(status: number, error: string) {
 export async function forwardToService(request: Request, service: ServiceConfig, path: string[]): Promise<Response> {
   const user = await getOptionalSessionUser();
   if (!user) return json(401, "Not signed in");
+  // "View as" is read-only: reads go through as that person, changes don't.
+  if (user.viewedBy && !["GET", "HEAD"].includes(request.method)) {
+    return json(403, `You're viewing as ${user.name}, so nothing can be saved. Exit "view as" to make changes as yourself.`);
+  }
 
   if (path.some((segment) => segment === "." || segment === ".." || segment === "")) {
     return json(400, "Invalid path");

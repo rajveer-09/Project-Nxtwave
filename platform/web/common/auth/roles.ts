@@ -68,6 +68,14 @@ export function isAdminRole(role: Role) {
   return role === "owner" || role === "admin";
 }
 
+/**
+ * "View as": admins and super admins may look at NxtOne exactly as someone ranked below them sees
+ * it (admins: senior instructors, instructors, success coaches; super admins: also admins), read-only.
+ */
+export function canViewAs(viewer: Role, target: Role) {
+  return isAdminRole(viewer) && ROLE_RANK[target] < ROLE_RANK[viewer];
+}
+
 export type SessionUser = {
   id: string;
   name: string;
@@ -75,6 +83,8 @@ export type SessionUser = {
   role: Role;
   /** Signed in with the default first password: must choose their own before anything else. */
   mustSetPassword?: boolean;
+  /** Set while an admin is viewing as this person: who is really signed in. Nothing can be saved then. */
+  viewedBy?: { id: string; name: string; role: Role };
 };
 
 export function initials(name: string) {

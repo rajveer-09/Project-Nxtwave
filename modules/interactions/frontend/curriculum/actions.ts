@@ -10,7 +10,7 @@ Date : 17 Nov 2026
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getSessionUser } from "@/common/auth/session";
+import { getSessionUser, viewOnly } from "@/common/auth/session";
 import { addQuestion, decide, setArchived, undoDecision, updateQuestion } from "./data";
 import { MAX_LEVEL } from "./lib/structure";
 import {
@@ -52,6 +52,8 @@ function done() {
 }
 
 export async function addQuestionAction(input: unknown): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = questionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues.some((i) => i.path[0] === "title") ? "The question name is required." : "Pick where the question goes." };
@@ -62,6 +64,8 @@ export async function addQuestionAction(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateQuestionAction(id: string, input: unknown): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = z.object(details).safeParse(input);
   if (!parsed.success) return { ok: false, error: "The question name is required." };
@@ -71,6 +75,8 @@ export async function updateQuestionAction(id: string, input: unknown): Promise<
 }
 
 export async function archiveQuestionAction(id: string, archived: boolean): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const result = await setArchived(user, String(id), !!archived);
   if (result.ok) done();
@@ -78,6 +84,8 @@ export async function archiveQuestionAction(id: string, archived: boolean): Prom
 }
 
 export async function decideAction(key: string, action: unknown, where: unknown): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const act = z.enum(["added", "kept", "dismissed"]).safeParse(action);
   if (!act.success) return { ok: false, error: "Unknown decision." };
@@ -90,6 +98,8 @@ export async function decideAction(key: string, action: unknown, where: unknown)
 }
 
 export async function undoDecisionAction(key: string): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const result = await undoDecision(user, String(key));
   if (result.ok) done();
@@ -128,6 +138,8 @@ const structureEdit = z.discriminatedUnion("kind", [
 export type StructureEdit = z.infer<typeof structureEdit>;
 
 export async function structureAction(input: StructureEdit): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = structureEdit.safeParse(input);
   if (!parsed.success) return { ok: false, error: "That change isn't valid." };

@@ -11,7 +11,7 @@ Date : 18 Nov 2026
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ROLES } from "@/common/auth/roles";
-import { getSessionUser } from "@/common/auth/session";
+import { getSessionUser, viewOnly } from "@/common/auth/session";
 import { invalidateRoster } from "@/common/data/roster";
 import {
   applyAssignmentImport,
@@ -33,6 +33,8 @@ function refreshStaff() {
 }
 
 export async function changeRoleAction(staffId: string, role: string): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = z.enum(ROLES).safeParse(role);
   if (!parsed.success) return { ok: false, error: "Pick a role." };
@@ -45,6 +47,8 @@ const idList = z.array(z.string().max(20)).min(1).max(300);
 
 /** Deactivate one or many (admins and super admins). They go to the super admins' Deactivated list. */
 export async function deactivateAction(staffIds: string[]): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = idList.safeParse(staffIds);
   if (!parsed.success) return { ok: false, error: "Pick people again." };
@@ -54,6 +58,8 @@ export async function deactivateAction(staffIds: string[]): Promise<ActionResult
 }
 
 export async function resetPasswordAction(staffIds: string[]): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = idList.safeParse(staffIds);
   if (!parsed.success) return { ok: false, error: "Pick people again." };
@@ -63,6 +69,8 @@ export async function resetPasswordAction(staffIds: string[]): Promise<ActionRes
 }
 
 export async function reactivateAction(staffIds: string[]): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = idList.safeParse(staffIds);
   if (!parsed.success) return { ok: false, error: "Pick people again." };
@@ -72,6 +80,8 @@ export async function reactivateAction(staffIds: string[]): Promise<ActionResult
 }
 
 export async function deleteStaffAction(staffIds: string[]): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = idList.safeParse(staffIds);
   if (!parsed.success) return { ok: false, error: "Pick people again." };
@@ -91,6 +101,8 @@ const addSchema = z.object({
 });
 
 export async function addStaffAction(input: unknown): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = addSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Fill in the name, email and role." };
@@ -102,6 +114,8 @@ export async function addStaffAction(input: unknown): Promise<ActionResult> {
 // ---------------------------------------------------------------- assignments
 
 export async function assignAction(niatId: string, kind: string, staffId: string | null): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const k = z.enum(["instructor", "coach"]).safeParse(kind);
   if (!k.success) return { ok: false, error: "Unknown assignment." };
@@ -119,6 +133,8 @@ export async function assignmentHistoryAction(niatId: string): Promise<{ ok: tru
 }
 
 export async function restoreAssignmentAction(niatId: string, kind: string, staffId: string | null, how: string): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const k = z.enum(["instructor", "coach"]).safeParse(kind);
   const h = z.enum(["undo", "restore"]).safeParse(how);
@@ -134,6 +150,8 @@ export async function restoreAssignmentAction(niatId: string, kind: string, staf
 const MAX_UPLOAD = 2 * 1024 * 1024;
 
 export async function previewImportAction(form: FormData): Promise<{ ok: true; preview: ImportPreview } | { ok: false; error: string }> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const file = form.get("file");
   if (!(file instanceof File) || !file.size) return { ok: false, error: "Choose an Excel (.xlsx) or CSV file." };
@@ -142,6 +160,8 @@ export async function previewImportAction(form: FormData): Promise<{ ok: true; p
 }
 
 export async function applyImportAction(importId: string): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const result = await applyAssignmentImport(user, String(importId));
   if (result.ok) {
@@ -154,6 +174,8 @@ export async function applyImportAction(importId: string): Promise<ActionResult>
 // ---------------------------------------------------------------- student sign-in
 
 export async function issuePasswordsAction(niatIds: string[]): Promise<{ ok: true; issued: Issued[] } | { ok: false; error: string }> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = z.array(z.string().max(20)).max(500).safeParse(niatIds);
   if (!parsed.success) return { ok: false, error: "Pick students again." };
@@ -163,6 +185,8 @@ export async function issuePasswordsAction(niatIds: string[]): Promise<{ ok: tru
 }
 
 export async function studentAccessAction(niatIds: string[], active: boolean): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = z.array(z.string().max(20)).min(1).max(500).safeParse(niatIds);
   if (!parsed.success) return { ok: false, error: "Pick students again." };

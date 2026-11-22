@@ -10,7 +10,7 @@ Date : 17 Nov 2026
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getSessionUser } from "@/common/auth/session";
+import { getSessionUser, viewOnly } from "@/common/auth/session";
 import { createTest, publishFormat, saveResults, submitResults, unlockResults } from "@/modules/tests/data";
 import { BANDS, FIELD_TYPES } from "@/modules/tests/types";
 
@@ -22,6 +22,8 @@ const rowsSchema = z
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string; problems?: Record<string, string[]> };
 
 export async function saveTestResults(testId: string, rows: unknown): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = rowsSchema.safeParse(rows);
   if (!parsed.success) return { ok: false, error: "Some values couldn't be read. Nothing was saved." };
@@ -31,6 +33,8 @@ export async function saveTestResults(testId: string, rows: unknown): Promise<Ac
 }
 
 export async function submitTestResults(testId: string): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const result = await submitResults(user, testId);
   if (result.ok) revalidatePath(`/tests/${testId}`);
@@ -38,6 +42,8 @@ export async function submitTestResults(testId: string): Promise<ActionResult> {
 }
 
 export async function unlockTestResults(testId: string, instructor: string): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const result = await unlockResults(user, testId, instructor);
   if (result.ok) revalidatePath(`/tests/${testId}`);
@@ -53,6 +59,8 @@ const testSchema = z.object({
 });
 
 export async function createWeeklyTest(input: unknown): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = testSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Fill in the name, band, date and due time." };
@@ -73,6 +81,8 @@ const fieldSchema = z.object({
 });
 
 export async function publishResultFormat(formatId: string, input: unknown): Promise<ActionResult> {
+  const blocked = await viewOnly(); // read-only while viewing as someone
+  if (blocked) return blocked;
   const user = await getSessionUser();
   const parsed = z.object({ passMark: z.number().min(0).max(10000), fields: z.array(fieldSchema).min(1).max(30) }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "The format has a field that isn't valid. Check names, marks and options." };
