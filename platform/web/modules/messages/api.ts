@@ -13,8 +13,8 @@ import type { InboxItem, SentItem } from "./data";
  * Polling intervals. A realtime channel (Ably/Pusher, ARCHITECTURE §4.6) will push
  * changes instead; these stay as the fallback when it disconnects.
  */
-export const INBOX_POLL_MS = 15_000;
-export const SENT_POLL_MS = 5_000;
+export const INBOX_POLL_MS = 60_000;
+export const SENT_POLL_MS = 30_000;
 
 export const messagesApi = {
   inbox: () => apiFetch<{ messages: InboxItem[]; unread: number }>("/api/messages/inbox"),

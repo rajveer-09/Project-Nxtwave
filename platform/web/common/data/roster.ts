@@ -35,7 +35,8 @@ export function invalidateRoster(niatId?: string) {
 /** The roster for a given IST day; safe to call from other cached functions. */
 export async function cachedRoster(today: string): Promise<RosterStudent[]> {
   "use cache: remote";
-  cacheLife({ stale: 30, revalidate: 60, expire: 900 });
+  // Re-read at most every 5 minutes (about 450 KB each time); saves in NxtOne expire it at once (invalidateRoster).
+  cacheLife({ stale: 60, revalidate: 300, expire: 1800 });
   cacheTag(TAGS.roster);
   return loadRoster(today);
 }

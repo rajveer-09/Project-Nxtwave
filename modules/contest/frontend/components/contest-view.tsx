@@ -23,7 +23,7 @@ import { Skeleton } from "@/common/ui/skeleton";
 import { contestApi, contestDate, mmss, pct } from "@nxtone/contest-ui/api";
 import type { ContestScope, ResultRow } from "@nxtone/contest-ui/types";
 import { cn } from "@/common/lib/utils";
-import { stateLabel } from "@nxtone/contest-ui/components/contests-list";
+import { stateLabel, WakingNote } from "@nxtone/contest-ui/components/contests-list";
 
 const STATUS_TEXT: Record<ResultRow["status"], string> = {
   solved: "Took part",
@@ -56,7 +56,14 @@ export function ContestView({ slug, canReview, hasStudents }: { slug: string; ca
     onError: (error) => toast.error(error.message),
   });
 
-  if (detail.isLoading) return <Skeleton className="h-[600px] rounded-xl" />;
+  if (detail.isLoading) {
+    return (
+      <div className="flex flex-col gap-3">
+        {detail.failureCount ? <WakingNote /> : null}
+        <Skeleton className="h-[600px] rounded-xl" />
+      </div>
+    );
+  }
   if (detail.isError) return <EmptyState title="Couldn't load this contest" description={detail.error.message} />;
   const d = detail.data!;
   const st = stateLabel({ state: d.status.state, in_review: d.status.in_review, final_at: d.status.final_at ?? null });
