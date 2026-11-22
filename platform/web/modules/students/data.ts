@@ -33,6 +33,7 @@ async function cachedDetail(niatId: string, today: string) {
 }
 import type { FlagKey } from "@/common/domain/risk";
 import { isStanding, type Standing } from "@/common/domain/standing";
+import { matchesSearch } from "@/common/lib/search";
 
 /**
  * Students data access. Reads the combined roster (common/data/roster.ts): the
@@ -86,10 +87,7 @@ export function parseStudentQuery(params: Record<string, string | string[] | und
 }
 
 function matches(s: RosterStudent, q: StudentQuery, ignoreFlag = false) {
-  if (q.q) {
-    const needle = q.q.toLowerCase();
-    if (!s.name.toLowerCase().includes(needle) && !s.niatId.toLowerCase().includes(needle)) return false;
-  }
+  if (q.q && !matchesSearch(q.q, s.name, s.niatId)) return false;
   if (q.college && s.college !== q.college) return false;
   if (q.section && s.section !== q.section) return false;
   if (q.hall && s.hall !== q.hall) return false;

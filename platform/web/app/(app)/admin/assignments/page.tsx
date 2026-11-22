@@ -11,6 +11,7 @@ import { Suspense } from "react";
 import { LiveForm } from "@/common/components/live-form";
 import { Dropdown } from "@/common/components/dropdown";
 import { asOptions } from "@/common/lib/options";
+import { searchMatcher } from "@/common/lib/search";
 import { StatusPill } from "@/common/components/chips";
 import { PageHeader } from "@/common/components/page-header";
 import { SectionCard } from "@/common/components/section-card";
@@ -32,7 +33,7 @@ const field =
 async function Content({ searchParams }: { searchParams: Promise<SearchParamsRecord> }) {
   const user = await requireAccess("/admin/assignments");
   const params = await searchParams;
-  const q = one(params.q)?.trim().toLowerCase();
+  const match = searchMatcher(one(params.q));
   const instructor = one(params.instructor);
   const hall = one(params.hall);
   const page = Math.max(1, Number(one(params.page)) || 1);
@@ -40,7 +41,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   const [roster, options] = await Promise.all([getRoster(), staffOptions()]);
   const filtered = roster.filter(
     (s) =>
-      (!q || s.name.toLowerCase().includes(q) || s.niatId.toLowerCase().includes(q)) &&
+      match(s.name, s.niatId) &&
       (!instructor || s.instructor === instructor) &&
       (!hall || s.hall === hall),
   );

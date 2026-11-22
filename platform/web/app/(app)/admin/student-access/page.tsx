@@ -11,6 +11,7 @@ import { Suspense } from "react";
 import { LiveForm } from "@/common/components/live-form";
 import { Dropdown } from "@/common/components/dropdown";
 import { asOptions } from "@/common/lib/options";
+import { searchMatcher } from "@/common/lib/search";
 import { StatusPill } from "@/common/components/chips";
 import { PageHeader } from "@/common/components/page-header";
 import { SectionCard } from "@/common/components/section-card";
@@ -40,13 +41,11 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   if (!rows) {
     return <p className="rounded-xl border border-border bg-card px-4 py-3.5 text-sm text-muted-foreground">Student sign-in needs the database.</p>;
   }
-  const q = one(params.q)?.trim().toLowerCase();
+  const match = searchMatcher(one(params.q));
   const hall = one(params.hall);
   const status = one(params.status) as AccountStatus | undefined;
   const page = Math.max(1, Number(one(params.page)) || 1);
-  const filtered = rows.filter(
-    (r) => (!q || r.name.toLowerCase().includes(q) || r.niatId.toLowerCase().includes(q) || r.section.toLowerCase() === q) && (!hall || r.hall === hall) && (!status || r.status === status),
-  );
+  const filtered = rows.filter((r) => match(r.name, r.niatId, r.section) && (!hall || r.hall === hall) && (!status || r.status === status));
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE));
   const shown = filtered.slice((Math.min(page, pageCount) - 1) * PAGE, Math.min(page, pageCount) * PAGE);
   const withoutSignIn = filtered.filter((r) => r.status === "none").map((r) => ({ niatId: r.niatId, name: r.name }));

@@ -10,6 +10,7 @@ import "server-only";
 import type { SessionUser } from "@/common/auth/roles";
 import type { ContestDetail, ContestListItem, ContestPage, ContestResults, DraftReview, QuestionStat, ResultRow, Summary } from "@nxtone/contest-ui/types";
 import { toCsv } from "@/common/lib/csv";
+import { searchMatcher } from "@/common/lib/search";
 import { buildStudentDetail } from "@/common/sample-data/student-detail";
 import { ROSTER } from "@/common/sample-data/roster";
 
@@ -174,10 +175,10 @@ export async function contestSample(request: Request, path: string[], user: Sess
 
   if (request.method === "GET" && a === "contests" && !b) {
     const type = url.searchParams.get("type");
-    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const match = searchMatcher(url.searchParams.get("q"));
     const all = CONTESTS.map((def) => listItem(def, nowSec));
     const upcoming = all.filter((x) => x.state === "upcoming" || x.state === "live").reverse();
-    const items = all.filter((x) => x.state !== "upcoming" && x.state !== "live").filter((x) => (!type || x.contest_type === type) && (!q || x.title.toLowerCase().includes(q)));
+    const items = all.filter((x) => x.state !== "upcoming" && x.state !== "live").filter((x) => (!type || x.contest_type === type) && match(x.title, x.slug));
     const body: ContestPage = {
       worker: { alive: true, last_seen: new Date(Date.now() - 40_000).toISOString() },
       queue: [],

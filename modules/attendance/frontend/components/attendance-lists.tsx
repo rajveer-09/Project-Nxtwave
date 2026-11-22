@@ -10,8 +10,11 @@ Date : 17 Nov 2026
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useState } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
+import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
 import { Skeleton } from "@/common/ui/skeleton";
 import { attendanceApi } from "@nxtone/attendance-ui/api";
 import { addDays, formatDate } from "@/common/lib/dates";
@@ -60,15 +63,26 @@ export function InternshipsList({ today }: { today: string }) {
     queryKey: ["attendance", "internships", today],
     queryFn: () => attendanceApi.internships(addDays(today, -60), addDays(today, 60)),
   });
+  const [query, setQuery] = useState("");
   if (q.isLoading) return <Skeleton className="h-60 rounded-xl" />;
   if (q.isError) return <EmptyState title="Couldn't load internships" description={q.error.message} />;
-  const rows = q.data?.internships ?? [];
+  const all = q.data?.internships ?? [];
+  const match = searchMatcher(query);
+  const rows = all.filter((p) => match(p.name, p.niat_id, p.degree, p.section, p.hall_no));
   return (
     <section aria-label="Internship and registration periods" className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="border-b border-border px-4 py-3 text-sm font-semibold">
-        {q.data?.current ?? 0} on internship today · {rows.length} periods in the last and next 60 days
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <span className="text-sm font-semibold">
+          {q.data?.current ?? 0} on internship today · {all.length} periods in the last and next 60 days
+          {query.trim() ? <span className="font-normal text-muted-foreground"> · {rows.length} match</span> : null}
+        </span>
+        {all.length > 6 ? <SearchField label="Search internships" placeholder="Name, NIAT ID, section or hall" value={query} onChange={setQuery} className="w-full max-w-72" /> : null}
       </div>
-      {rows.length ? (
+      {query.trim() && !rows.length ? (
+        <div className="p-4">
+          <EmptyState title={`No student matches “${query.trim()}”`} />
+        </div>
+      ) : rows.length ? (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] border-collapse text-[13px]">
             <caption className="sr-only">Internship and registration-pending periods</caption>

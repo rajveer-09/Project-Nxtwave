@@ -10,6 +10,7 @@ import "server-only";
 import { authMode } from "@/common/auth/config";
 import { isAdminRole, ROLE_LABEL, type Role, type SessionUser } from "@/common/auth/roles";
 import { getDb } from "@/common/db/pool";
+import { searchWords } from "@/common/lib/search";
 
 /**
  * The change log (core.change_log), for admins and super admins. Each entry says what changed,
@@ -109,7 +110,7 @@ type Row = {
 export async function listChanges(viewer: SessionUser, filter: ChangeFilter): Promise<{ entries: ChangeEntry[]; page: number; more: boolean }> {
   if (authMode() !== "database" || !isAdminRole(viewer.role)) return { entries: [], page: 1, more: false };
   const page = Math.max(1, filter.page ?? 1);
-  const q = filter.q?.trim() || null;
+  const words = searchWords(filter.q);
   const { rows } = await getDb().query<Row>(
     `SELECT c.id::text, c.at, c.txid::text, c.source, c.source_detail, c.actor_name, c.actor_email, c.actor_role,
             c.entity, c.action, c.niat_id, cs.full_name AS student_name, st.name AS staff_name, c.field, c.old_value, c.new_value,
@@ -121,8 +122,10 @@ export async function listChanges(viewer: SessionUser, filter: ChangeFilter): Pr
        AND ($2::text IS NULL OR c.entity = $2)
        AND ($3::date IS NULL OR c.at >= $3::date)
        AND ($4::date IS NULL OR c.at < $4::date + 1)
-       AND ($5::text IS NULL OR c.niat_id ILIKE '%' || $5 || '%' OR cs.full_name ILIKE '%' || $5 || '%' OR st.name ILIKE '%' || $5 || '%'
-            OR c.actor_name ILIKE '%' || $5 || '%' OR c.old_value ILIKE '%' || $5 || '%' OR c.new_value ILIKE '%' || $5 || '%')
+       -- Search: every word typed appears somewhere in the entry (common/lib/search.ts: words are
+       -- only letters and digits, so they can't act as LIKE wildcards).
+       AND NOT EXISTS (SELECT 1 FROM unnest($5::text[]) w
+                       WHERE concat_ws(' ', c.niat_id, cs.full_name, st.name, c.actor_name, c.old_value, c.new_value) NOT ILIKE '%' || w || '%')
        -- Admins: nothing about super admins' own accounts or roles.
        AND ($6 OR NOT (c.entity IN ('staff', 'staff_role') AND (
              c.old_value = 'owner' OR c.new_value = 'owner'
@@ -134,7 +137,7 @@ export async function listChanges(viewer: SessionUser, filter: ChangeFilter): Pr
       filter.entity || null,
       filter.from || null,
       filter.to || null,
-      q,
+      words,
       viewer.role === "owner",
       PAGE + 1,
       (page - 1) * PAGE,

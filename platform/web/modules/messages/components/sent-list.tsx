@@ -12,6 +12,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
+import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
 import { Skeleton } from "@/common/ui/skeleton";
 import { cn } from "@/common/lib/utils";
 import { messagesApi, SENT_POLL_MS, sentKey, timeAgo } from "../api";
@@ -21,6 +23,10 @@ import { PRIORITY_INFO } from "../audience";
 export function SentList() {
   const q = useQuery({ queryKey: sentKey, queryFn: messagesApi.sent, refetchInterval: SENT_POLL_MS });
   const [open, setOpen] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const match = searchMatcher(query);
+  const sent = q.data?.sent ?? [];
+  const shown = sent.filter((m) => match(m.subject, m.body, m.audienceLabel, m.fromName));
 
   return (
     <section aria-labelledby="sent-h" className="flex min-w-0 flex-[1_1_420px] flex-col gap-3">
@@ -30,14 +36,19 @@ export function SentList() {
         </h2>
         <span className="text-xs text-muted-foreground">Counts refresh every few seconds</span>
       </div>
+      {sent.length > 5 ? (
+        <SearchField label="Search sent messages" placeholder="Subject, text or who it went to" value={query} onChange={setQuery} className="w-full max-w-80" />
+      ) : null}
       {q.isLoading ? (
         <Skeleton className="h-64 rounded-xl" />
       ) : q.isError ? (
         <EmptyState title="Couldn't load sent messages" description={q.error.message} />
-      ) : !q.data?.sent.length ? (
+      ) : !sent.length ? (
         <EmptyState title="Nothing sent yet" />
+      ) : !shown.length ? (
+        <EmptyState title={`No message matches “${query.trim()}”`} />
       ) : (
-        q.data.sent.map((m) => {
+        shown.map((m) => {
           const expanded = open === m.id;
           const pct = (n: number) => `${m.total ? (n / m.total) * 100 : 0}%`;
           return (

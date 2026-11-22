@@ -8,9 +8,9 @@ Date : 17 Nov 2026
 
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IntentLink } from "@/common/components/intent-link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StatusPill, type PillTone } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
 import { Skeleton } from "@/common/ui/skeleton";
@@ -49,7 +49,17 @@ export function ContestsList({ defaultScope = "all" }: { defaultScope?: ContestS
   };
   const [type, setType] = useState("");
   const [q, setQ] = useState("");
-  const query = useQuery({ queryKey: ["contests", "list", type, q], queryFn: () => contestApi.list({ type, q }) });
+  // Search once typing pauses, and keep the current list on screen while the next one loads.
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(q.trim()), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  const query = useQuery({
+    queryKey: ["contests", "list", type, search],
+    queryFn: () => contestApi.list({ type, q: search }),
+    placeholderData: keepPreviousData,
+  });
   const data = query.data;
 
   return (

@@ -15,6 +15,8 @@ import { useConfirm } from "@/common/components/confirm";
 import { Dropdown } from "@/common/components/dropdown";
 import { EmptyState } from "@/common/components/empty-state";
 import { asOptions } from "@/common/lib/options";
+import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
 import { Button } from "@/common/ui/button";
 import { cn } from "@/common/lib/utils";
 import { addQuestionAction, archiveQuestionAction, decideAction, structureAction, undoDecisionAction, updateQuestionAction, type StructureEdit } from "../actions";
@@ -954,7 +956,13 @@ const STATUS = {
 
 function ReviewQueue({ structure, queue }: { structure: Structure; queue: QueueItem[] }) {
   const [filter, setFilter] = useState<"new" | "added" | "kept" | "all">("new");
-  const shown = queue.filter((q) => (filter === "all" ? true : filter === "new" ? !q.decision : q.decision?.status === filter));
+  const [query, setQuery] = useState("");
+  const match = searchMatcher(query);
+  const shown = queue.filter(
+    (q) =>
+      (filter === "all" ? true : filter === "new" ? !q.decision : q.decision?.status === filter) &&
+      match(q.title, q.instructors.join(" "), q.firstBy, q.suggested.topic, q.suggested.subtopic),
+  );
   return (
     <div className="flex flex-col gap-4">
       <p className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
@@ -976,8 +984,15 @@ function ReviewQueue({ structure, queue }: { structure: Structure; queue: QueueI
             {text} · {count}
           </Chip>
         ))}
+        <SearchField label="Search questions" placeholder="Question, instructor or topic" value={query} onChange={setQuery} className="ml-auto w-full max-w-72" />
       </div>
-      {shown.length ? shown.map((item) => <QueueCard key={item.key} item={item} structure={structure} />) : <EmptyState title="Nothing here" description="New off-roadmap questions appear when instructors log them." />}
+      {shown.length ? (
+        shown.map((item) => <QueueCard key={item.key} item={item} structure={structure} />)
+      ) : query.trim() ? (
+        <EmptyState title={`No question matches “${query.trim()}”`} description="Try fewer words, or pick All above." />
+      ) : (
+        <EmptyState title="Nothing here" description="New off-roadmap questions appear when instructors log them." />
+      )}
     </div>
   );
 }

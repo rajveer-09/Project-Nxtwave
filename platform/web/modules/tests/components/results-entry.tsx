@@ -16,6 +16,8 @@ import { Button } from "@/common/ui/button";
 import { maxTotal, resultProblems, totalOf, type FormatVersion, type ResultValue } from "@/modules/tests/types";
 import { cn } from "@/common/lib/utils";
 import { FieldInput } from "@/modules/tests/components/field-input";
+import { SearchField } from "@/common/components/search-field";
+import { searchMatcher } from "@/common/lib/search";
 
 export type EntryStudent = { niatId: string; name: string; section: string; attendance30d: number | null };
 type Row = { present: boolean; values: Record<string, ResultValue> };
@@ -46,6 +48,10 @@ export function ResultsEntry({
   const [dirty, setDirty] = useState<Set<string>>(new Set());
   const [problems, setProblems] = useState<Record<string, string[]>>({});
   const [sel, setSel] = useState(students[0]?.niatId ?? "");
+  // Search only narrows the table; marks typed for students not shown are kept and saved.
+  const [query, setQuery] = useState("");
+  const match = searchMatcher(query);
+  const shownStudents = students.filter((s) => match(s.name, s.niatId, s.section));
 
   const columns = format.fields.filter((f) => f.column);
   const panel = format.fields.filter((f) => !f.column);
@@ -139,6 +145,12 @@ export function ResultsEntry({
 
       <div className="flex flex-wrap items-start gap-5">
         <section aria-label="Marks" className="min-w-0 flex-[3_1_640px] overflow-hidden rounded-xl border border-border bg-card">
+          {students.length > 8 ? (
+            <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
+              <SearchField label="Search students" placeholder="Name, NIAT ID or section" value={query} onChange={setQuery} className="w-full max-w-72" />
+              {query.trim() ? <span className="text-[13px] text-muted-foreground">{shownStudents.length} of {students.length}</span> : null}
+            </div>
+          ) : null}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] border-collapse text-[13px]">
               <caption className="sr-only">Marks for each student</caption>
@@ -157,7 +169,14 @@ export function ResultsEntry({
                 </tr>
               </thead>
               <tbody>
-                {students.map((s) => {
+                {query.trim() && !shownStudents.length ? (
+                  <tr>
+                    <td colSpan={columns.length + 4} className="px-4 py-6 text-center text-muted-foreground">
+                      No student matches “{query.trim()}”.
+                    </td>
+                  </tr>
+                ) : null}
+                {shownStudents.map((s) => {
                   const row = rows[s.niatId];
                   const total = row.present ? totalOf(format.fields, row.values) : null;
                   const rowProblems = problems[s.niatId];

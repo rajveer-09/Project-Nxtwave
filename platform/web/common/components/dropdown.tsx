@@ -13,6 +13,7 @@ import { Select } from "@base-ui/react/select";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DropdownOption } from "@/common/lib/options";
+import { matchesSearch } from "@/common/lib/search";
 import { zoomAnchor } from "@/common/lib/zoom-anchor";
 import { cn } from "@/common/lib/utils";
 
@@ -121,6 +122,7 @@ export function Dropdown({
           value={selected}
           onValueChange={(o: DropdownOption | null) => o && pick(o.value)}
           itemToStringLabel={(o: DropdownOption) => o.label}
+          filter={(o: DropdownOption, query: string) => matchesSearch(query, o.label)}
           isItemEqualToValue={(a: DropdownOption, b: DropdownOption) => a.value === b.value}
           disabled={disabled}
         >

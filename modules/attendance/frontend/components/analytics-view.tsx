@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { Dropdown } from "@/common/components/dropdown";
 import { EmptyState } from "@/common/components/empty-state";
 import { asOptions } from "@/common/lib/options";
+import { searchMatcher } from "@/common/lib/search";
 import { PageHeader } from "@/common/components/page-header";
 import { Button } from "@/common/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/common/ui/sheet";
@@ -333,9 +334,10 @@ function AnalyticsDrill({ a, query, drill, onClose }: { a: Analytics; query: Ana
   const sorts = sortsFor(focus, multi);
   const [sortIndex, setSortIndex] = useState(0);
   const [search, setSearch] = useState("");
-  const term = search.trim().toLowerCase();
+  const match = searchMatcher(search);
+  const term = search.trim();
   const rows = [...(res.data?.students ?? [])]
-    .filter((r) => !term || r.name.toLowerCase().includes(term) || r.niat_id.toLowerCase().includes(term))
+    .filter((r) => match(r.name, r.niat_id))
     .sort(sorts[Math.min(sortIndex, sorts.length - 1)].compare);
   const metric = (r: AnalyticsStudent) => (!multi ? dayMark(r) : focus === "pct" ? pct(r.pct) : days(r[focus]));
   const scope = { degree: q.degree ?? "", hall: q.hall === undefined ? null : q.hall, section: q.section ?? "" };
