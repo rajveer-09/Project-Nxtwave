@@ -40,10 +40,10 @@ export function TrendLine({ data, valueLabel, target, height = 220 }: { data: Po
   const config = { value: { label: valueLabel, color: "var(--chart-1)" } } satisfies ChartConfig;
   return (
     <ChartContainer config={config} className="aspect-auto w-full" style={{ height }}>
-      <LineChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+      <LineChart data={data} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
         <CartesianGrid vertical={false} strokeOpacity={0.5} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={6} minTickGap={18} interval="preserveStartEnd" />
-        <YAxis tickLine={false} axisLine={false} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} width={40} tickFormatter={(v) => `${v}%`} />
+        <YAxis tickLine={false} axisLine={false} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} width={44} tickFormatter={(v) => `${v}%`} />
         {target !== undefined ? (
           <ReferenceLine y={target} stroke="var(--warning-strong)" strokeDasharray="4 4" label={{ value: `${target}%`, position: "insideTopRight", fontSize: 11, fill: "var(--warning)" }} />
         ) : null}
