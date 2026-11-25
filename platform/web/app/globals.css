@@ -24,6 +24,7 @@ Date : 14 Nov 2026
 @theme inline {
     --font-sans: var(--font-inter);
     --font-heading: var(--font-space-grotesk);
+    --font-telugu: var(--font-noto-telugu), var(--font-inter);
 
     --color-warning: var(--warning);
     --color-warning-strong: var(--warning-strong);
@@ -259,4 +260,43 @@ html[data-theme-switch]::view-transition-new(root) {
   .sb-only {
     display: none !important;
   }
+}
+
+/*
+ * Printing (weekly test reports and other "Print / save PDF" pages): full scale, no sidebar or
+ * banners, just the page's own content. Bars keep their colour.
+ */
+@media print {
+  :root {
+    --ui-zoom: 1;
+  }
+  @page {
+    margin: 12mm;
+  }
+  body,
+  :has(> #main),
+  .bg-background {
+    background: #fff !important;
+  }
+  nav[aria-label="Main"],
+  #main > :not(:last-child),
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  #main {
+    padding: 0 !important;
+  }
+  /* Student report sheets: one A4 page each (a hair under 297 mm so rounding never adds a blank page). */
+  .student-sheet {
+    min-height: 296mm;
+    break-after: page;
+    break-inside: avoid;
+  }
+  .student-sheet:last-child {
+    break-after: auto;
+  }
+}
+@utility print-exact {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
 }

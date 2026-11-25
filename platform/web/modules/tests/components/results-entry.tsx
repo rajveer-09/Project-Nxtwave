@@ -13,14 +13,16 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { saveTestResults, submitTestResults } from "@/modules/tests/actions";
 import { Button } from "@/common/ui/button";
-import { maxTotal, resultProblems, totalOf, type FormatVersion, type ResultValue } from "@/modules/tests/types";
+import { daysText, hasTeluguText, maxTotal, pctText, progressText, resultProblems, totalOf, type AutoFill, type FormatVersion, type ResultValue } from "@/modules/tests/types";
 import { cn } from "@/common/lib/utils";
 import { FieldInput } from "@/modules/tests/components/field-input";
 import { SearchField } from "@/common/components/search-field";
 import { searchMatcher } from "@/common/lib/search";
 
-export type EntryStudent = { niatId: string; name: string; section: string; attendance30d: number | null };
-type Row = { present: boolean; values: Record<string, ResultValue> };
+/** `auto`: attendance this semester and last week, and roadmap progress, filled in for the instructor (modules/tests/autofill.ts). */
+export type EntryStudent = { niatId: string; name: string; section: string; auto: AutoFill | null };
+/** `valuesTe`: the instructor's own Telugu wording of text feedback, for the Telugu student report. */
+type Row = { present: boolean; values: Record<string, ResultValue>; valuesTe?: Record<string, string> };
 
 /**
  * Results entry generated from the test's format version: fields marked "column"
@@ -157,6 +159,9 @@ export function ResultsEntry({
               <thead>
                 <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
                   <th scope="col" className="border-b border-border py-2.5 pr-2 pl-4">Student</th>
+                  <th scope="col" className="border-b border-border px-2 py-2.5">
+                    <span title="Filled in automatically: attendance this semester and last week, and roadmap progress">Attendance · roadmap</span>
+                  </th>
                   <th scope="col" className="border-b border-border px-2 py-2.5">Took test</th>
                   {columns.map((f) => (
                     <th key={f.id} scope="col" className="border-b border-border px-2 py-2.5">
@@ -171,7 +176,7 @@ export function ResultsEntry({
               <tbody>
                 {query.trim() && !shownStudents.length ? (
                   <tr>
-                    <td colSpan={columns.length + 4} className="px-4 py-6 text-center text-muted-foreground">
+                    <td colSpan={columns.length + 5} className="px-4 py-6 text-center text-muted-foreground">
                       No student matches “{query.trim()}”.
                     </td>
                   </tr>
@@ -192,6 +197,9 @@ export function ResultsEntry({
                           {s.niatId} · {s.section}
                         </div>
                         {rowProblems ? <div className="text-xs font-semibold text-warning">{rowProblems[0]}</div> : null}
+                      </td>
+                      <td className="border-b border-muted px-2 py-2">
+                        <AutoCell auto={s.auto} />
                       </td>
                       <td className="border-b border-muted px-2 py-2">
                         <button
@@ -264,17 +272,20 @@ export function ResultsEntry({
                 <h2 id="fb-h" className="text-xl font-semibold">
                   {selected.name}
                 </h2>
-                <a href={`/students/${selected.niatId}`} className="text-[13px] font-semibold text-primary hover:text-accent-strong">
-                  {selected.niatId} · open student page
-                </a>
+                <span className="flex flex-wrap gap-x-3 text-[13px] font-semibold">
+                  <a href={`/students/${selected.niatId}`} className="text-primary hover:text-accent-strong">
+                    {selected.niatId} · student page
+                  </a>
+                  <a href={`/tests/${testId}/students/${selected.niatId}`} className="text-primary hover:text-accent-strong">
+                    Student report
+                  </a>
+                </span>
               </div>
               <span className={cn("font-heading text-2xl font-semibold tabular", selTotal !== null && selTotal < format.passMark && "text-warning")}>
                 {!selRow.present ? "Absent" : selTotal === null ? "…" : `${selTotal} / ${max}`}
               </span>
             </div>
-            <p className="rounded-lg bg-background px-3 py-2 text-xs text-sidebar-foreground">
-              Last test: <b>{lastScores[selected.niatId] ?? "—"}</b> · Attendance 30d: <b>{selected.attendance30d === null ? "—" : `${selected.attendance30d}%`}</b>
-            </p>
+            <AutoPanel auto={selected.auto} lastScore={lastScores[selected.niatId] ?? null} />
             {panel.map((f) => (
               <div key={f.id} className="flex flex-col gap-1.5">
                 <span className="text-[13px] font-semibold">
@@ -288,6 +299,26 @@ export function ResultsEntry({
                   onChange={(v) => update(selected.niatId, (r) => ({ ...r, values: { ...r.values, [f.id]: v } }))}
                 />
                 {f.help ? <span className="text-xs text-muted-foreground">{f.help}</span> : null}
+                {hasTeluguText(f) && selRow.present ? (
+                  <details className="group text-xs" open={!!selRow.valuesTe?.[f.id]}>
+                    <summary className="w-fit cursor-pointer font-semibold text-primary select-none hover:text-accent-strong">
+                      {selRow.valuesTe?.[f.id] ? "తెలుగులో (Telugu)" : "Add in Telugu (optional)"}
+                    </summary>
+                    <textarea
+                      lang="te"
+                      aria-label={`${f.label} in Telugu`}
+                      rows={f.type === "long" ? 3 : 2}
+                      disabled={locked}
+                      value={selRow.valuesTe?.[f.id] ?? ""}
+                      onChange={(e) => update(selected.niatId, (r) => ({ ...r, valuesTe: { ...r.valuesTe, [f.id]: e.target.value } }))}
+                      placeholder="మీ మాటల్లో తెలుగులో రాయండి"
+                      className="mt-1.5 w-full rounded-lg border border-input bg-card px-3 py-2 font-telugu text-sm leading-relaxed focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60"
+                    />
+                    <span className="text-muted-foreground">
+                      Written by you, for the Telugu report. Not translated automatically; if left empty, the Telugu report shows your English and says so.
+                    </span>
+                  </details>
+                ) : null}
               </div>
             ))}
             <div className="flex justify-between gap-2">
@@ -306,5 +337,64 @@ export function ResultsEntry({
         ) : null}
       </div>
     </div>
+  );
+}
+
+const low = (pct: number | null | undefined) => pct !== null && pct !== undefined && pct < 75;
+
+/** Compact autofilled values for the marks table. */
+function AutoCell({ auto }: { auto: AutoFill | null }) {
+  if (!auto) return <span className="text-xs text-muted-foreground">—</span>;
+  const p = auto.progress;
+  return (
+    <div className="flex min-w-36 flex-col gap-0.5 text-xs">
+      <span className="tabular whitespace-nowrap">
+        Sem <b className={cn(low(auto.semester.pct) && "text-warning")}>{pctText(auto.semester)}</b> · Wk{" "}
+        <b className={cn(low(auto.week.pct) && "text-warning")}>{pctText(auto.week)}</b>
+      </span>
+      <span className="max-w-48 truncate text-muted-foreground" title={progressText(p)}>
+        L{p.level}
+        {p.topic ? ` · ${p.topicNo}/${p.topicCount} ${p.topic}` : ""}
+        {p.step && p.level > 0 ? ` · ${p.step}` : ""}
+      </span>
+    </div>
+  );
+}
+
+/** The autofilled values in full, in the feedback panel. */
+function AutoPanel({ auto, lastScore }: { auto: AutoFill | null; lastScore: number | null }) {
+  const p = auto?.progress;
+  return (
+    <section aria-label="Filled in automatically" className="flex flex-col gap-2 rounded-lg bg-background px-3 py-2.5 text-xs">
+      <span className="font-semibold text-muted-foreground">Filled in automatically{auto ? ` · as of ${auto.asOf}` : ""}</span>
+      <dl className="grid grid-cols-3 gap-2">
+        <div>
+          <dt className="text-muted-foreground">Semester</dt>
+          <dd className={cn("font-heading text-lg font-semibold tabular", low(auto?.semester.pct) && "text-warning")}>{pctText(auto?.semester)}</dd>
+          <dd className="text-muted-foreground">{daysText(auto?.semester)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Last week</dt>
+          <dd className={cn("font-heading text-lg font-semibold tabular", low(auto?.week.pct) && "text-warning")}>{pctText(auto?.week)}</dd>
+          <dd className="text-muted-foreground">{daysText(auto?.week)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Last test</dt>
+          <dd className="font-heading text-lg font-semibold tabular">{lastScore ?? "—"}</dd>
+        </div>
+      </dl>
+      {p ? (
+        <div className="flex flex-col gap-1">
+          <span className="text-muted-foreground">Roadmap progress</span>
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden>
+              <div className="h-full rounded-full bg-primary" style={{ width: `${p.percent ?? 0}%` }} />
+            </div>
+            <span className="font-semibold tabular">{p.percent === null ? "—" : `${p.percent}%`}</span>
+          </div>
+          <span className="text-sidebar-foreground">{progressText(p)}</span>
+        </div>
+      ) : null}
+    </section>
   );
 }

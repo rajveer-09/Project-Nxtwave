@@ -10,6 +10,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { FileBarChart } from "lucide-react";
 import { StatusPill } from "@/common/components/chips";
 import { PageHeader } from "@/common/components/page-header";
 import { UnlockButton } from "@/modules/tests/components/admin-tools";
@@ -19,6 +20,7 @@ import { requireAccess } from "@/common/auth/guard";
 import { isAdminRole } from "@/common/auth/roles";
 import { formatDate } from "@/common/lib/dates";
 import { getFormatVersion, getResults, getSubmission, getTest, listSubmissions, listTests, studentsFor } from "@/modules/tests/data";
+import { autofillFor } from "@/modules/tests/autofill";
 import { maxTotal, totalOf } from "@/modules/tests/types";
 
 export const metadata = { title: "Weekly test" };
@@ -42,7 +44,18 @@ async function Content({ params }: { params: Promise<{ testId: string }> }) {
       }
       title={`${test.name} · ${test.band}`}
       description={`Held ${formatDate(test.heldOn)} · ${format.fields.filter((f) => f.type === "marks").map((f) => `${f.label} ${f.max}`).join(" + ")} = ${maxTotal(format.fields)} · pass ${format.passMark} · format v${format.version}`}
-      actions={<StatusPill>Due {new Date(test.dueAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</StatusPill>}
+      actions={
+        <>
+          <StatusPill>Due {new Date(test.dueAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</StatusPill>
+          <Link
+            href={`/tests/${test.id}/report`}
+            className="flex h-10 items-center gap-2 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <FileBarChart aria-hidden className="size-4" />
+            Generate report
+          </Link>
+        </>
+      }
     />
   );
 
@@ -115,6 +128,8 @@ async function Content({ params }: { params: Promise<{ testId: string }> }) {
   const previous = (await listTests()).filter((t) => t.band === test.band && t.heldOn < test.heldOn).sort((a, b) => b.heldOn.localeCompare(a.heldOn))[0];
   const prevResults = previous ? await getResults(previous.id, students.map((s) => s.niatId)) : [];
   const prevFormat = previous ? await getFormatVersion(previous.formatId, previous.version) : null;
+  // Attendance and roadmap progress, filled in for the instructor: as saved with the result, else worked out now.
+  const auto = await autofillFor(test, students, results);
 
   return (
     <>
@@ -123,8 +138,8 @@ async function Content({ params }: { params: Promise<{ testId: string }> }) {
         testId={test.id}
         format={format}
         locked={locked}
-        students={students.map((s) => ({ niatId: s.niatId, name: s.name, section: s.section, attendance30d: s.attendance30d }))}
-        initial={Object.fromEntries(students.map((s, i) => [s.niatId, results[i] ? { present: results[i]!.present, values: results[i]!.values } : null]))}
+        students={students.map((s, i) => ({ niatId: s.niatId, name: s.name, section: s.section, auto: auto[i] }))}
+        initial={Object.fromEntries(students.map((s, i) => [s.niatId, results[i] ? { present: results[i]!.present, values: results[i]!.values, valuesTe: results[i]!.valuesTe ?? undefined } : null]))}
         lastScores={Object.fromEntries(
           students.map((s, i) => {
             const r = prevResults[i];
