@@ -16,7 +16,14 @@ import { BANDS, FIELD_TYPES } from "@/modules/tests/types";
 
 const value = z.union([z.number(), z.string().max(4000), z.array(z.string().max(200)).max(50), z.boolean(), z.null()]);
 const rowsSchema = z
-  .array(z.object({ niatId: z.string().regex(/^N\d{2}H\d{2}[AB]\d{4}$/), present: z.boolean(), values: z.record(z.string(), value) }))
+  .array(
+    z.object({
+      niatId: z.string().regex(/^N\d{2}H\d{2}[AB]\d{4}$/),
+      present: z.boolean(),
+      values: z.record(z.string(), value),
+      valuesTe: z.record(z.string(), z.string().max(4000)).optional(),
+    }),
+  )
   .max(500);
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string; problems?: Record<string, string[]> };
@@ -78,6 +85,7 @@ const fieldSchema = z.object({
   column: z.boolean(),
   max: z.number().int().min(0).max(1000).optional(),
   options: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
+  labelTe: z.string().trim().max(120).optional(),
 });
 
 export async function publishResultFormat(formatId: string, input: unknown): Promise<ActionResult> {
