@@ -13,19 +13,19 @@ import { addDays } from "@/common/lib/dates";
 import { cn } from "@/common/lib/utils";
 
 /**
- * Date range for any data view: quick ranges (today, 7 / 30 / 90 days, this month) or custom from–to.
- * Lives inside a <LiveForm>: its two date fields are named "from" and "to", and picking a quick
- * range fills them and applies the form.
+ * Date range for any data view: quick ranges (Today by default), or Custom from–to. Lives inside a
+ * <LiveForm>: its two date fields are named "from" and "to" (hidden, but still sent, while a quick
+ * range is chosen), and picking a quick range fills them and applies the form.
  */
 const field =
   "h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
+const tab = (on: boolean) =>
+  cn("h-8 rounded-md px-3 text-xs font-semibold transition-colors", on ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground");
 
 export type QuickRange = "Today" | "7 days" | "30 days" | "90 days" | "This month";
 
-/** `quick` limits which quick-range buttons show (all of them when left out); From/To always show. */
-export function DateRange({ from, to, today, max = 400, quick }: { from: string; to: string; today: string; max?: number; quick?: QuickRange[] }) {
-  const [range, setRange] = useState({ from, to });
-  const root = useRef<HTMLDivElement>(null);
+/** `quick` picks which quick ranges show before Custom, in this order: Today, 7 / 30 / 90 days, This month. Just Today when left out. */
+export function DateRange({ from, to, today, max = 400, quick = ["Today"] }: { from: string; to: string; today: string; max?: number; quick?: QuickRange[] }) {
   const all: { label: QuickRange; from: string; to: string }[] = [
     { label: "Today", from: today, to: today },
     { label: "7 days", from: addDays(today, -6), to: today },
@@ -33,34 +33,43 @@ export function DateRange({ from, to, today, max = 400, quick }: { from: string;
     { label: "90 days", from: addDays(today, -89), to: today },
     { label: "This month", from: `${today.slice(0, 7)}-01`, to: today },
   ];
-  const presets = quick ? all.filter((p) => quick.includes(p.label)) : all;
+  const presets = all.filter((p) => quick.includes(p.label));
+  const matching = (r: { from: string; to: string }) => presets.findIndex((p) => p.from === r.from && p.to === r.to);
+
+  const [range, setRange] = useState({ from, to });
+  const [custom, setCustom] = useState(matching({ from, to }) < 0);
+  const root = useRef<HTMLDivElement>(null);
+  const fromInput = useRef<HTMLInputElement>(null);
+
   const pick = (next: { from: string; to: string }) => {
+    setCustom(false);
     setRange(next);
     // Let the inputs take the new values, then apply the form they belong to.
     requestAnimationFrame(() => root.current?.closest("form")?.requestSubmit());
   };
+  const pickCustom = () => {
+    setCustom(true);
+    requestAnimationFrame(() => fromInput.current?.focus());
+  };
+  // Only the first matching quick range is marked (on the 1st, "This month" is the same as "Today").
+  const active = custom ? -1 : matching(range);
+
   return (
     <div ref={root} className="flex flex-wrap items-end gap-2">
-      <div role="group" aria-label="Quick ranges" className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
-        {presets.map((p, i) => {
-          // Only the first matching preset is marked (on the 1st, "This month" is the same as "Today").
-          const on = presets.findIndex((q) => q.from === range.from && q.to === range.to) === i;
-          return (
-            <button
-              key={p.label}
-              type="button"
-              aria-pressed={on}
-              onClick={() => pick(p)}
-              className={cn("h-8 rounded-md px-2.5 text-xs font-semibold transition-colors", on ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
-            >
-              {p.label}
-            </button>
-          );
-        })}
+      <div role="group" aria-label="Dates" className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+        {presets.map((p, i) => (
+          <button key={p.label} type="button" aria-pressed={active === i} onClick={() => pick(p)} className={tab(active === i)}>
+            {p.label}
+          </button>
+        ))}
+        <button type="button" aria-pressed={custom} onClick={pickCustom} className={tab(custom)}>
+          Custom
+        </button>
       </div>
-      <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+      <label className={cn("flex flex-col gap-1 text-xs font-medium text-muted-foreground", !custom && "hidden")}>
         From
         <input
+          ref={fromInput}
           type="date"
           name="from"
           value={range.from}
@@ -70,7 +79,7 @@ export function DateRange({ from, to, today, max = 400, quick }: { from: string;
           className={field}
         />
       </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+      <label className={cn("flex flex-col gap-1 text-xs font-medium text-muted-foreground", !custom && "hidden")}>
         To
         <input type="date" name="to" value={range.to} min={range.from} max={today} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className={field} />
       </label>

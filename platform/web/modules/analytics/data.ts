@@ -35,6 +35,61 @@ const COUNTED_MARKS = `
           ELSE extract(isodow FROM a.date) <> 7
         END`;
 
+/** Counted marks between $1 and $2 of the students in $3 (null: everyone), with each student's college. */
+const SCOPED_MARKS = `
+  SELECT m.*, COALESCE(cs.college, 'Other') AS college
+  FROM (${COUNTED_MARKS}) m
+  LEFT JOIN core.students cs ON cs.niat_id = m.niat_id
+  WHERE $3::text[] IS NULL OR m.niat_id = ANY($3::text[])`;
+
+type Marks = { present: number; absent: number; pct: number | null };
+export type AttendanceOverview = {
+  /** Marks on today's date (nothing marked yet, or a day off: all zero). */
+  today: Marks;
+  /** Every counted mark in the chosen dates. */
+  period: Marks & { students: number };
+  byDay: { day: string; pct: number | null }[];
+  byHall: { hall: string; pct: number; students: number }[];
+  byCollege: { college: string; pct: number | null }[];
+};
+
+/**
+ * Attendance for the evaluation dashboard (Home and Analytics): today, the chosen dates, per day, per hall and
+ * per college. `ids` limits it to those students (an instructor's or coach's own); null is everyone.
+ */
+export async function getAttendanceOverview(from: string, to: string, today: string, ids: string[] | null = null): Promise<AttendanceOverview> {
+  "use cache: remote";
+  cacheLife({ stale: 60, revalidate: 120, expire: 900 });
+  cacheTag(TAGS.roster, TAGS.home);
+  const db = getDb();
+  type Row = { p: number; m: number };
+  const [day, period, byDay, byHall, byCollege] = await Promise.all([
+    db.query<Row>(`SELECT count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x`, [today, today, ids]),
+    db.query<Row & { students: number }>(
+      `SELECT count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m, count(DISTINCT niat_id)::int AS students FROM (${SCOPED_MARKS}) x`,
+      [from, to, ids],
+    ),
+    db.query<Row & { day: string }>(`SELECT date::text AS day, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x GROUP BY 1 ORDER BY 1`, [from, to, ids]),
+    db.query<Row & { hall: string; students: number }>(
+      `SELECT COALESCE(hall_no, 'No hall') AS hall, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m, count(DISTINCT niat_id)::int AS students
+       FROM (${SCOPED_MARKS}) x GROUP BY 1`,
+      [from, to, ids],
+    ),
+    db.query<Row & { college: string }>(`SELECT college, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x GROUP BY 1`, [from, to, ids]),
+  ]);
+  const marks = (r: Row): Marks => ({ present: r.p, absent: r.m - r.p, pct: pct(r.p, r.m) });
+  return {
+    today: marks(day.rows[0]),
+    period: { ...marks(period.rows[0]), students: period.rows[0].students },
+    byDay: byDay.rows.map((r) => ({ day: r.day, pct: pct(r.p, r.m) })),
+    byHall: byHall.rows
+      .filter((r) => r.m > 0)
+      .map((r) => ({ hall: r.hall, pct: Math.round((r.p * 100) / r.m), students: r.students }))
+      .sort((a, b) => Number(a.hall.match(/\d+/)?.[0] ?? 999) - Number(b.hall.match(/\d+/)?.[0] ?? 999)),
+    byCollege: byCollege.rows.map((r) => ({ college: r.college, pct: pct(r.p, r.m) })),
+  };
+}
+
 export type Headline = { attendancePct: number | null; interactions: number; studentsReached: number; contestParticipation: number | null };
 export type Analytics = {
   headline: Headline;

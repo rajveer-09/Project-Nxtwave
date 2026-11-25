@@ -92,7 +92,12 @@ async function Content() {
                       <Link href={`/tests/${test.id}`} className="font-semibold hover:text-primary">
                         {test.name}
                       </Link>
-                      <div className="text-xs text-muted-foreground">Held {formatDate(test.heldOn)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Held {formatDate(test.heldOn)} ·{" "}
+                        <Link href={`/tests/${test.id}/report`} className="font-semibold text-primary hover:text-accent-strong">
+                          Report
+                        </Link>
+                      </div>
                     </td>
                     <td className="border-b border-muted px-3 py-3 font-semibold">{test.band}</td>
                     <td className="border-b border-muted px-3 py-3 tabular">

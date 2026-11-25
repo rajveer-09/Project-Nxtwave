@@ -163,6 +163,16 @@ export function FormatBuilder({ formatId, name, current, usedBy }: { formatId: s
                       ) : null}
                     </div>
                     <label className="flex flex-col gap-1.5 text-[13px] font-medium">
+                      Name in Telugu (optional, for Telugu student reports)
+                      <input
+                        lang="te"
+                        value={f.labelTe ?? ""}
+                        onChange={(e) => patch(f.id, { labelTe: e.target.value })}
+                        placeholder="e.g. కోడింగ్ ప్రశ్న 1 — leave empty to show the English name"
+                        className={input}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-[13px] font-medium">
                       Hint for instructors (optional)
                       <input value={f.help} onChange={(e) => patch(f.id, { help: e.target.value })} className={input} />
                     </label>

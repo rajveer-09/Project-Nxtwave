@@ -19,8 +19,10 @@ import { buildStudentDetail } from "@/common/sample-data/student-detail";
 import { ROSTER } from "@/common/sample-data/roster";
 import {
   bandOf,
+  hasTeluguText,
   resultProblems,
   totalOf,
+  type AutoFill,
   type Band,
   type FormatField,
   type FormatVersion,
@@ -30,6 +32,7 @@ import {
   type TestResult,
   type WeeklyTest,
 } from "@/modules/tests/types";
+import { autofill } from "@/modules/tests/autofill";
 
 /**
  * Weekly tests data access (ARCHITECTURE §4.7). With the database: core.test_formats,
@@ -148,7 +151,7 @@ const toTest = (r: TestRow): WeeklyTest => ({
   createdBy: r.created_by,
 });
 
-type ResultRow = { test_id: string; niat_id: string; present: boolean; values: Record<string, ResultValue>; entered_by: string; updated_at: string };
+type ResultRow = { test_id: string; niat_id: string; present: boolean; values: Record<string, ResultValue>; entered_by: string; updated_at: string; auto: AutoFill | null; values_te: Record<string, string> | null };
 const toResult = (r: ResultRow): TestResult => ({
   testId: r.test_id,
   niatId: r.niat_id,
@@ -156,6 +159,8 @@ const toResult = (r: ResultRow): TestResult => ({
   values: r.values,
   enteredBy: r.entered_by,
   updatedAt: new Date(r.updated_at).toISOString(),
+  auto: r.auto ?? null,
+  valuesTe: r.values_te ?? null,
 });
 
 // ---------------------------------------------------------------- reads
@@ -224,7 +229,7 @@ async function cachedResults(testId: string, niatIds: string[]): Promise<(TestRe
   cacheLife({ stale: 30, revalidate: 60, expire: 900 });
   cacheTag(TAGS.tests);
   const { rows } = await getDb().query<ResultRow>(
-    `SELECT test_id, niat_id, present, "values", entered_by, updated_at FROM core.test_results WHERE test_id = $1 AND niat_id = ANY($2::text[])`,
+    `SELECT test_id, niat_id, present, "values", entered_by, updated_at, auto, values_te FROM core.test_results WHERE test_id = $1 AND niat_id = ANY($2::text[])`,
     [testId, niatIds],
   );
   const byId = new Map(rows.map((r) => [r.niat_id, toResult(r)]));
@@ -291,10 +296,21 @@ function canEnter(user: SessionUser, instructor: string) {
   return (user.role === "instructor" || user.role === "senior_instructor") && user.name === instructor;
 }
 
+/** A row's Telugu feedback, kept only for text fields with text; null when there is none (or absent). */
+function teluguOf(fields: FormatField[], row: { present: boolean; valuesTe?: Record<string, string> }): Record<string, string> | null {
+  if (!row.present || !row.valuesTe) return null;
+  const out: Record<string, string> = {};
+  for (const f of fields) {
+    const t = hasTeluguText(f) ? row.valuesTe[f.id]?.trim() : "";
+    if (t) out[f.id] = t;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 export async function saveResults(
   user: SessionUser,
   testId: string,
-  rows: { niatId: string; present: boolean; values: Record<string, ResultValue> }[],
+  rows: { niatId: string; present: boolean; values: Record<string, ResultValue>; valuesTe?: Record<string, string> }[],
 ): Promise<{ ok: true; saved: number } | Fail> {
   const test = await getTest(testId);
   if (!test) return { ok: false, error: "Test not found." };
@@ -303,7 +319,8 @@ export async function saveResults(
   if (!(user.role === "instructor" || user.role === "senior_instructor")) return { ok: false, error: "Results are entered by instructors." };
   if (await getSubmission(testId, user.name)) return { ok: false, error: "You've already submitted. Ask an admin to unlock." };
 
-  const mine = new Set((await studentsFor(test, user.name)).map((s) => s.niatId));
+  const myStudents = await studentsFor(test, user.name);
+  const mine = new Set(myStudents.map((s) => s.niatId));
   const problems: Record<string, string[]> = {};
   for (const row of rows) {
     if (!mine.has(row.niatId)) return { ok: false, error: "You can only enter results for your own students." };
@@ -313,25 +330,32 @@ export async function saveResults(
   }
   if (Object.keys(problems).length) return { ok: false, error: "Some marks are out of range. Nothing was saved.", problems };
 
+  // Attendance and roadmap progress as of the test, kept with the result (modules/tests/autofill.ts).
+  const auto = await autofill(test, myStudents.filter((s) => rows.some((r) => r.niatId === s.niatId)));
   const clean = rows.map((row) => ({
     niatId: row.niatId,
     present: row.present,
     values: Object.fromEntries(version.fields.map((f) => [f.id, row.present ? (row.values[f.id] ?? null) : null])),
+    auto: auto.get(row.niatId) ?? null,
+    // Telugu wording only for text fields, trimmed; null when there is none.
+    valuesTe: teluguOf(version.fields, row),
   }));
   if (fromDb()) {
     // One statement, so either every row is saved or none is.
     await getDb().query(
-      `INSERT INTO core.test_results (test_id, niat_id, present, "values", entered_by)
-       SELECT $1, x.niat_id, x.present, x."values", $3 FROM jsonb_to_recordset($2::jsonb) AS x(niat_id text, present boolean, "values" jsonb)
+      `INSERT INTO core.test_results (test_id, niat_id, present, "values", entered_by, auto, values_te)
+       SELECT $1, x.niat_id, x.present, x."values", $3, x.auto, x.values_te
+       FROM jsonb_to_recordset($2::jsonb) AS x(niat_id text, present boolean, "values" jsonb, auto jsonb, values_te jsonb)
        ON CONFLICT (test_id, niat_id) DO UPDATE
-         SET present = EXCLUDED.present, "values" = EXCLUDED."values", entered_by = EXCLUDED.entered_by, updated_at = now()`,
-      [testId, JSON.stringify(clean.map((r) => ({ niat_id: r.niatId, present: r.present, values: r.values }))), user.name],
+         SET present = EXCLUDED.present, "values" = EXCLUDED."values", entered_by = EXCLUDED.entered_by, auto = EXCLUDED.auto,
+             values_te = EXCLUDED.values_te, updated_at = now()`,
+      [testId, JSON.stringify(clean.map((r) => ({ niat_id: r.niatId, present: r.present, values: r.values, auto: r.auto, values_te: r.valuesTe }))), user.name],
     );
     expire(TAGS.tests);
   } else {
     const s = store();
     const now = new Date().toISOString();
-    for (const row of clean) s.results.set(key(testId, row.niatId), { testId, niatId: row.niatId, present: row.present, values: row.values, enteredBy: user.name, updatedAt: now });
+    for (const row of clean) s.results.set(key(testId, row.niatId), { testId, niatId: row.niatId, present: row.present, values: row.values, enteredBy: user.name, updatedAt: now, auto: row.auto, valuesTe: row.valuesTe });
   }
   return { ok: true, saved: rows.length };
 }

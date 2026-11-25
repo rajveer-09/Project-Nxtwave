@@ -34,12 +34,12 @@ export type ConversionItem = { niatId: string; name: string; college: string; in
  */
 export function LevelConversions({ counted, notCounted, colleges, levels }: { counted: ConversionItem[]; notCounted: ConversionItem[]; colleges: string[]; levels: number }) {
   const boundaries = Array.from({ length: Math.max(1, levels - 1) }, (_, from) => from);
-  const grid = "grid grid-cols-[minmax(7rem,1.4fr)_repeat(var(--cols),minmax(3.5rem,1fr))] items-center gap-2";
+  const grid = "grid grid-cols-[minmax(6.5rem,1.4fr)_repeat(var(--cols),minmax(3rem,1fr))] items-center gap-2";
   const style = { "--cols": colleges.length + 1 } as React.CSSProperties;
   return (
     <div className="flex flex-col gap-4">
       <div className="overflow-x-auto">
-        <div className="min-w-[420px] text-[13px]">
+        <div className="min-w-[300px] text-[13px]">
           <div className={cn(grid, "border-b border-border bg-surface-subtle px-3 py-2 text-xs font-semibold text-muted-foreground")} style={style}>
             <span>Conversion</span>
             {[...colleges, "Total"].map((c) => (
@@ -189,7 +189,7 @@ export function DailyByCollege({ days, colleges, cells, today }: { days: string[
           <caption className="sr-only">Students interacted with each day, per college, by outcome</caption>
           <thead className="sticky top-0 z-10 bg-surface-subtle text-xs text-muted-foreground">
             <tr>
-              <th rowSpan={2} scope="col" className="px-3 py-2 text-left font-semibold">
+              <th rowSpan={2} scope="col" className="sticky left-0 z-20 bg-surface-subtle px-3 py-2 text-left font-semibold">
                 Date
               </th>
               {groups.map((g) => (
@@ -211,7 +211,7 @@ export function DailyByCollege({ days, colleges, cells, today }: { days: string[
           <tbody>
             {days.map((day) => (
               <tr key={day} className={cn("border-b border-muted", day === today && "bg-surface-subtle")}>
-                <th scope="row" className="px-3 py-1.5 text-left font-medium whitespace-nowrap tabular">
+                <th scope="row" className={cn("sticky left-0 z-[1] px-3 py-1.5 text-left font-medium whitespace-nowrap tabular", day === today ? "bg-surface-subtle" : "bg-card")}>
                   {formatDate(day)}
                   {day === today ? <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold">Today</span> : null}
                 </th>
@@ -219,9 +219,9 @@ export function DailyByCollege({ days, colleges, cells, today }: { days: string[
               </tr>
             ))}
           </tbody>
-          <tfoot className="sticky bottom-0 bg-surface-subtle font-semibold">
+          <tfoot className="sticky bottom-0 z-10 bg-surface-subtle font-semibold">
             <tr className="border-t border-border">
-              <th scope="row" className="px-3 py-2 text-left">
+              <th scope="row" className="sticky left-0 z-[1] bg-surface-subtle px-3 py-2 text-left">
                 Period total
               </th>
               {groups.map((g) => group(totals(g), true))}
@@ -236,28 +236,29 @@ export function DailyByCollege({ days, colleges, cells, today }: { days: string[
 
 // ---------------------------------------------------------------- colleges
 
-export type CollegeCard = { college: string; students: number; interactions: number; today: number; cleared: number; revisit: number };
+export type CollegeCard = { college: string; students: number; interactions: number; today: number; cleared: number; revisit: number; attendance: number | null };
 
-/** Per college: roster size, interactions in the dates and today, students cleared / to revisit in the dates. */
-export function CollegeCards({ cards }: { cards: CollegeCard[] }) {
+/** Per college: roster size, interactions in the dates and today, students cleared / to revisit and attendance in the dates. */
+export function CollegeCards({ cards, attendanceMin = 75 }: { cards: CollegeCard[]; attendanceMin?: number }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-3 xl:grid-cols-2">
       {cards.map((c) => (
-        <div key={c.college} className="flex flex-col gap-3 rounded-lg border border-border p-3.5">
+        <div key={c.college} className="flex flex-col gap-3 rounded-lg border border-border bg-surface-subtle/60 p-3.5">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-sm font-semibold">{c.college}</span>
             <span className="text-xs text-muted-foreground">{c.students} students</span>
           </div>
-          <dl className="grid grid-cols-2 gap-2">
+          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {[
-              ["Interactions", c.interactions, undefined],
-              ["Today", c.today, undefined],
-              ["Students cleared", c.cleared, "text-accent-strong"],
-              ["Students to revisit", c.revisit, "text-warning"],
+              ["Total interactions", String(c.interactions), undefined],
+              ["Today", String(c.today), undefined],
+              ["Cleared", String(c.cleared), "text-accent-strong"],
+              ["Revisit", String(c.revisit), "text-warning"],
+              ["Attendance", c.attendance === null ? "—" : `${c.attendance}%`, c.attendance !== null && c.attendance < attendanceMin ? "text-warning" : undefined],
             ].map(([label, value, tone]) => (
-              <div key={label as string} className="flex flex-col rounded-md bg-surface-subtle px-2.5 py-2">
+              <div key={label} className="flex flex-col rounded-md border border-border bg-card px-2.5 py-2 last:col-span-2 sm:last:col-span-1">
                 <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
-                <dd className={cn("font-heading text-lg font-semibold tabular", tone as string | undefined)}>{value}</dd>
+                <dd className={cn("font-heading text-lg font-semibold tabular", tone)}>{value}</dd>
               </div>
             ))}
           </dl>
