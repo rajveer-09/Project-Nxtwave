@@ -107,6 +107,8 @@ export async function getConversions(): Promise<Conversion[]> {
 
 export type OutcomeCounts = { students: number; cleared: number; revisit: number; inProgress: number };
 export type Evaluation = {
+  /** Today: interactions taken, and students whose outcome today was Cleared / Need to Revisit. */
+  today: { interactions: number; cleared: number; revisit: number };
   /** Per day and college: students seen that day, by their latest outcome that day. */
   daily: ({ day: string; college: string } & OutcomeCounts)[];
   /** Per college: interactions in the dates and today, students with a Cleared / Revisit outcome in the dates. */
@@ -117,16 +119,34 @@ export type Evaluation = {
   students: { niatId: string; interactions: number; cleared: number; revisits: number; last: string | null }[];
 };
 
-export async function getEvaluation(from: string, to: string, today: string): Promise<Evaluation> {
+/**
+ * Interaction numbers for the chosen dates. `ids` limits every number to those students (an
+ * instructor's or coach's own); null is the whole cohort. Shared by everyone with the same view.
+ */
+export async function getEvaluation(from: string, to: string, today: string, ids: string[] | null = null): Promise<Evaluation> {
   "use cache: remote";
   cacheLife({ stale: 60, revalidate: 120, expire: 900 });
   cacheTag(TAGS.interactions, TAGS.roster);
   const db = getDb();
-  const [daily, colleges, instructors, students] = await Promise.all([
+  // Interactions of the students in view (parameter `p` null: everyone)
+  const its = (p: number) => `(SELECT * FROM logs.interactions WHERE $${p}::text[] IS NULL OR upper(student_id) = ANY($${p}::text[]))`;
+  const [todayRow, daily, colleges, instructors, students] = await Promise.all([
+    db.query<{ n: number; cleared: number; revisit: number }>(
+      `WITH latest AS (
+         SELECT DISTINCT ON (upper(it.student_id)) it.status_post_interaction AS outcome
+         FROM ${its(2)} it WHERE it.date = $1::date
+         ORDER BY upper(it.student_id), it.created_at DESC
+       )
+       SELECT (SELECT count(*) FROM ${its(2)} it WHERE it.date = $1::date)::int AS n,
+              count(*) FILTER (WHERE outcome = 'Cleared')::int AS cleared,
+              count(*) FILTER (WHERE outcome = 'Need to Revisit')::int AS revisit
+       FROM latest`,
+      [today, ids],
+    ),
     db.query<{ day: string; college: string; students: number; cleared: number; revisit: number; in_progress: number }>(
       `WITH latest AS (
          SELECT DISTINCT ON (it.date, upper(it.student_id)) it.date, upper(it.student_id) AS niat_id, it.status_post_interaction AS outcome
-         FROM logs.interactions it
+         FROM ${its(3)} it
          WHERE it.date BETWEEN $1::date AND $2::date
          ORDER BY it.date, upper(it.student_id), it.created_at DESC
        )
@@ -136,7 +156,7 @@ export async function getEvaluation(from: string, to: string, today: string): Pr
               count(*) FILTER (WHERE l.outcome NOT IN ('Cleared', 'Need to Revisit'))::int AS in_progress
        FROM latest l JOIN core.students s ON s.niat_id = l.niat_id
        GROUP BY 1, 2`,
-      [from, to],
+      [from, to, ids],
     ),
     db.query<{ college: string; interactions: number; today: number; cleared: number; revisit: number }>(
       `SELECT s.college,
@@ -144,12 +164,13 @@ export async function getEvaluation(from: string, to: string, today: string): Pr
               count(*) FILTER (WHERE it.date = $3::date)::int AS today,
               count(DISTINCT s.niat_id) FILTER (WHERE it.date BETWEEN $1::date AND $2::date AND it.status_post_interaction = 'Cleared')::int AS cleared,
               count(DISTINCT s.niat_id) FILTER (WHERE it.date BETWEEN $1::date AND $2::date AND it.status_post_interaction = 'Need to Revisit')::int AS revisit
-       FROM logs.interactions it JOIN core.students s ON s.niat_id = upper(it.student_id)
+       FROM ${its(4)} it JOIN core.students s ON s.niat_id = upper(it.student_id)
        WHERE it.date BETWEEN $1::date AND $2::date OR it.date = $3::date
        GROUP BY 1`,
-      [from, to, today],
+      [from, to, today, ids],
     ),
-    // Everyone still teaching, plus anyone who has left but took interactions
+    // Everyone still teaching, plus anyone who has left but took interactions; with ids, only
+    // instructors who took interactions with those students.
     db.query<{ name: string; today: number; last3: number; last7: number; in_range: number; cleared: number; revisits: number }>(
       `SELECT COALESCE(i.full_name, x.instructor_name) AS name,
               count(x.id) FILTER (WHERE x.date = $3::date)::int AS today,
@@ -159,21 +180,27 @@ export async function getEvaluation(from: string, to: string, today: string): Pr
               count(x.id) FILTER (WHERE x.status_post_interaction = 'Cleared')::int AS cleared,
               count(x.id) FILTER (WHERE x.status_post_interaction = 'Need to Revisit')::int AS revisits
        FROM logs.instructors i
-       FULL JOIN logs.interactions x ON x.taken_by_instructor_id = i.id
+       FULL JOIN ${its(4)} x ON x.taken_by_instructor_id = i.id
        WHERE (i.left_on IS NULL OR x.id IS NOT NULL) AND COALESCE(i.full_name, x.instructor_name) IS NOT NULL
        GROUP BY 1
+       HAVING $4::text[] IS NULL OR count(x.id) > 0
        ORDER BY 1`,
-      [from, to, today],
+      [from, to, today, ids],
     ),
     db.query<{ niat_id: string; n: number; cleared: number; revisits: number; last: string | null }>(
       `SELECT upper(student_id) AS niat_id, count(*)::int AS n,
               count(*) FILTER (WHERE status_post_interaction = 'Cleared')::int AS cleared,
               count(*) FILTER (WHERE status_post_interaction = 'Need to Revisit')::int AS revisits,
               max(date)::text AS last
-       FROM logs.interactions GROUP BY 1`,
+       FROM logs.interactions
+       WHERE $1::text[] IS NULL OR upper(student_id) = ANY($1::text[])
+       GROUP BY 1`,
+      [ids],
     ),
   ]);
+  const t = todayRow.rows[0];
   return {
+    today: { interactions: t?.n ?? 0, cleared: t?.cleared ?? 0, revisit: t?.revisit ?? 0 },
     daily: daily.rows.map((r) => ({ day: r.day, college: r.college, students: r.students, cleared: r.cleared, revisit: r.revisit, inProgress: r.in_progress })),
     colleges: colleges.rows,
     instructors: instructors.rows.map((r) => ({ name: r.name, today: r.today, last3: r.last3, last7: r.last7, inRange: r.in_range, cleared: r.cleared, revisits: r.revisits })),
