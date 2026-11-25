@@ -146,7 +146,8 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
                 className="h-10 w-72 rounded-lg border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
               />
             </label>
-            <DateRange from={range.from} to={range.to} today={today} />
+            {/* Only super admins (owner) get every quick range; everyone else gets Today / This month and From–To. */}
+            <DateRange from={range.from} to={range.to} today={today} quick={user.role === "owner" ? undefined : ["Today", "This month"]} />
             {!logging || user.role === "senior_instructor" ? (
               <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
                 Taken by

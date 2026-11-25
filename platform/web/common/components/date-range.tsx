@@ -20,16 +20,20 @@ import { cn } from "@/common/lib/utils";
 const field =
   "h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
-export function DateRange({ from, to, today, max = 400 }: { from: string; to: string; today: string; max?: number }) {
+export type QuickRange = "Today" | "7 days" | "30 days" | "90 days" | "This month";
+
+/** `quick` limits which quick-range buttons show (all of them when left out); From/To always show. */
+export function DateRange({ from, to, today, max = 400, quick }: { from: string; to: string; today: string; max?: number; quick?: QuickRange[] }) {
   const [range, setRange] = useState({ from, to });
   const root = useRef<HTMLDivElement>(null);
-  const presets = [
+  const all: { label: QuickRange; from: string; to: string }[] = [
     { label: "Today", from: today, to: today },
     { label: "7 days", from: addDays(today, -6), to: today },
     { label: "30 days", from: addDays(today, -29), to: today },
     { label: "90 days", from: addDays(today, -89), to: today },
     { label: "This month", from: `${today.slice(0, 7)}-01`, to: today },
   ];
+  const presets = quick ? all.filter((p) => quick.includes(p.label)) : all;
   const pick = (next: { from: string; to: string }) => {
     setRange(next);
     // Let the inputs take the new values, then apply the form they belong to.
