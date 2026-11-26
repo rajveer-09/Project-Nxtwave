@@ -27,7 +27,10 @@ export type Interaction = {
   date: string; // YYYY-MM-DD (IST)
   round: number;
   takenBy: string;
+  /** The student's instructor now (falls back to pocAtTime when the student has none). */
   assignedInstructor: string;
+  /** The student's instructor (POC) when the interaction was logged; differs from takenBy when a support POC took it. */
+  pocAtTime: string;
   level: number;
   topics: string[];
   subtopics: string[];
@@ -46,6 +49,9 @@ export type Interaction = {
   createdBy: string;
   createdAt: string;
 };
+
+/** Taken by someone other than the student's POC at the time (a support POC covering). */
+export const isSupport = (it: Pick<Interaction, "takenBy" | "pocAtTime">) => !!it.pocAtTime && it.takenBy !== it.pocAtTime;
 
 const httpsUrl = z
   .string()

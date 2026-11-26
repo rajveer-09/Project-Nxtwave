@@ -87,6 +87,7 @@ function seed(): Store {
         round: it.round,
         takenBy: it.by,
         assignedInstructor: student.instructor,
+        pocAtTime: student.instructor,
         level,
         topics: [it.topics.split(" › ")[0]],
         subtopics: it.topics.includes(" › ") ? [it.topics.split(" › ")[1]] : [],
@@ -168,6 +169,7 @@ export async function createInteraction(raw: unknown, user: SessionUser): Promis
     studentName: student.name,
     round: Math.max(0, ...previous.map((it) => it.round)) + 1,
     assignedInstructor: student.instructor,
+    pocAtTime: student.instructor,
     createdBy: user.name,
     createdAt: new Date().toISOString(),
   };
@@ -241,6 +243,7 @@ type DbRow = {
   round: number;
   taken_by: string;
   assigned_instructor: string | null;
+  poc_at_time: string | null;
   level: number | null;
   topics: string;
   subtopics: string;
@@ -268,6 +271,7 @@ function toInteraction(r: DbRow): Interaction {
     round: r.round,
     takenBy: r.taken_by,
     assignedInstructor: r.assigned_instructor ?? "",
+    pocAtTime: r.poc_at_time || r.assigned_instructor || "",
     level: r.level ?? 0,
     topics: splitList(r.topics),
     subtopics: splitList(r.subtopics),
@@ -292,7 +296,7 @@ function toInteraction(r: DbRow): Interaction {
 function interactionSelect(withTranscript: boolean) {
   return `
     SELECT it.id, upper(it.student_id) AS niat_id, it.student_name, it.date::text AS date, it.interaction_round AS round,
-           it.instructor_name AS taken_by, COALESCE(cur.name, it.assigned_instructor_name) AS assigned_instructor,
+           it.instructor_name AS taken_by, COALESCE(cur.name, it.assigned_instructor_name) AS assigned_instructor, it.assigned_instructor_name AS poc_at_time,
            it.level, it.topics, it.subtopics, it.steps_reached, it.status_post_interaction AS status, it.rating::float8 AS rating,
            it.questions_asked, it.tweaked_questions, it.remarks, it.performed_well, it.improvement_areas, it.action_items,
            it.meet_recording, ${withTranscript ? "it.granola_transcript" : "NULL"} AS transcript,

@@ -12,43 +12,83 @@ import { getSessionUser } from "@/common/auth/session";
 import { canViewStudent } from "@/common/auth/student-access";
 import { getRosterStudent } from "@/common/data/roster";
 import { listInteractions } from "@nxtone/interactions-ui/data";
-import { coveredLabel, STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
+import { coveredLabel, isSupport, STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
+import { roomsByInteraction } from "@nxtone/interactions-ui/room/data";
 
 export type HistoryEntry = {
   id: string;
   date: string;
   round: number;
+  /** Position in the student's history, oldest = 1 (the stored round is 1 for most migrated interactions). */
+  number: number;
   takenBy: string;
+  /** The student's POC when it was logged; differs from takenBy when a support POC took it. */
+  poc: string;
+  support: boolean;
   level: number;
   covered: string;
+  topics: string[];
+  subtopics: string[];
+  /** Steps reached per subtopic, e.g. "LCM & GCD: 3.1" (", "-joined). */
+  stepsDetail: string;
+  /** Steps reached, e.g. "3.2" (several joined with ", "). */
+  steps: string;
   status: string;
+  statusKey: string;
   rating: number;
   questions: { title: string; step?: string; offRoadmap: boolean }[];
+  tweakedQuestions: string;
   remarks: string;
+  performedWell: string;
+  improvementAreas: string;
   actionItems: string;
+  /** https link to the Meet recording, "" when none. */
+  meetRecording: string;
+  /** Code room saved with this interaction, if any. */
+  codeRoom?: string;
 };
 
-/** A student's interaction history for the History pop-up on the Students list (newest first). */
-export async function studentHistoryAction(niatId: string): Promise<{ ok: true; name: string; entries: HistoryEntry[] } | { ok: false; error: string }> {
+export type HistoryStudent = { niatId: string; name: string; college: string; section: string; hall: string; instructor: string; level: number };
+
+/** A student and their interactions (newest first) for the History panel on Students and Today's interactions. */
+export async function studentHistoryAction(
+  niatId: string,
+): Promise<{ ok: true; name: string; student: HistoryStudent; entries: HistoryEntry[] } | { ok: false; error: string }> {
   const user = await getSessionUser();
   const student = await getRosterStudent(String(niatId).toUpperCase());
   if (!student || !canViewStudent(user, student)) return { ok: false, error: "That student isn't in your list." };
   const rows = await listInteractions({ niatId: student.niatId });
+  const rooms = await roomsByInteraction(rows.map((it) => it.id));
   return {
     ok: true,
     name: student.name,
-    entries: rows.map((it) => ({
+    student: { niatId: student.niatId, name: student.name, college: student.college, section: student.section, hall: student.hall, instructor: student.instructor, level: student.level },
+    // Newest first, so the oldest (last) is number 1.
+    entries: rows.map((it, i) => ({
       id: it.id,
       date: it.date,
       round: it.round,
+      number: rows.length - i,
       takenBy: it.takenBy,
+      poc: it.pocAtTime,
+      support: isSupport(it),
       level: it.level,
       covered: coveredLabel(it.topics, it.subtopics),
+      topics: it.topics,
+      subtopics: it.subtopics,
+      stepsDetail: Object.entries(it.stepsReached).map(([k, v]) => `${k}: ${v}`).join(", "),
+      steps: [...new Set(Object.values(it.stepsReached).filter(Boolean))].join(", "),
       status: STATUS_LABEL[it.status] ?? it.status,
+      statusKey: it.status,
       rating: it.rating,
       questions: it.questions.map((q) => ({ title: q.title, step: q.step, offRoadmap: q.offRoadmap })),
+      tweakedQuestions: it.tweakedQuestions,
       remarks: it.remarks,
+      performedWell: it.performedWell,
+      improvementAreas: it.improvementAreas,
       actionItems: it.actionItems,
+      meetRecording: /^https:\/\//i.test(it.meetRecording) ? it.meetRecording : "",
+      ...(rooms[it.id] ? { codeRoom: rooms[it.id] } : {}),
     })),
   };
 }

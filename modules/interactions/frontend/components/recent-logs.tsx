@@ -11,7 +11,7 @@ import { IntentLink } from "@/common/components/intent-link";
 import { StatusPill } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
 import { formatDate } from "@/common/lib/dates";
-import { coveredLabel, STATUS_LABEL, type Interaction } from "@nxtone/interactions-ui/lib/types";
+import { coveredLabel, isSupport, STATUS_LABEL, type Interaction } from "@nxtone/interactions-ui/lib/types";
 
 /** `codeRooms`: interaction id → code room saved with it (shows a "Code" link). */
 export function RecentLogs({ rows, total, exportHref, codeRooms = {} }: { rows: Interaction[]; total: number; exportHref: string; codeRooms?: Record<string, string> }) {
@@ -55,6 +55,11 @@ export function RecentLogs({ rows, total, exportHref, codeRooms = {} }: { rows: 
                       </IntentLink>
                       <div className="text-xs text-muted-foreground">
                         round {it.round} · {it.takenBy}
+                        {isSupport(it) ? (
+                          <span className="ml-1.5 rounded-md bg-warning-soft px-1.5 font-semibold text-warning" title={`${it.takenBy} took it for ${it.pocAtTime}'s student`}>
+                            support for {it.pocAtTime}
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="border-b border-muted px-2.5 py-2.5 text-sidebar-foreground">

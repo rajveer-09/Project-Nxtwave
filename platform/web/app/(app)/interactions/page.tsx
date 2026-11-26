@@ -8,6 +8,7 @@ Date : 16 Nov 2026
 
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { CalendarDays } from "lucide-react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -24,6 +25,8 @@ import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
 import { addDays, todayIst } from "@/common/lib/dates";
 import { listInteractions } from "@nxtone/interactions-ui/data";
+import { isSupport } from "@nxtone/interactions-ui/lib/types";
+import { PocSummary } from "@nxtone/interactions-ui/components/poc-summary";
 import { canLogInteractions } from "@nxtone/interactions-ui/lib/permissions";
 import { RISK_THRESHOLDS } from "@/common/domain/risk";
 import type { SearchParamsRecord } from "@/common/lib/url";
@@ -59,20 +62,23 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   const today = todayIst();
   const weekAgo = addDays(today, -7);
   const thisWeek = all.filter((it) => it.date > weekAgo).length;
+  const todayCount = all.filter((it) => it.date === today).length;
 
-  // Activity for the chosen dates (and, for admins, one person who took the interactions)
+  // Activity for the chosen dates, optionally for one person who took the interactions ("by") and/or
+  // one POC whose students got them ("poc": the student's instructor when the interaction was logged).
   const range = parseRange(params, today, 30);
   const takenBy = typeof params.by === "string" && params.by ? params.by : null;
+  const poc = typeof params.poc === "string" && params.poc ? params.poc : null;
   const q = typeof params.q === "string" ? params.q.slice(0, 100) : "";
   const match = searchMatcher(q);
   const people = [...new Set(all.map((it) => it.takenBy))].sort();
-  const inRange = all.filter(
-    (it) =>
-      it.date >= range.from &&
-      it.date <= range.to &&
-      (!takenBy || it.takenBy === takenBy) &&
-      match(it.studentName, it.niatId, it.takenBy, it.topics.join(" "), it.subtopics.join(" ")),
+  const pocs = [...new Set(all.map((it) => it.pocAtTime).filter(Boolean))].sort();
+  // Dates + search only: what the By-person table counts (the person filters pick its rows instead).
+  const inDates = all.filter(
+    (it) => it.date >= range.from && it.date <= range.to && match(it.studentName, it.niatId, it.takenBy, it.pocAtTime, it.topics.join(" "), it.subtopics.join(" ")),
   );
+  const inRange = inDates.filter((it) => (!takenBy || it.takenBy === takenBy) && (!poc || it.pocAtTime === poc));
+  const bySupport = inRange.filter(isSupport).length;
   const recent = inRange.slice(0, 40);
   const codeRooms = await roomsByInteraction(recent.map((it) => it.id));
   const perDay = new Map<string, number>();
@@ -84,7 +90,10 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
     ["Interactions", inRange.length.toLocaleString("en-IN")],
     ["Busiest day", busiest && busiest.value ? `${busiest.label} · ${busiest.value}` : "—"],
     ["Students reached", reached.toLocaleString("en-IN")],
+    ["Taken by support", inRange.length ? `${bySupport.toLocaleString("en-IN")} · ${Math.round((bySupport / inRange.length) * 100)}%` : "0"],
   ];
+  // Admins, super admins and senior instructors see the person filters and the By-person table.
+  const showPeople = !logging || user.role === "senior_instructor";
 
 
   const overdueLabel = `${overdue.length} ${logging ? "of my students" : "students"} overdue (${RISK_THRESHOLDS.interactionGapDays}d+)`;
@@ -109,6 +118,14 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
             )}
             <StatusPill tone="accent">{thisWeek} logged this week</StatusPill>
             {sample ? <StatusPill>Sample data</StatusPill> : null}
+            <Link
+              href="/interactions/today"
+              className="ml-1 inline-flex h-10 items-center gap-2 rounded-lg border border-input bg-card px-3.5 text-sm font-semibold hover:bg-muted"
+            >
+              <CalendarDays aria-hidden="true" className="size-4 text-muted-foreground" />
+              Today&apos;s interactions
+              <span className="rounded-md bg-muted px-1.5 text-xs tabular text-muted-foreground">{todayCount}</span>
+            </Link>
             {logging ? (
               <Link href="/log-interaction" className="ml-1 inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90">
                 Log interaction
@@ -132,7 +149,7 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
 
       <SectionCard
         title="Interactions"
-        description={`${shortDay(range.from)} – ${shortDay(range.to)}${takenBy ? ` · taken by ${takenBy}` : ""}${q.trim() ? ` · matching “${q.trim()}”` : ""}`}
+        description={`${shortDay(range.from)} – ${shortDay(range.to)}${poc ? ` · ${poc}'s students` : ""}${takenBy ? ` · taken by ${takenBy}` : ""}${q.trim() ? ` · matching “${q.trim()}”` : ""}`}
       >
         <div className="flex flex-col gap-4">
           <LiveForm className="flex flex-wrap items-end gap-3" aria-label="Filter interactions">
@@ -148,17 +165,29 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
             </label>
             {/* Only super admins (owner) get every quick range; everyone else gets Today / This month; From–To is under Custom. */}
             <DateRange from={range.from} to={range.to} today={today} quick={user.role === "owner" ? ["Today", "7 days", "30 days", "90 days", "This month"] : ["Today", "This month"]} />
-            {!logging || user.role === "senior_instructor" ? (
-              <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-                Taken by
-                <Dropdown
-                  name="by"
-                  defaultValue={takenBy ?? ""}
-                  options={[{ value: "", label: "Everyone" }, ...asOptions(people)]}
-                  searchPlaceholder="Search people…"
-                  className="w-56"
-                />
-              </label>
+            {showPeople ? (
+              <>
+                <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+                  POC (students of)
+                  <Dropdown
+                    name="poc"
+                    defaultValue={poc ?? ""}
+                    options={[{ value: "", label: "Every POC" }, ...asOptions(pocs)]}
+                    searchPlaceholder="Search POCs…"
+                    className="w-56"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+                  Taken by
+                  <Dropdown
+                    name="by"
+                    defaultValue={takenBy ?? ""}
+                    options={[{ value: "", label: "Everyone" }, ...asOptions(people)]}
+                    searchPlaceholder="Search people…"
+                    className="w-56"
+                  />
+                </label>
+              </>
             ) : null}
           </LiveForm>
           <dl className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3">
@@ -173,6 +202,16 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
           <p className="sr-only">{daily.map((d) => `${d.label}: ${d.value}`).join(", ")}</p>
         </div>
       </SectionCard>
+
+      {showPeople ? (
+        <SectionCard
+          title="By person"
+          description="Took: interactions they took, for their own students or as support for another POC. Their students got: interactions with the students they were POC for at the time, by them or by a support POC. Click a number to filter."
+          bodyClassName="px-0 pb-2"
+        >
+          <PocSummary rows={inDates} params={params} only={[takenBy, poc].filter((v): v is string => !!v)} />
+        </SectionCard>
+      ) : null}
 
       <RecentLogs rows={recent} total={inRange.length} exportHref="/api/logs/interactions/export" codeRooms={codeRooms} />
     </OverdueReminder>

@@ -10,6 +10,7 @@ Date : 18 Nov 2026
 
 import { useRef, useState } from "react";
 import { addDays } from "@/common/lib/dates";
+import { useResetWhenShown } from "@/common/lib/use-reset-when-shown";
 import { cn } from "@/common/lib/utils";
 
 /**
@@ -38,6 +39,12 @@ export function DateRange({ from, to, today, max = 400, quick = ["Today"] }: { f
 
   const [range, setRange] = useState({ from, to });
   const [custom, setCustom] = useState(matching({ from, to }) < 0);
+  // The fields always show the dates the data uses: on new dates from the server, and when this
+  // page is shown again (cacheComponents keeps left pages alive, with what was typed in them).
+  useResetWhenShown(() => {
+    setRange({ from, to });
+    setCustom(matching({ from, to }) < 0);
+  }, `${from}|${to}`);
   const root = useRef<HTMLDivElement>(null);
   const fromInput = useRef<HTMLInputElement>(null);
 
@@ -84,5 +91,27 @@ export function DateRange({ from, to, today, max = 400, quick = ["Today"] }: { f
         <input type="date" name="to" value={range.to} min={range.from} max={today} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className={field} />
       </label>
     </div>
+  );
+}
+
+/**
+ * Just the From and To fields, always shown (for pages that list one day by default). Like
+ * DateRange, they go back to the page's dates whenever the page is shown again.
+ */
+export function FromToFields({ from, to, today }: { from: string; to: string; today: string }) {
+  const [range, setRange] = useState({ from, to });
+  useResetWhenShown(() => setRange({ from, to }), `${from}|${to}`);
+  const label = "flex flex-col gap-1 text-xs font-medium text-muted-foreground";
+  return (
+    <>
+      <label className={label}>
+        From
+        <input type="date" name="from" value={range.from} max={range.to} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} className={field} />
+      </label>
+      <label className={label}>
+        To
+        <input type="date" name="to" value={range.to} min={range.from} max={today} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className={field} />
+      </label>
+    </>
   );
 }

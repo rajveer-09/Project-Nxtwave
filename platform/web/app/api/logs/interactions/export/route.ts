@@ -12,19 +12,28 @@ import { getRoster } from "@/common/data/roster";
 import { toCsv } from "@/common/lib/csv";
 import { todayIst } from "@/common/lib/dates";
 import { listInteractions } from "@nxtone/interactions-ui/data";
-import { STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
+import { isSupport, STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
+import { filterLog } from "@nxtone/interactions-ui/lib/log-filter";
+import { parseRange } from "@/common/lib/range";
 
-/** CSV of interactions the signed-in person can see (instructors: their own students). */
-export async function GET() {
+/**
+ * CSV of interactions the signed-in person can see (instructors: their own students). With ?from=&to=
+ * (and optional q=) only those dates / that search, as on the Today's interactions page.
+ */
+export async function GET(request: Request) {
   const user = await getOptionalSessionUser();
   if (!user) return Response.json({ error: "Not signed in" }, { status: 401 });
 
   const scope = studentScope(user);
-  const rows = scope?.coach !== undefined
+  const visible = scope?.coach !== undefined
     ? await listInteractions({ niatIds: (await getRoster()).filter((s) => inScope(scope, s)).map((s) => s.niatId) })
     : await listInteractions({ instructor: scope?.instructor });
+  const url = new URL(request.url);
+  const dated = url.searchParams.has("from") || url.searchParams.has("to");
+  const range = dated ? parseRange(Object.fromEntries(url.searchParams), todayIst(), 1) : null;
+  const rows = range ? filterLog(visible, { from: range.from, to: range.to, q: (url.searchParams.get("q") ?? "").slice(0, 100) }) : visible;
   const csv = toCsv(
-    ["Date", "NIAT ID", "Student", "Round", "Taken by", "Assigned instructor", "Level", "Topics", "Subtopics", "Steps reached", "Outcome", "Rating", "Questions asked", "Off-roadmap questions", "Tweaked questions", "Remarks", "Performed well", "Improvement areas", "Action items", "Meet recording", "Transcript link"],
+    ["Date", "NIAT ID", "Student", "Round", "Taken by", "Assigned instructor", "POC at the time", "Taken by support", "Level", "Topics", "Subtopics", "Steps reached", "Outcome", "Rating", "Questions asked", "Off-roadmap questions", "Tweaked questions", "Remarks", "Performed well", "Improvement areas", "Action items", "Meet recording", "Transcript link"],
     rows.map((it) => [
       it.date,
       it.niatId,
@@ -32,6 +41,8 @@ export async function GET() {
       it.round,
       it.takenBy,
       it.assignedInstructor,
+      it.pocAtTime,
+      isSupport(it) ? "Yes" : "No",
       `L${it.level}`,
       it.topics.join("; "),
       it.subtopics.join("; "),
@@ -52,7 +63,7 @@ export async function GET() {
   return new Response(csv, {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="interactions-${todayIst()}.csv"`,
+      "content-disposition": `attachment; filename="interactions-${range ? (range.from === range.to ? range.from : `${range.from}_to_${range.to}`) : todayIst()}.csv"`,
       "cache-control": "private, no-store",
     },
   });

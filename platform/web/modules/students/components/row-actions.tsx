@@ -8,21 +8,18 @@ Date : 18 Nov 2026
 
 "use client";
 
-import { History, NotebookPen } from "lucide-react";
+import { History, NotebookPen, X } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
-import { EmptyState } from "@/common/components/empty-state";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/common/ui/dialog";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/common/ui/sheet";
 import { Skeleton } from "@/common/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/common/ui/tooltip";
-import { formatDate } from "@/common/lib/dates";
 import { cn } from "@/common/lib/utils";
-import { studentHistoryAction, type HistoryEntry } from "../actions";
+import { studentHistoryAction, type HistoryEntry, type HistoryStudent } from "../actions";
+import { InteractionTimeline, TimelineSubtitle } from "./interaction-timeline";
 
 const button =
   "flex h-9 items-center gap-1.5 rounded-lg border border-input bg-card px-2.5 text-xs font-semibold text-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
-
-const TONE: Record<string, string> = { Cleared: "text-accent-strong", "Needs revisit": "text-warning" };
 
 /**
  * Button text, shown only when the Students table has room (its wrapper is the @container,
@@ -51,19 +48,19 @@ function NamedButton({ name, icon, render }: { name: string; icon: React.ReactNo
   );
 }
 
-/** History (interactions so far, in a pop-up) and Log interaction, at the end of a Students row. */
+/** History (the interaction timeline, in a side panel) and Log interaction, at the end of a Students or Today's interactions row. */
 export function StudentRowActions({ niatId, name, logHref }: { niatId: string; name: string; logHref: string | null }) {
   const [open, setOpen] = useState(false);
-  const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
+  const [data, setData] = useState<{ student: HistoryStudent; entries: HistoryEntry[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, startLoading] = useTransition();
 
   function show() {
     setOpen(true);
-    if (entries) return;
+    if (data) return;
     startLoading(async () => {
       const result = await studentHistoryAction(niatId);
-      if (result.ok) setEntries(result.entries);
+      if (result.ok) setData({ student: result.student, entries: result.entries });
       else setError(result.error);
     });
   }
@@ -82,59 +79,38 @@ export function StudentRowActions({ niatId, name, logHref }: { niatId: string; n
           render={<Link href={logHref} className={cn(button, "border-primary/40 text-primary")} aria-label={`Log an interaction for ${name}`} />}
         />
       ) : null}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85vh] gap-4 overflow-y-auto p-6 sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg">{name} · interaction history</DialogTitle>
-            <DialogDescription className="text-[13px] tabular">
-              {niatId}
-              {entries ? ` · ${entries.length} interaction${entries.length === 1 ? "" : "s"}` : ""}
-            </DialogDescription>
-          </DialogHeader>
-          {loading || (!entries && !error) ? (
-            <div className="flex flex-col gap-2" aria-busy="true">
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className="h-20 rounded-lg" />
-              ))}
-            </div>
-          ) : error ? (
-            <p className="text-[13px] text-warning">{error}</p>
-          ) : entries && entries.length ? (
-            <ol className="flex flex-col gap-2.5">
-              {entries.map((e) => (
-                <li key={e.id} className="flex flex-col gap-1.5 rounded-lg border border-border px-3.5 py-3 text-[13px]">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="font-semibold">
-                      {formatDate(e.date)} · Round {e.round} · L{e.level}
-                    </span>
-                    <span className={cn("text-xs font-semibold", TONE[e.status] ?? "text-sidebar-foreground")}>
-                      {e.status} · {e.rating}/5
-                    </span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    Taken by {e.takenBy}
-                    {e.covered ? ` · ${e.covered}` : ""}
-                  </span>
-                  {e.questions.length ? (
-                    <ul className="flex flex-wrap gap-1.5">
-                      {e.questions.map((q, i) => (
-                        <li key={i} className={cn("rounded-md px-2 py-0.5 text-xs", q.offRoadmap ? "bg-warning-soft text-warning" : "bg-muted")}>
-                          {q.step ? `${q.step} · ` : ""}
-                          {q.title}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {e.remarks ? <p className="text-sidebar-foreground">{e.remarks}</p> : null}
-                  {e.actionItems ? <p className="text-xs text-muted-foreground">Next: {e.actionItems}</p> : null}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <EmptyState title="No interactions yet" description="Logged interactions for this student will show here." />
-          )}
-        </DialogContent>
-      </Dialog>
+      <Sheet open={open} onOpenChange={setOpen}>
+        {/* Own close button inside the sticky header: the built-in one would sit under it. */}
+        <SheetContent side="right" showCloseButton={false} className="w-full gap-0 overflow-y-auto p-0 data-[side=right]:sm:max-w-2xl">
+          <SheetHeader className="sticky top-0 z-20 gap-1 border-b border-border bg-popover px-5 py-4 pr-12">
+            <SheetTitle className="flex flex-wrap items-center gap-2 text-lg">
+              {name}
+              <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground tabular">{niatId}</span>
+            </SheetTitle>
+            <SheetDescription>{data ? <TimelineSubtitle student={data.student} /> : "Interaction history"}</SheetDescription>
+            <SheetClose
+              aria-label="Close"
+              className="absolute top-3 right-3 flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <X aria-hidden="true" className="size-4" />
+            </SheetClose>
+          </SheetHeader>
+          <div className="px-5 py-4">
+            {loading || (!data && !error) ? (
+              <div className="flex flex-col gap-3" aria-busy="true">
+                <Skeleton className="h-16 rounded-lg" />
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-20 rounded-lg" />
+                ))}
+              </div>
+            ) : error ? (
+              <p className="text-[13px] text-warning">{error}</p>
+            ) : data ? (
+              <InteractionTimeline student={data.student} entries={data.entries} logHref={logHref} />
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
