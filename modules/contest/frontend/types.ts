@@ -103,7 +103,58 @@ export interface QuestionStat {
   solve_rate: number | null;
   median_solve_secs: number | null;
   avg_wrong: number | null;
+  /** The question's topic tags (contest page). */
+  topics?: QuestionTopics;
 }
+
+// ---------------------------------------------------------------- topics (services/topics.py)
+
+export type TagState = "official" | "provisional" | "insufficient" | "pending";
+
+export interface QuestionTopics {
+  state: TagState;
+  tags: { slug: string; name: string; source: "official" | "community" }[];
+  mentions: number | null;
+  fetched_at: string | null;
+}
+
+export interface TopicMetrics {
+  /** Times a question with this topic was in front of the students (one per student per question). */
+  appeared: number;
+  solved: number;
+  solve_rate: number | null;
+  /** Accepted ÷ (accepted + wrong tries); LeetCode reports wrong tries only for solved problems. */
+  accuracy: number | null;
+  median_secs: number | null;
+}
+
+export interface TopicRow extends TopicMetrics {
+  slug: string;
+  name: string;
+  official: TopicMetrics;
+  provisional_appeared: number;
+  provisional_questions: number;
+}
+
+export interface TopicsData {
+  topics: TopicRow[];
+  /** With roll_nos: how many of those students the contest service knows. */
+  students?: number;
+  /** Groups only: lowest solve rate among topics seen often enough, weakest first. */
+  weakest?: string[];
+  coverage: {
+    contests: number;
+    contests_provisional: number;
+    questions: number;
+    official: number;
+    provisional: number;
+    insufficient: number;
+    pending: number;
+    last_refresh: string | null;
+  };
+}
+
+export type TopicsQuery = { last?: number; college?: string };
 
 export interface DraftReview {
   run_id: number;
@@ -181,8 +232,12 @@ export interface ContestResults {
 /** Scope of the results: everyone, my students, or one college (NxtRank's ContestScope). */
 export type ContestScope = "all" | "mine" | `college:${string}`;
 
-export function scopeQuery(scope: ContestScope) {
-  if (scope === "mine") return "?mine=true";
+/**
+ * The query for a scope. "mine" sends the students NxtOne assigns to the viewer (NIAT IDs), so
+ * contests agree with the rest of NxtOne; without them it falls back to NxtRank's own list.
+ */
+export function scopeQuery(scope: ContestScope, myIds?: string[]) {
+  if (scope === "mine") return myIds ? `?${new URLSearchParams({ roll_nos: myIds.join(",") })}` : "?mine=true";
   if (scope.startsWith("college:")) return `?${new URLSearchParams({ college: scope.slice("college:".length) })}`;
   return "";
 }

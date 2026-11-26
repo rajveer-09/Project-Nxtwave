@@ -51,12 +51,14 @@ export function stateLabel(c: Pick<ContestListItem, "state" | "in_review" | "fin
   }
 }
 
-export function ContestsList({ defaultScope = "all" }: { defaultScope?: ContestScope }) {
+export function ContestsList({ myIds = [] }: { myIds?: string[] }) {
+  // A contest page opens on "My students" for someone with students of their own.
+  const defaultScope: ContestScope = myIds.length ? "mine" : "all";
   const queryClient = useQueryClient();
   // Hovering a contest loads what its page shows (same keys as ContestView).
   const preload = (slug: string) => {
-    void queryClient.prefetchQuery({ queryKey: ["contests", "detail", slug, defaultScope], queryFn: () => contestApi.detail(slug, defaultScope), staleTime: 60_000 });
-    void queryClient.prefetchQuery({ queryKey: ["contests", "results", slug, defaultScope], queryFn: () => contestApi.results(slug, defaultScope), staleTime: 60_000 });
+    void queryClient.prefetchQuery({ queryKey: ["contests", "detail", slug, defaultScope], queryFn: () => contestApi.detail(slug, defaultScope, myIds), staleTime: 60_000 });
+    void queryClient.prefetchQuery({ queryKey: ["contests", "results", slug, defaultScope], queryFn: () => contestApi.results(slug, defaultScope, myIds), staleTime: 60_000 });
   };
   const [type, setType] = useState("");
   const [q, setQ] = useState("");

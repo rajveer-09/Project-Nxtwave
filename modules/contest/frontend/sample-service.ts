@@ -8,7 +8,7 @@ Date : 17 Nov 2026
 
 import "server-only";
 import type { SessionUser } from "@/common/auth/roles";
-import type { ContestDetail, ContestListItem, ContestPage, ContestResults, DraftReview, QuestionStat, ResultRow, Summary } from "@nxtone/contest-ui/types";
+import type { ContestDetail, ContestListItem, ContestPage, ContestResults, DraftReview, QuestionStat, QuestionTopics, ResultRow, Summary, TopicsData } from "@nxtone/contest-ui/types";
 import { toCsv } from "@/common/lib/csv";
 import { searchMatcher } from "@/common/lib/search";
 import { buildStudentDetail } from "@/common/sample-data/student-detail";
@@ -193,11 +193,80 @@ function summarise(rows: ResultRow[]): Summary {
   };
 }
 
+/** roll_nos (NIAT IDs, comma-separated) as a set, or null when not given. */
+function rollNos(url: URL) {
+  const raw = url.searchParams.get("roll_nos");
+  return raw === null ? null : new Set(raw.split(",").map((r) => r.trim().toUpperCase()).filter(Boolean));
+}
+
 function scoped(rows: ResultRow[], url: URL, user: SessionUser) {
   const college = url.searchParams.get("college");
   const mine = url.searchParams.get("mine") === "true";
+  const picked = rollNos(url);
   const myIds = new Set(ROSTER.filter((s) => s.instructor === user.name).map((s) => s.niatId));
-  return rows.filter((r) => (!college || r.college === college) && (!mine || myIds.has(r.roll_no ?? "")));
+  return rows.filter(
+    (r) => (!college || r.college === college) && (!mine || myIds.has(r.roll_no ?? "")) && (!picked || picked.has((r.roll_no ?? "").toUpperCase())),
+  );
+}
+
+/* ---------------------------------------------------------------- topics (services/topics.py) */
+
+/** Each sample question's topics, by position (Q1–Q4). */
+const SAMPLE_TAGS: [string, string][][] = [
+  [["array", "Array"], ["hash-table", "Hash Table"]],
+  [["string", "String"], ["greedy", "Greedy"]],
+  [["dynamic-programming", "Dynamic Programming"], ["array", "Array"]],
+  [["graph", "Graph"], ["binary-search", "Binary Search"]],
+];
+
+const questionTopics = (i: number): QuestionTopics => ({
+  state: "official",
+  tags: SAMPLE_TAGS[i].map(([slug, name]) => ({ slug, name, source: "official" as const })),
+  mentions: null,
+  fetched_at: "2026-11-20T10:00:00+05:30",
+});
+
+/** Topic metrics over the last `last` scanned contests, for the rows `keep` lets through. */
+function topicsFor(last: number | null, keep: (r: ResultRow) => boolean, group: boolean): TopicsData {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const scanned = CONTESTS.filter((d) => listItem(d, nowSec).has_data).slice(0, last ?? undefined);
+  const acc = new Map<string, { name: string; appeared: number; solved: number; wrong: number; secs: number[] }>();
+  for (const def of scanned) {
+    const took = resultsFor(def).filter((r) => keep(r) && (r.status === "solved" || r.status === "zero"));
+    LABELS.forEach((label, i) => {
+      for (const [slug, name] of SAMPLE_TAGS[i]) {
+        const t = acc.get(slug) ?? { name, appeared: 0, solved: 0, wrong: 0, secs: [] };
+        for (const r of took) {
+          t.appeared += 1;
+          const p = r.problems[label];
+          if (p) {
+            t.solved += 1;
+            t.wrong += p.fail_count;
+            t.secs.push(p.solve_secs);
+          }
+        }
+        acc.set(slug, t);
+      }
+    });
+  }
+  const topics = [...acc.entries()].map(([slug, t]) => {
+    const sorted = [...t.secs].sort((a, b) => a - b);
+    const m = {
+      appeared: t.appeared,
+      solved: t.solved,
+      solve_rate: t.appeared ? Math.round((t.solved / t.appeared) * 10000) / 10000 : null,
+      accuracy: t.solved ? Math.round((t.solved / (t.solved + t.wrong)) * 10000) / 10000 : null,
+      median_secs: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null,
+    };
+    return { slug, name: t.name, ...m, official: m, provisional_appeared: 0, provisional_questions: 0 };
+  });
+  const weakest = topics
+    .filter((t) => t.appeared >= 10 && t.solve_rate !== null)
+    .sort((a, b) => (a.solve_rate ?? 0) - (b.solve_rate ?? 0))
+    .slice(0, 3)
+    .map((t) => t.slug);
+  const coverage = { contests: scanned.length, contests_provisional: 0, questions: scanned.length * 4, official: scanned.length * 4, provisional: 0, insufficient: 0, pending: 0, last_refresh: "2026-11-20T10:00:00+05:30" };
+  return group ? { topics, weakest, coverage } : { topics, coverage };
 }
 
 function statusOf(def: ContestDef, nowSec: number): ContestListItem["state"] {
@@ -277,6 +346,7 @@ export async function contestSample(request: Request, path: string[], user: Sess
         solve_rate: participated ? solvers.length / participated : null,
         median_solve_secs: secs.length ? secs[Math.floor(secs.length / 2)] : null,
         avg_wrong: solvers.length ? solvers.reduce((n, r) => n + r.problems[label].fail_count, 0) / solvers.length : null,
+        topics: questionTopics(i),
       };
     });
     const colleges = ["BITS", "CDU"].map((college) => {
@@ -333,6 +403,17 @@ export async function contestSample(request: Request, path: string[], user: Sess
   }
 
   if (request.method === "GET" && a === "scan-status" && !b) return json(200, scanQueue());
+
+  if (request.method === "GET" && a === "analytics" && b === "topics" && !c) {
+    const last = Number(url.searchParams.get("last")) || null;
+    const picked = rollNos(url);
+    const data = topicsFor(last, (r) => !picked || picked.has((r.roll_no ?? "").toUpperCase()), true);
+    return json(200, picked ? { ...data, students: ROSTER.filter((s) => picked.has(s.niatId)).length } : data);
+  }
+  if (request.method === "GET" && a === "students" && /^\d+$/.test(b ?? "") && c === "topics") {
+    const last = Number(url.searchParams.get("last")) || null;
+    return json(200, topicsFor(last, (r) => r.student_id === Number(b), false));
+  }
 
   // A requested rescan joins the sample queue (see scanQueue); its results then wait for review.
   if (request.method === "POST" && a === "admin" && b === "scans" && !c) {

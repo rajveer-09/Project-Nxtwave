@@ -71,9 +71,12 @@ def scan_status_view(db: Session = Depends(get_db)) -> dict:
 
 
 def _scope(db: Session, user: User, college: str | None, mine: bool,
-           instructor_id: int | None = None) -> set[int] | None:
-    """Students a contest page is limited to: an instructor's own (`mine`), one
+           instructor_id: int | None = None, roll_nos: str | None = None) -> set[int] | None:
+    """Students a contest page is limited to: the given roll numbers (the web app's own groups,
+    e.g. an instructor's students as NxtOne assigns them), an instructor's own (`mine`), one
     instructor's (`instructor_id`, admins), one college, or everyone (None)."""
+    if roll_nos is not None:
+        return _roll_no_ids(db, roll_nos)
     if instructor_id is not None:
         if user.role != "admin":
             raise HTTPException(status.HTTP_403_FORBIDDEN, "only admins can choose an instructor")
@@ -93,9 +96,10 @@ def _scope(db: Session, user: User, college: str | None, mine: bool,
 
 @router.get("/contests/{slug}")
 def contest(slug: str, college: str | None = None, mine: bool = False, instructor_id: int | None = None,
+            roll_nos: str | None = None,
             db: Session = Depends(get_db), settings: Settings = Depends(get_settings),
             user: User = Depends(current_user)) -> dict:
-    ids = _scope(db, user, college, mine, instructor_id)
+    ids = _scope(db, user, college, mine, instructor_id, roll_nos)
     page = dashboard.contest_page(db, slug, now=datetime.now(timezone.utc), scan_delay=_delay(settings),
                                   final=Policy.from_settings(settings).final, student_ids=ids)
     if page is None:
@@ -203,10 +207,10 @@ def cancel_contest_scan(slug: str, db: Session = Depends(get_db), user: User = D
 
 @router.get("/contests/{slug}/results")
 def contest_results(request: Request, slug: str, college: str | None = None, mine: bool = False,
-                    instructor_id: int | None = None, db: Session = Depends(get_db),
+                    instructor_id: int | None = None, roll_nos: str | None = None, db: Session = Depends(get_db),
                     user: User = Depends(current_user)) -> Response:
     def build(version):
-        ids = _scope(db, user, college, mine, instructor_id)
+        ids = _scope(db, user, college, mine, instructor_id, roll_nos)
 
         def everyone():
             stored = _results(db, slug)
@@ -402,12 +406,32 @@ def _both(a: set[int] | None, b: set[int] | None) -> set[int] | None:
     return b if a is None else a if b is None else a & b
 
 
+def _roll_no_ids(db: Session, roll_nos: str | None) -> set[int] | None:
+    """Students by roll number (NIAT ID), comma-separated: the web app's own groups, e.g. an
+    instructor's students as NxtOne assigns them."""
+    if roll_nos is None:
+        return None
+    wanted = {r.strip().upper() for r in roll_nos.split(",") if r.strip()}
+    if len(wanted) > 3000:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "at most 3000 roll numbers")
+    if not wanted:
+        return set()
+    return set(db.scalars(select(Student.id).where(func.upper(func.trim(Student.roll_no)).in_(wanted))))
+
+
 @router.get("/analytics/topics")
 def analytics_topics(request: Request, last: int | None = Query(None, ge=1), college: str | None = None,
+                     roll_nos: str | None = None,
                      db: Session = Depends(get_db), user: User = Depends(current_user)) -> Response:
-    """Topic-wise stats for every active student (or one college), weakest topics, coverage."""
-    return conditional(request, db, user, lambda version: topics.group_topics(
-        db, last=last, student_ids=_college_ids(db, college), version=version))
+    """Topic-wise stats for every active student (or one college, or the given roll numbers),
+    weakest topics, coverage. With roll_nos, `students` says how many of them were found."""
+    ids = _both(_roll_no_ids(db, roll_nos), _college_ids(db, college))
+
+    def build(version):
+        data = topics.group_topics(db, last=last, student_ids=ids, version=version)
+        return {**data, "students": len(ids)} if roll_nos is not None and ids is not None else data
+
+    return conditional(request, db, user, build)
 
 
 @router.get("/instructor/analytics/topics")

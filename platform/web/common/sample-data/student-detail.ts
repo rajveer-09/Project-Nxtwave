@@ -210,6 +210,8 @@ export function buildStudentDetail(s: RosterStudent) {
   });
   const attendedResults = contestList.filter((c) => c.attended);
   const contests = {
+    /** The contest service's id for the student (database only: its topics come from the service). */
+    contestId: null as number | null,
     handle: s.lcHandle,
     rating: s.lcRating,
     attended: s.contestsAttended,

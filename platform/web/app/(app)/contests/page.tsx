@@ -18,11 +18,12 @@ import { ContestsList } from "@nxtone/contest-ui/components/contests-list";
 import { Skeleton } from "@/common/ui/skeleton";
 import { authMode } from "@/common/auth/config";
 import { requireAccess } from "@/common/auth/guard";
-import { getRoster } from "@/common/data/roster";
 import { shortDay } from "@/common/lib/range";
 import type { SearchParamsRecord } from "@/common/lib/url";
 import { cn } from "@/common/lib/utils";
 import { collegePerformance, contestPerformance, type ContestRow } from "@nxtone/contest-ui/performance";
+import { idsByCollege, myStudentIds } from "@nxtone/contest-ui/my-students";
+import { TopicsView } from "@nxtone/contest-ui/components/topics";
 
 export const metadata = { title: "Contests" };
 
@@ -36,7 +37,7 @@ const fmt = (n: number) => n.toLocaleString("en-IN");
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part * 100) / whole)}%` : "—");
 const shortTitle = (t: string) => t.replace(/^(Weekly|Biweekly) Contest /, "$1 ");
 
-type View = "mine" | "all" | "colleges";
+type View = "mine" | "all" | "colleges" | "topics";
 
 function Tabs({ view, views }: { view: View; views: [View, string][] }) {
   return (
@@ -169,10 +170,14 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   const params = await searchParams;
   const db = authMode() === "database";
   // Instructors (and senior instructors who teach) start on their own students.
-  const teaches = user.role === "instructor" || user.role === "senior_instructor";
-  const myIds = teaches && db ? (await getRoster()).filter((s) => s.instructor === user.name).map((s) => s.niatId) : [];
+  const myIds = await myStudentIds(user);
   const hasMine = myIds.length > 0;
-  const views: [View, string][] = [...(hasMine ? ([["mine", "My students"]] as [View, string][]) : []), ["all", "All contests"], ...(db ? ([["colleges", "By college"]] as [View, string][]) : [])];
+  const views: [View, string][] = [
+    ...(hasMine ? ([["mine", "My students"]] as [View, string][]) : []),
+    ["all", "All contests"],
+    ...(db ? ([["colleges", "By college"]] as [View, string][]) : []),
+    ["topics", "Topics"],
+  ];
   const asked = typeof params.view === "string" ? (params.view as View) : null;
   const view: View = asked && views.some(([k]) => k === asked) ? asked : hasMine ? "mine" : "all";
 
@@ -183,8 +188,10 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
         <MyContests rows={await contestPerformance(myIds, 10)} students={myIds.length} />
       ) : view === "colleges" ? (
         <Colleges />
+      ) : view === "topics" ? (
+        <TopicsView colleges={await idsByCollege()} myIds={myIds} />
       ) : (
-        <ContestsList defaultScope={user.role === "instructor" ? "mine" : "all"} />
+        <ContestsList myIds={myIds} />
       )}
     </div>
   );
