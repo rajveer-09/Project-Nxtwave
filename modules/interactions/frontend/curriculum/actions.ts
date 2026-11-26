@@ -45,7 +45,14 @@ const details = {
   notes: z.string().trim().max(1000),
 };
 
-const questionSchema = z.object({ ...placement, ...details, tweakOf: z.string().max(200).nullable() });
+const questionSchema = z.object({
+  ...placement,
+  ...details,
+  tweakOf: z.string().max(200).nullable(),
+  // Adding inside a sheet block (Level 0's interaction sheet): its id and, optionally, the heading it goes under.
+  blockId: z.string().max(40).nullable().optional(),
+  poolGroup: z.string().trim().max(200).optional(),
+});
 
 function done() {
   revalidatePath("/admin/curriculum");

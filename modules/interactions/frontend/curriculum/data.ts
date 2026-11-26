@@ -19,6 +19,7 @@ import { listOffRoadmapEntries } from "@nxtone/interactions-ui/data";
 import { LEVELS } from "@nxtone/interactions-ui/lib/curriculum";
 import { bankKey, QUESTION_BANK, SAMPLE_BANK, type BankQuestion } from "@nxtone/interactions-ui/lib/question-bank";
 import { findLevel, findTopic, levelName, subtopicNames, topicSteps } from "./lib/structure";
+import { hasBlocks, listBlocks } from "./blocks";
 import { canEditCurriculum, getStructure } from "./structure";
 
 /**
@@ -45,7 +46,18 @@ export type Question = {
   origin: "roadmap" | "promoted";
   createdBy: string;
   archived: boolean;
+  /** The sheet block (rules + pool) it belongs to; null = not in a block (shown as before). See ./blocks.ts. */
+  blockId: string | null;
+  /** Heading inside its block's pool, e.g. "Pick 1 from this ->"; "" = none. */
+  poolGroup: string;
+  /** Order within its block; null = by when it was added. */
+  position: number | null;
+  /** Full multi-line text (code, options, answer) when the one-line title isn't the whole question; "" = none. */
+  body: string;
 };
+
+/** The block fields of a question that isn't in a block. */
+const NO_BLOCK = { blockId: null, poolGroup: "", position: null, body: "" } as const;
 
 export type Decision = { status: "added" | "kept" | "dismissed"; by: string; at: string; questionId?: string };
 
@@ -72,6 +84,7 @@ function seed(bank: Record<string, BankQuestion[]> = QUESTION_BANK): Store {
         origin: "roadmap",
         createdBy: "Imported from the Interactions app",
         archived: false,
+        ...NO_BLOCK,
       });
     }
   }
@@ -95,8 +108,17 @@ type QuestionRow = {
   origin: "roadmap" | "promoted";
   created_by: string;
   archived: boolean;
+  // Only once the blocks migration has run (see ./blocks.ts).
+  block_id?: string | null;
+  pool_group?: string;
+  position?: number | null;
+  body?: string;
 };
 const toQuestion = (r: QuestionRow): Question => ({
+  blockId: r.block_id ?? null,
+  poolGroup: r.pool_group ?? "",
+  position: r.position ?? null,
+  body: r.body ?? "",
   id: r.id,
   level: r.level,
   topic: r.topic,
@@ -137,16 +159,19 @@ function ensureSeeded(): Promise<void> {
 
 async function dbQuestions(includeArchived: boolean): Promise<Question[]> {
   await ensureSeeded();
-  return cachedQuestions(includeArchived);
+  return cachedQuestions(includeArchived, await hasBlocks());
 }
 
-async function cachedQuestions(includeArchived: boolean): Promise<Question[]> {
+async function cachedQuestions(includeArchived: boolean, withBlocks: boolean): Promise<Question[]> {
   "use cache: remote";
   cacheLife({ stale: 30, revalidate: 60, expire: 900 });
   cacheTag(TAGS.curriculum);
+  // With blocks, questions keep the sheet's order (position); without, by when they were added.
   const { rows } = await getDb().query<QuestionRow>(
     `SELECT id, level, topic, subtopic, step, title, source, url, notes, tweak_of, origin, created_by, archived
-     FROM core.curriculum_questions WHERE $1 OR NOT archived ORDER BY level, topic, subtopic NULLS FIRST, step, created_at, title`,
+            ${withBlocks ? ", block_id, pool_group, position, body" : ""}
+     FROM core.curriculum_questions WHERE $1 OR NOT archived
+     ORDER BY level, topic, subtopic NULLS FIRST, ${withBlocks ? "position NULLS LAST, " : ""}step, created_at, title`,
     [includeArchived],
   );
   return rows.map(toQuestion);
@@ -157,11 +182,22 @@ async function insertQuestion(q: Question, db?: Db) {
     store().questions.push(q);
     return;
   }
-  await (db ?? getDb()).query(
-    `INSERT INTO core.curriculum_questions (id, level, topic, subtopic, step, title, source, url, notes, tweak_of, origin, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-    [q.id, q.level, q.topic, q.subtopic, q.step, q.title, q.source, q.url, q.notes, q.tweakOf, q.origin, q.createdBy],
-  );
+  const values = [q.id, q.level, q.topic, q.subtopic, q.step, q.title, q.source, q.url, q.notes, q.tweakOf, q.origin, q.createdBy];
+  if (await hasBlocks()) {
+    // In a block, it goes to the end of that block's pool.
+    await (db ?? getDb()).query(
+      `INSERT INTO core.curriculum_questions (id, level, topic, subtopic, step, title, source, url, notes, tweak_of, origin, created_by, block_id, pool_group, body, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+               CASE WHEN $13::text IS NULL THEN NULL ELSE (SELECT COALESCE(max(position), 0) + 1 FROM core.curriculum_questions WHERE block_id = $13::text) END)`,
+      [...values, q.blockId, q.poolGroup, q.body],
+    );
+  } else {
+    await (db ?? getDb()).query(
+      `INSERT INTO core.curriculum_questions (id, level, topic, subtopic, step, title, source, url, notes, tweak_of, origin, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      values,
+    );
+  }
   expire(TAGS.curriculum);
 }
 
@@ -192,7 +228,20 @@ export async function questionBank(): Promise<Record<string, BankQuestion[]>> {
 
 type Fail = { ok: false; error: string };
 
-export type QuestionInput = { level: number; topic: string; subtopic: string | null; step: string; title: string; source: string; url: string; notes: string; tweakOf: string | null };
+export type QuestionInput = {
+  level: number;
+  topic: string;
+  subtopic: string | null;
+  step: string;
+  title: string;
+  source: string;
+  url: string;
+  notes: string;
+  tweakOf: string | null;
+  /** Add it to this block's pool (same level and topic), optionally under one of its headings. */
+  blockId?: string | null;
+  poolGroup?: string;
+};
 
 async function placementError(input: Pick<QuestionInput, "level" | "topic" | "subtopic" | "step">): Promise<string | null> {
   const s = await getStructure();
@@ -219,7 +268,26 @@ export async function addQuestion(user: SessionUser, input: QuestionInput, origi
     (q) => !q.archived && q.level === input.level && q.topic === input.topic && q.subtopic === input.subtopic && q.title.trim().toLowerCase() === input.title.trim().toLowerCase(),
   );
   if (dupe) return { ok: false, error: "That question is already in this place." };
-  const question: Question = { ...input, title: input.title.trim(), id: randomUUID().slice(0, 8), origin, createdBy: user.name, archived: false };
+  const block = input.blockId ? (await listBlocks()).find((b) => b.id === input.blockId) : null;
+  if (input.blockId && (!block || block.level !== input.level || block.topic !== input.topic)) return { ok: false, error: "That block isn't in this topic." };
+  const question: Question = {
+    level: input.level,
+    topic: input.topic,
+    subtopic: input.subtopic,
+    step: input.step,
+    source: input.source,
+    url: input.url,
+    notes: input.notes,
+    tweakOf: input.tweakOf,
+    ...NO_BLOCK,
+    blockId: block?.id ?? null,
+    poolGroup: block ? (input.poolGroup ?? "").trim() : "",
+    title: input.title.trim(),
+    id: randomUUID().slice(0, 8),
+    origin,
+    createdBy: user.name,
+    archived: false,
+  };
   if (fromDb()) await withChange(user, "ui", "Curriculum", (db) => insertQuestion(question, db));
   else await insertQuestion(question);
   return { ok: true, question };
