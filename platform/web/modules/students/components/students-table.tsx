@@ -9,10 +9,9 @@ Date : 16 Nov 2026
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import Link from "next/link";
 import { IntentLink } from "@/common/components/intent-link";
-import { FlagLegend, StudentFlags } from "@/common/components/student-flags";
 import type { SortKey, StudentQuery } from "@/modules/students/data";
 import type { RosterStudent } from "@/common/sample-data/roster";
-import { flagsWithDetail } from "@/common/domain/risk";
+import { FLAG_LABEL, flagsWithDetail } from "@/common/domain/risk";
 import { withParams, type SearchParamsRecord } from "@/common/lib/url";
 import { cn } from "@/common/lib/utils";
 import type { SessionUser } from "@/common/auth/roles";
@@ -97,11 +96,7 @@ export function StudentsTable({
             <SortHeader label="Level" sortKey="level" query={query} params={params} basePath={basePath} />
             <SortHeader label="LeetCode" sortKey="rating" query={query} params={params} basePath={basePath} />
             <SortHeader label="Last interaction" sortKey="interaction" query={query} params={params} basePath={basePath} />
-            <Th>
-              <span className="inline-flex items-center gap-1">
-                Flags <FlagLegend />
-              </span>
-            </Th>
+            <Th>Flags</Th>
             <th scope="col" className="border-b border-border py-2.5 pr-5 pl-3 text-right font-semibold">
               <span className="sr-only">Actions</span>
             </th>
@@ -140,9 +135,19 @@ export function StudentsTable({
                 <td className="border-b border-muted px-3 py-2.5 text-sidebar-foreground">
                   {s.lastInteractionDays === null ? "Never" : s.lastInteractionDays === 0 ? "Today" : s.lastInteractionDays === 1 ? "Yesterday" : `${s.lastInteractionDays} days ago`}
                 </td>
-                {/* relative: the whole cell is the flags' hover/click target (StudentFlags fills it). */}
-                <td className="relative border-b border-muted px-3 py-2.5">
-                  <StudentFlags flags={flagsWithDetail(s.flags, s.risk)} name={s.name} className="px-3" />
+                {/* Each flag as red text; hovering one shows this student's own numbers behind it. */}
+                <td className="border-b border-muted px-3 py-2.5">
+                  {s.flags.length ? (
+                    <ul className="flex flex-col items-start gap-1">
+                      {flagsWithDetail(s.flags, s.risk).map((f) => (
+                        <li key={f.key} title={f.detail} className="text-xs font-semibold whitespace-nowrap text-destructive">
+                          {FLAG_LABEL[f.key]}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">On track</span>
+                  )}
                 </td>
                 <td className="border-b border-muted py-2 pr-5 pl-3">
                   <StudentRowActions niatId={s.niatId} name={s.name} logHref={logHrefFor(viewer, s)} />
