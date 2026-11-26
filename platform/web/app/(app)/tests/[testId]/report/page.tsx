@@ -12,7 +12,6 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { Download, FileText } from "lucide-react";
 import { BarList } from "@/common/components/bar-list";
-import { StatusPill } from "@/common/components/chips";
 import { Dropdown } from "@/common/components/dropdown";
 import { LiveForm } from "@/common/components/live-form";
 import { PageHeader } from "@/common/components/page-header";
@@ -150,38 +149,6 @@ async function Content({ params, searchParams }: { params: Promise<{ testId: str
               )}
             </SectionCard>
           </div>
-
-          <SectionCard
-            title={`Needs attention · ${report.attention.length}`}
-            description="Below pass, missed the test, attendance under 75%, or down 20%+ of the total from the last test"
-          >
-            {report.attention.length ? (
-              <ul className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
-                {report.attention.slice(0, 24).map(({ row, reasons }) => (
-                  <li key={row.niatId} className="flex break-inside-avoid flex-col gap-1.5 rounded-lg border border-border px-3 py-2.5">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <a href={`/students/${row.niatId}`} className="font-semibold hover:text-primary">
-                        {row.name}
-                      </a>
-                      <span className="text-xs text-muted-foreground">{row.section}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {reasons.map((r) => (
-                        <StatusPill key={r} tone="warning">
-                          {r}
-                        </StatusPill>
-                      ))}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">Nobody — every student passed and has attendance of 75% or more.</p>
-            )}
-            {report.attention.length > 24 ? (
-              <p className="mt-2 text-xs text-muted-foreground">And {report.attention.length - 24} more — filter the table below by result or low attendance.</p>
-            ) : null}
-          </SectionCard>
 
           <ReportView testId={test.id} rows={report.rows} fields={format.fields} max={max} passMark={format.passMark} />
 
