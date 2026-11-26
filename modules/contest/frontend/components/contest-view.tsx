@@ -11,7 +11,7 @@ Date : 17 Nov 2026
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BarList } from "@/common/components/bar-list";
 import { StatusPill } from "@/common/components/chips";
@@ -22,9 +22,10 @@ import { searchMatcher } from "@/common/lib/search";
 import { Button } from "@/common/ui/button";
 import { Skeleton } from "@/common/ui/skeleton";
 import { contestApi, contestDate, mmss, pct } from "@nxtone/contest-ui/api";
-import type { ContestScope, ContestStatus, ResultRow } from "@nxtone/contest-ui/types";
+import type { ContestScope, ResultRow } from "@nxtone/contest-ui/types";
 import { cn } from "@/common/lib/utils";
 import { stateLabel, WakingNote } from "@nxtone/contest-ui/components/contests-list";
+import { ContestScanPanel } from "@nxtone/contest-ui/components/scan-activity";
 
 const STATUS_TEXT: Record<ResultRow["status"], string> = {
   solved: "Took part",
@@ -47,6 +48,15 @@ export function ContestView({ slug, canReview, canRescan = false, hasStudents }:
     refetchInterval: (q) => (busy(q.state.data?.status.state) ? 5_000 : false),
   });
   const results = useQuery({ queryKey: ["contests", "results", slug, scope], queryFn: () => contestApi.results(slug, scope) });
+  const state = detail.data?.status.state;
+  // Pages read and whether the scanner is online, while this contest is queued or scanning.
+  const scan = useQuery({ queryKey: ["contests", "scan-status"], queryFn: contestApi.scanStatus, enabled: busy(state), refetchInterval: busy(state) ? 5_000 : false });
+  // When a scan finishes, show what it found.
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy(state)) void queryClient.invalidateQueries({ queryKey: ["contests"] });
+    wasBusy.current = busy(state);
+  }, [state, queryClient]);
   const [query, setQuery] = useState("");
   const match = searchMatcher(query);
   const shownRows = (results.data?.rows ?? []).filter((r) => match(r.name, r.roll_no, r.leetcode_handle, r.college, r.extra.section));
@@ -107,7 +117,7 @@ export function ContestView({ slug, canReview, canRescan = false, hasStudents }:
         </div>
       </div>
 
-      {canRescan && busy(d.status.state) ? <ScanProgress status={d.status} /> : null}
+      {busy(d.status.state) ? <ContestScanPanel status={d.status} scan={scan.data} /> : null}
 
       {canReview && d.review ? (
         <section aria-label="Scan waiting for review" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning-border bg-warning-soft px-4 py-3.5">
@@ -318,9 +328,8 @@ export function ContestView({ slug, canReview, canRescan = false, hasStudents }:
 function RescanButton({ slug, title, busy, finalAt }: { slug: string; title: string; busy: boolean; finalAt: string | null }) {
   const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
-  // Same key as the contests list, so it's usually cached already. Only for the scanner's status.
-  const list = useQuery({ queryKey: ["contests", "list", "", ""], queryFn: () => contestApi.list({}) });
-  const alive = list.data?.worker.alive;
+  const scan = useQuery({ queryKey: ["contests", "scan-status"], queryFn: contestApi.scanStatus });
+  const alive = scan.data?.worker.alive;
 
   const open = () => {
     const final = !finalAt || Date.now() >= new Date(finalAt).getTime();
@@ -359,31 +368,5 @@ function RescanButton({ slug, title, busy, finalAt }: { slug: string; title: str
       </Button>
       {dialog}
     </>
-  );
-}
-
-/** Where a requested scan stands: in the queue, or how far it has read. */
-function ScanProgress({ status }: { status: ContestStatus }) {
-  const scanning = status.state === "scanning";
-  const percent = Math.round((status.progress ?? 0) * 100);
-  const ready = status.ready_at ? new Date(status.ready_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }) : null;
-  return (
-    <section aria-label="Scan in progress" role="status" className="flex flex-col gap-2 rounded-xl border border-border bg-card px-4 py-3.5 text-[13px]">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-semibold">
-          {scanning ? `Scanning LeetCode · ${percent}%` : status.position && status.position > 1 ? `Queued · ${status.position - 1} scan${status.position === 2 ? "" : "s"} ahead` : "Queued · starts next"}
-        </span>
-        <span className="text-muted-foreground">
-          {ready ? `Ready about ${ready}` : "Waiting for the scanner to come online"}
-          {status.requested_by ? ` · requested by ${status.requested_by}` : ""}
-        </span>
-      </div>
-      {scanning ? (
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-          <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${Math.max(percent, 3)}%` }} />
-        </div>
-      ) : null}
-      <p className="text-xs text-muted-foreground">The results will wait above for review before they replace what everyone sees.</p>
-    </section>
   );
 }

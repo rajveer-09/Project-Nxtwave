@@ -19,6 +19,8 @@ export const contestApi = {
     if (q.q) p.set("q", q.q);
     return apiFetch<ContestPage>(`${base}/contests?${p}`);
   },
+  /** The scanner: online or not, the scan running now and the queue (small; polled while busy). */
+  scanStatus: () => apiFetch<Pick<ContestPage, "worker" | "running" | "queue" | "typical_scan_secs">>(`${base}/scan-status`),
   detail: (slug: string, scope: ContestScope) => apiFetch<ContestDetail>(`${base}/contests/${encodeURIComponent(slug)}${scopeQuery(scope)}`),
   results: (slug: string, scope: ContestScope) => apiFetch<ContestResults>(`${base}/contests/${encodeURIComponent(slug)}/results${scopeQuery(scope)}`),
   exportUrl: (slug: string, scope: ContestScope) => `${base}/contests/${encodeURIComponent(slug)}/export.csv${scopeQuery(scope)}`,
