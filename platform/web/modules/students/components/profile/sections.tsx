@@ -8,6 +8,8 @@ Date : 16 Nov 2026
 
 import { roomsByInteraction } from "@nxtone/interactions-ui/room/data";
 import { BarList } from "@/common/components/bar-list";
+import { LeetCodeLink } from "@/common/components/leetcode-link";
+import { StudentTopics } from "@nxtone/contest-ui/components/topics";
 import type { StudentDetail } from "@/modules/students/data";
 import { cn } from "@/common/lib/utils";
 import { InteractionsList } from "@/modules/students/components/profile/interactions-list";
@@ -125,7 +127,20 @@ export function ContestsSection({ d, student = false }: { d: StudentDetail; stud
   ];
   return (
     <section id="contests" aria-labelledby="contests-h" className="flex scroll-mt-6 flex-col gap-3.5">
-      <SectionHeading id="contests" title="LeetCode contests" extra={c.handle ? `· ${c.handle}` : "· no handle on file"} link={student ? undefined : { href: "/contests", label: "All contests" }} />
+      <SectionHeading
+        id="contests"
+        title="LeetCode contests"
+        extra={
+          c.handle ? (
+            <>
+              · <LeetCodeLink handle={c.handle} />
+            </>
+          ) : (
+            "· no handle on file"
+          )
+        }
+        link={student ? undefined : { href: "/contests", label: "All contests" }}
+      />
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
         {stats.map(([label, value, warn]) => (
           <div key={label} className="rounded-xl border border-border bg-card px-3.5 py-3">
@@ -167,22 +182,25 @@ export function ContestsSection({ d, student = false }: { d: StudentDetail; stud
             </table>
           </div>
         </div>
-        <div className="min-w-0 flex-[1_1_280px] rounded-xl border border-border bg-card p-4">
-          <h3 className="text-[15px] font-bold">Topics in contest problems</h3>
-          <p className="mb-3 text-xs text-muted-foreground">Solved / attempted, from LeetCode tags</p>
-          {!c.tags.length ? <p className="text-sm text-muted-foreground">No contest problems attempted yet.</p> : null}
-          <BarList
-            items={c.tags.map((tag) => ({
-              label: tag.name,
-              value: tag.attempted ? tag.solved / tag.attempted : 0,
-              display: `${tag.solved}/${tag.attempted}`,
-              warn: tag.attempted > 0 && tag.solved / tag.attempted < 0.5,
-            }))}
-            max={1}
-            labelWidth="7.5rem"
-          />
-        </div>
+        {!student && c.contestId !== null ? null : (
+          <div className="min-w-0 flex-[1_1_280px] rounded-xl border border-border bg-card p-4">
+            <h3 className="text-[15px] font-bold">Topics in contest problems</h3>
+            <p className="mb-3 text-xs text-muted-foreground">Solved / attempted, from LeetCode tags</p>
+            {!c.tags.length ? <p className="text-sm text-muted-foreground">No contest problems attempted yet.</p> : null}
+            <BarList
+              items={c.tags.map((tag) => ({
+                label: tag.name,
+                value: tag.attempted ? tag.solved / tag.attempted : 0,
+                display: `${tag.solved}/${tag.attempted}`,
+                warn: tag.attempted > 0 && tag.solved / tag.attempted < 0.5,
+              }))}
+              max={1}
+              labelWidth="7.5rem"
+            />
+          </div>
+        )}
       </div>
+      {!student && c.contestId !== null ? <StudentTopics contestStudentId={c.contestId} name={d.student.name.split(" ")[0]} /> : null}
     </section>
   );
 }
@@ -196,12 +214,24 @@ export function RecordsSection({ d }: { d: StudentDetail }) {
         <div className="min-w-0 flex-[1_1_360px] rounded-xl border border-border bg-card p-4">
           <h3 className="mb-3 text-[15px] font-bold">Roster details</h3>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
-            {r.roster.map(([k, v]) => (
-              <div key={k} className="contents">
-                <dt className="text-muted-foreground">{k}</dt>
-                <dd className="font-semibold">{v}</dd>
-              </div>
-            ))}
+            {r.roster.map(([k, v]) => {
+              const handle = d.contests.handle;
+              return (
+                <div key={k} className="contents">
+                  <dt className="text-muted-foreground">{k}</dt>
+                  <dd className="font-semibold">
+                    {k === "LeetCode handle" && handle && v.startsWith(handle) ? (
+                      <>
+                        <LeetCodeLink handle={handle} />
+                        {v.slice(handle.length)}
+                      </>
+                    ) : (
+                      v
+                    )}
+                  </dd>
+                </div>
+              );
+            })}
           </dl>
         </div>
         <div className="flex min-w-0 flex-[1_1_360px] flex-col gap-4">

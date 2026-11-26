@@ -335,6 +335,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     interactions: items,
     tests: { list: [], recurringAreas: [], passMark: 20, max: 50, markLabels: [] },
     contests: {
+      contestId: contest.contestId,
       handle: s.lcHandle,
       rating: s.lcRating,
       attended: contest.attended,
@@ -358,7 +359,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
 
 async function loadContests(niatId: string) {
   const db = getDb();
-  const empty = { attended: 0, scanned: 0, absentStreak: 0, bestGlobal: null, bestCollege: null, avgSolved: null, checkedOn: null, results: [], tags: [] };
+  const empty = { contestId: null, attended: 0, scanned: 0, absentStreak: 0, bestGlobal: null, bestCollege: null, avgSolved: null, checkedOn: null, results: [], tags: [] };
   const { rows } = await db.query<{
     id: number;
     checked: string | null;
@@ -401,6 +402,7 @@ async function loadContests(niatId: string) {
     ),
   ]);
   return {
+    contestId: c.id,
     attended: c.attended ?? 0,
     scanned: c.scanned ?? 0,
     absentStreak: c.absent_streak ?? 0,
@@ -426,6 +428,7 @@ async function loadContests(niatId: string) {
 }
 
 type ContestBlock = {
+  contestId: number | null;
   attended: number;
   scanned: number;
   absentStreak: number;

@@ -8,7 +8,8 @@ for every request (platform/web/common/services/identity-token.ts), sent as
 `Authorization: Bearer <token>`; no cookies come with it. With IDENTITY_JWT_SECRET set
 (the web app's CONTEST_JWT_SECRET), such a request is signed in as the NxtRank login whose
 username is the token's email. A hub owner or admin with no NxtRank login gets a stand-in
-admin that exists only for the request; anyone else without one is refused.
+admin that exists only for the request; other hub staff without one get a read-only viewer;
+anyone else (e.g. a student) is refused.
 
 The token is checked here with the standard library (HS256 only), so no JWT package is needed."""
 
@@ -25,10 +26,12 @@ ISSUER = "student-hub-web"
 AUDIENCE = "contest-api"
 LEEWAY_SECS = 5  # clock difference allowed between the web app and this service
 
-# stand-ins for hub owners/admins with no NxtRank login: never saved, and their ids
+# stand-ins for hub staff with no NxtRank login: never saved, and their ids
 # can't be a real user's (ids start at 1), so "is this me?" checks never match anyone
 OWNER_STAND_IN_ID = -1
 ADMIN_STAND_IN_ID = -2
+VIEWER_STAND_IN_ID = -3
+HUB_VIEWER_ROLES = ("senior_instructor", "instructor", "success_coach")
 NO_PASSWORD = "!"  # not a hash any password produces
 
 
@@ -121,11 +124,15 @@ def stand_in(who: Identity) -> User | None:
     """The request's user for a hub owner (super admin) or admin (admin) with no NxtRank
     login; None for anyone else. Transient: never added to a database session."""
     if who.role == "owner":
-        uid, is_super = OWNER_STAND_IN_ID, True
+        uid, is_super, role = OWNER_STAND_IN_ID, True, "admin"
     elif who.role == "admin":
-        uid, is_super = ADMIN_STAND_IN_ID, False
+        uid, is_super, role = ADMIN_STAND_IN_ID, False, "admin"
+    elif who.role in HUB_VIEWER_ROLES:
+        # NxtOne staff without a NxtRank login (NxtRank is being retired): read-only, every
+        # student; NxtOne sends its own "my students" as roll numbers (routes_data._scope).
+        uid, is_super, role = VIEWER_STAND_IN_ID, False, "viewer"
     else:
         return None
     # username is what audit fields and scan requests record (requested_by holds 64 characters)
     return User(id=uid, username=who.email[:64], display_name=who.name[:200], password_hash=NO_PASSWORD,
-                role="admin", active=True, is_super=is_super)
+                role=role, active=True, is_super=is_super)

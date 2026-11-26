@@ -24,8 +24,10 @@ import { Skeleton } from "@/common/ui/skeleton";
 import { contestApi, contestDate, mmss, pct } from "@nxtone/contest-ui/api";
 import type { ContestScope, ResultRow } from "@nxtone/contest-ui/types";
 import { cn } from "@/common/lib/utils";
+import { LeetCodeLink } from "@/common/components/leetcode-link";
 import { stateLabel, WakingNote } from "@nxtone/contest-ui/components/contests-list";
 import { ContestScanPanel } from "@nxtone/contest-ui/components/scan-activity";
+import { QuestionChips } from "@nxtone/contest-ui/components/topics";
 
 const STATUS_TEXT: Record<ResultRow["status"], string> = {
   solved: "Took part",
@@ -38,16 +40,18 @@ const STATUS_TEXT: Record<ResultRow["status"], string> = {
 
 const busy = (state: string | undefined) => state === "queued" || state === "scanning";
 
-export function ContestView({ slug, canReview, canRescan = false, hasStudents }: { slug: string; canReview: boolean; canRescan?: boolean; hasStudents: boolean }) {
+/** myIds: the viewer's own students as NxtOne assigns them (NIAT IDs); none = no "My students". */
+export function ContestView({ slug, canReview, canRescan = false, myIds = [] }: { slug: string; canReview: boolean; canRescan?: boolean; myIds?: string[] }) {
+  const hasStudents = myIds.length > 0;
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<ContestScope>(hasStudents ? "mine" : "all");
   // While a scan is queued or running, follow it every few seconds.
   const detail = useQuery({
     queryKey: ["contests", "detail", slug, scope],
-    queryFn: () => contestApi.detail(slug, scope),
+    queryFn: () => contestApi.detail(slug, scope, myIds),
     refetchInterval: (q) => (busy(q.state.data?.status.state) ? 5_000 : false),
   });
-  const results = useQuery({ queryKey: ["contests", "results", slug, scope], queryFn: () => contestApi.results(slug, scope) });
+  const results = useQuery({ queryKey: ["contests", "results", slug, scope], queryFn: () => contestApi.results(slug, scope, myIds) });
   const state = detail.data?.status.state;
   // Pages read and whether the scanner is online, while this contest is queued or scanning.
   const scan = useQuery({ queryKey: ["contests", "scan-status"], queryFn: contestApi.scanStatus, enabled: busy(state), refetchInterval: busy(state) ? 5_000 : false });
@@ -193,7 +197,12 @@ export function ContestView({ slug, canReview, canRescan = false, hasStudents }:
                   <tbody>
                     {d.questions.map((q) => (
                       <tr key={q.label}>
-                        <td className="border-b border-muted py-2.5 pr-3 pl-4 font-semibold">{q.title}</td>
+                        <td className="border-b border-muted py-2.5 pr-3 pl-4">
+                          <div className="font-semibold">{q.title}</div>
+                          <div className="mt-1">
+                            <QuestionChips t={q.topics} />
+                          </div>
+                        </td>
                         <td className="border-b border-muted px-3 py-2.5 tabular">{q.credit}</td>
                         <td className="border-b border-muted px-3 py-2.5">
                           <span className="flex items-center gap-2">
@@ -280,7 +289,9 @@ export function ContestView({ slug, canReview, canRescan = false, hasStudents }:
                             <span className="font-semibold">{r.name}</span>
                           )}
                           <div className="text-xs text-muted-foreground">
-                            {r.college} · {r.extra.section} · {r.leetcode_handle || "no handle"}
+                            {r.college} · {r.extra.section} ·{" "}
+                            {/* A handle LeetCode doesn't know would only open a "user not found" page. */}
+                            {r.leetcode_handle && r.status !== "invalid_handle" ? <LeetCodeLink handle={r.leetcode_handle} /> : r.leetcode_handle || "no handle"}
                           </div>
                         </td>
                         <td className={cn("border-b border-muted px-2.5 py-2.5 text-xs font-semibold", r.status === "absent" && "text-warning")}>{STATUS_TEXT[r.status]}</td>

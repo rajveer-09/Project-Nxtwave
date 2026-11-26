@@ -12,14 +12,24 @@ import { StatusPill } from "@/common/components/chips";
 import { initials } from "@/common/auth/roles";
 import type { StudentDetail } from "@/modules/students/data";
 import { cn } from "@/common/lib/utils";
+import { LeetCodeLink } from "@/common/components/leetcode-link";
 
 export function ProfileHeader({ d }: { d: StudentDetail }) {
   const s = d.student;
-  const facts: [string, string][] = [
+  const facts: [string, React.ReactNode][] = [
     ["Instructor", d.profile.instructorSince ? `${s.instructor} · since ${d.profile.instructorSince}` : s.instructor],
     ["POC", s.poc],
     ["Coach", d.profile.coach ?? "Not assigned"],
-    ["LeetCode", s.lcHandle ? `${s.lcHandle} · verified` : "No handle"],
+    [
+      "LeetCode",
+      s.lcHandle ? (
+        <>
+          <LeetCodeLink handle={s.lcHandle} /> · verified
+        </>
+      ) : (
+        "No handle"
+      ),
+    ],
     ["Weekly test band", d.profile.levelBand],
     ["Last activity", d.profile.lastActivity],
   ];
@@ -149,7 +159,7 @@ export function JumpBar() {
   );
 }
 
-export function SectionHeading({ id, title, extra, link }: { id: string; title: string; extra?: string; link?: { href: string; label: string } }) {
+export function SectionHeading({ id, title, extra, link }: { id: string; title: string; extra?: React.ReactNode; link?: { href: string; label: string } }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-2">
       <h2 id={`${id}-h`} className="text-[22px] font-semibold">
