@@ -50,13 +50,18 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   if (typeof params.student === "string" && params.student) redirect(`/log-interaction?niat=${encodeURIComponent(params.student.toUpperCase())}`);
   // Instructors and senior instructors log for their own students; coaches read their coached students' logs.
   const logging = canLogInteractions(user);
+  // Admins, super admins and senior instructors get the all-students view (every interaction, the
+  // person filters, the By-person table). Senior instructors also keep their own "My students" list.
+  const adminView = !logging || user.role === "senior_instructor";
   const sample = usingSampleData();
-  const { scope, students: myStudents } = await scopedStudents(user);
+  const { scope, roster, students: myStudents } = await scopedStudents(user);
+  // The interactions this page lists: everyone's in the admin view, otherwise the person's own students.
+  const listScope = user.role === "senior_instructor" ? undefined : scope;
   const [all, mine] = await Promise.all([
-    listInteractions(scope?.coach !== undefined ? { niatIds: myStudents.map((s) => s.niatId) } : { instructor: scope?.instructor }),
+    listInteractions(listScope?.coach !== undefined ? { niatIds: myStudents.map((s) => s.niatId) } : { instructor: listScope?.instructor }),
     myStudentsList(user),
   ]);
-  const overdue = myStudents.filter(isOverdue);
+  const overdue = (user.role === "senior_instructor" ? roster : myStudents).filter(isOverdue);
   // Whether the Overdue banner starts open (its toggle is remembered in a cookie).
   const overduePref = parseOverduePref((await cookies()).get(OVERDUE_COOKIE)?.value);
   const today = todayIst();
@@ -92,13 +97,12 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
     ["Students reached", reached.toLocaleString("en-IN")],
     ["Taken by support", inRange.length ? `${bySupport.toLocaleString("en-IN")} · ${Math.round((bySupport / inRange.length) * 100)}%` : "0"],
   ];
-  // Admins, super admins and senior instructors see the person filters and the By-person table.
-  const showPeople = !logging || user.role === "senior_instructor";
+  const showPeople = adminView;
 
-
-  const overdueLabel = `${overdue.length} ${logging ? "of my students" : "students"} overdue (${RISK_THRESHOLDS.interactionGapDays}d+)`;
+  const overdueLabel = `${overdue.length} ${adminView ? "students" : "of my students"} overdue (${RISK_THRESHOLDS.interactionGapDays}d+)`;
   // Instructors with overdue students: the pill is a button that shows/hides the list below it.
-  const overdueReminder = logging && overdue.length > 0;
+  // (Senior instructors see their own overdue students in My students instead.)
+  const overdueReminder = !adminView && overdue.length > 0;
 
   return (
     <OverdueReminder
@@ -107,7 +111,7 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
       seen={overduePref.open ? null : overduePref.seen}
     >
       <PageHeader
-        eyebrow={logging ? `Interactions · my students (${myStudents.length})` : "Interactions · all students"}
+        eyebrow={adminView ? "Interactions · all students" : `Interactions · my students (${myStudents.length})`}
         title="Interactions"
         actions={
           <div className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -141,9 +145,12 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
 
       {mine ? <MyStudents students={mine} overdueDays={RISK_THRESHOLDS.interactionGapDays} /> : null}
 
-      {!logging ? (
+      {adminView ? (
         <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-sidebar-foreground">
-          Interactions are logged by the assigned instructor. As {user.role === "owner" ? "an Owner" : "an Admin"} you can read and export every log.
+          Interactions are logged by the assigned instructor.{" "}
+          {user.role === "senior_instructor"
+            ? "As a Senior instructor you can read and export every log, and log for your own students (My students above)."
+            : `As ${user.role === "owner" ? "a Super admin" : "an Admin"} you can read and export every log.`}
         </p>
       ) : null}
 
@@ -163,8 +170,8 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
                 className="h-10 w-72 rounded-lg border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
               />
             </label>
-            {/* Only super admins (owner) get every quick range; everyone else gets Today / This month; From–To is under Custom. */}
-            <DateRange from={range.from} to={range.to} today={today} quick={user.role === "owner" ? ["Today", "7 days", "30 days", "90 days", "This month"] : ["Today", "This month"]} />
+            {/* Everyone (super admins too) gets Today / This month; any other dates are under Custom. */}
+            <DateRange from={range.from} to={range.to} today={today} quick={["Today", "This month"]} />
             {showPeople ? (
               <>
                 <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">

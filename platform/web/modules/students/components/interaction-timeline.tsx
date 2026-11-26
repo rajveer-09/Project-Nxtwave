@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Code2, NotebookPen, Video } from "lucide-react";
+import { ChevronDown, CircleHelp, Code2, ListChecks, MessageSquareText, NotebookPen, PencilLine, ThumbsUp, TrendingUp, UserRound, Video } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { StatusPill } from "@/common/components/chips";
@@ -218,49 +218,62 @@ export function QuestionLines({ questions, className }: { questions: HistoryEntr
   );
 }
 
+/** Feedback sections, each its own box; the stripe and tint say at a glance what kind of note it is. */
+const NOTES: { key: "remarks" | "performedWell" | "improvementAreas" | "actionItems" | "tweakedQuestions"; label: string; icon: typeof MessageSquareText; box: string; iconClass: string }[] = [
+  { key: "performedWell", label: "Performed well", icon: ThumbsUp, box: "border-l-emerald-500 bg-emerald-500/5", iconClass: "text-emerald-600 dark:text-emerald-400" },
+  { key: "improvementAreas", label: "Improvement areas", icon: TrendingUp, box: "border-l-warning bg-warning-soft/40", iconClass: "text-warning" },
+  { key: "actionItems", label: "Action items", icon: ListChecks, box: "border-l-primary bg-primary/5", iconClass: "text-primary" },
+  { key: "remarks", label: "Remarks", icon: MessageSquareText, box: "border-l-border bg-surface-subtle", iconClass: "text-muted-foreground" },
+  { key: "tweakedQuestions", label: "Tweaked questions", icon: PencilLine, box: "border-l-border bg-surface-subtle", iconClass: "text-muted-foreground" },
+];
+
 function Details({ entry: e, id }: { entry: HistoryEntry; id: string }) {
-  const text = [
-    ["Remarks", e.remarks],
-    ["Performed well", e.performedWell],
-    ["Improvement areas", e.improvementAreas],
-    ["Action items", e.actionItems],
-    ["Tweaked questions", e.tweakedQuestions],
-  ].filter(([, value]) => value.trim());
+  const notes = NOTES.filter((n) => e[n.key].trim());
   return (
-    <div id={id} className="flex flex-col gap-3 border-t border-muted px-3 pt-2.5 pb-3 text-[13px]">
-      <div>
-        <div className="text-xs font-bold text-muted-foreground">Questions asked</div>
-        <QuestionLines questions={e.questions} className="mt-1" />
-      </div>
-      {text.length ? (
-        <dl className="grid gap-x-4 gap-y-2.5 sm:grid-cols-2">
-          {text.map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-xs font-bold text-muted-foreground">{label}</dt>
-              <dd className="mt-0.5 whitespace-pre-line">{value}</dd>
-            </div>
+    <div id={id} className="flex flex-col gap-3 border-t border-muted bg-surface-subtle/40 px-3 pt-3 pb-3.5 text-[13px]">
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        <h4 className="flex items-center gap-1.5 border-b border-border px-3 py-2 text-xs font-bold">
+          <CircleHelp aria-hidden="true" className="size-3.5 text-primary" />
+          Questions asked
+          <span className="rounded bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground tabular">{e.questions.length}</span>
+        </h4>
+        <QuestionLines questions={e.questions} className="m-2.5" />
+      </section>
+
+      {notes.length ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {notes.map(({ key, label, icon: Icon, box, iconClass }) => (
+            <section key={key} className={cn("rounded-lg border border-l-4 border-border px-3 py-2.5", box, key === "remarks" || key === "tweakedQuestions" ? "sm:col-span-2" : "")}>
+              <h4 className="flex items-center gap-1.5 text-xs font-bold">
+                <Icon aria-hidden="true" className={cn("size-3.5", iconClass)} />
+                {label}
+              </h4>
+              <p className="mt-1 leading-relaxed whitespace-pre-line text-foreground/90">{e[key]}</p>
+            </section>
           ))}
-        </dl>
-      ) : null}
-      {e.meetRecording || e.codeRoom ? (
-        <div className="flex flex-wrap gap-3 text-xs font-semibold">
-          {e.meetRecording ? (
-            <a href={e.meetRecording} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:text-accent-strong">
-              <Video aria-hidden="true" className="size-3.5" />
-              Meet recording
-            </a>
-          ) : null}
-          {e.codeRoom ? (
-            <a href={`/room/${e.codeRoom}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-primary hover:text-accent-strong">
-              <Code2 aria-hidden="true" className="size-3.5" />
-              View code
-            </a>
-          ) : null}
         </div>
-      ) : null}
-      <p className="text-xs text-muted-foreground">
-        POC at the time: <span className="text-foreground">{e.poc || "—"}</span>
-      </p>
+      ) : (
+        <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-muted-foreground">No remarks or feedback were written for this interaction.</p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-muted-foreground">
+          <UserRound aria-hidden="true" className="size-3.5" />
+          POC at the time: <span className="font-semibold text-foreground">{e.poc || "—"}</span>
+        </span>
+        {e.meetRecording ? (
+          <a href={e.meetRecording} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 font-semibold text-primary hover:bg-muted">
+            <Video aria-hidden="true" className="size-3.5" />
+            Meet recording
+          </a>
+        ) : null}
+        {e.codeRoom ? (
+          <a href={`/room/${e.codeRoom}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 font-semibold text-primary hover:bg-muted">
+            <Code2 aria-hidden="true" className="size-3.5" />
+            View code
+          </a>
+        ) : null}
+      </div>
     </div>
   );
 }
