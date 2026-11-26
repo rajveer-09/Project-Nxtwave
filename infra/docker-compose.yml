@@ -120,6 +120,11 @@ services:
       - attendance-api
       - contest-api
       - interactions-api
+    # Optional repo-root .env (git-ignored), e.g. WEB_DATABASE_URL for real sign-in and data.
+    # Without it the app runs on sample data.
+    env_file:
+      - path: ../.env
+        required: false
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
