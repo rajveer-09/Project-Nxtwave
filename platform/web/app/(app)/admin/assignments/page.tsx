@@ -23,7 +23,7 @@ import { staffOptions } from "@/modules/admin/assignments-data";
 import { AssignSelect, ImportPanel } from "@/modules/admin/components/assignment-controls";
 import { AssignmentHistoryButton } from "@/modules/admin/components/assignment-history";
 
-export const metadata = { title: "Assignments" };
+export const metadata = { title: "Assign POC" };
 
 const PAGE = 50;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
@@ -56,7 +56,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
     <>
       <PageHeader
         eyebrow={user.role === "senior_instructor" ? "Senior SDI panel" : "Admin panel"}
-        title="Assignments"
+        title="Assign POC"
         description="Who teaches and who coaches each student. Every change keeps history and goes to the change log with your name."
         actions={
           <div className="flex flex-wrap gap-2">

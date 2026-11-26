@@ -14,7 +14,8 @@ import { formatDate } from "@/common/lib/dates";
 import { coveredLabel, isSupport, STATUS_LABEL, type Interaction } from "@nxtone/interactions-ui/lib/types";
 
 /** `codeRooms`: interaction id → code room saved with it (shows a "Code" link). */
-export function RecentLogs({ rows, total, exportHref, codeRooms = {} }: { rows: Interaction[]; total: number; exportHref: string; codeRooms?: Record<string, string> }) {
+/** `allHref`: where to see every row when only the first ones are listed (Today's interactions with the same filters). */
+export function RecentLogs({ rows, total, exportHref, allHref, codeRooms = {} }: { rows: Interaction[]; total: number; exportHref: string; allHref?: string; codeRooms?: Record<string, string> }) {
   return (
     <section aria-labelledby="recent-h" className="min-w-0 flex-[1.5_1_560px] overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-border px-5 py-4">
@@ -24,9 +25,17 @@ export function RecentLogs({ rows, total, exportHref, codeRooms = {} }: { rows: 
           </h2>
           <span className="text-xs text-muted-foreground">
             Showing {rows.length} of {total}
+            {allHref ? (
+              <>
+                {" · "}
+                <IntentLink href={allHref} className="font-semibold text-primary hover:text-accent-strong">
+                  See all {total.toLocaleString("en-IN")} →
+                </IntentLink>
+              </>
+            ) : null}
           </span>
         </div>
-        <a href={exportHref} className="flex min-h-9 items-center rounded-lg border border-input bg-card px-3 text-[13px] font-semibold hover:bg-muted">
+        <a href={exportHref} download className="flex min-h-9 items-center rounded-lg border border-input bg-card px-3 text-[13px] font-semibold hover:bg-muted">
           Export CSV
         </a>
       </div>

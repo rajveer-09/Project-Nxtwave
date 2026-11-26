@@ -27,14 +27,14 @@ import { addDays, todayIst } from "@/common/lib/dates";
 import { listInteractions } from "@nxtone/interactions-ui/data";
 import { isSupport } from "@nxtone/interactions-ui/lib/types";
 import { PocSummary } from "@nxtone/interactions-ui/components/poc-summary";
+import { filterLog } from "@nxtone/interactions-ui/lib/log-filter";
 import { canLogInteractions } from "@nxtone/interactions-ui/lib/permissions";
 import { RISK_THRESHOLDS } from "@/common/domain/risk";
-import type { SearchParamsRecord } from "@/common/lib/url";
+import { withParams, type SearchParamsRecord } from "@/common/lib/url";
 import { SectionCard } from "@/common/components/section-card";
 import { LiveForm } from "@/common/components/live-form";
 import { Dropdown } from "@/common/components/dropdown";
 import { asOptions } from "@/common/lib/options";
-import { searchMatcher } from "@/common/lib/search";
 import { DateRange } from "@/common/components/date-range";
 import { DailyBars } from "@/common/components/charts";
 import { eachDay, parseRange, shortDay } from "@/common/lib/range";
@@ -75,16 +75,15 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   const takenBy = typeof params.by === "string" && params.by ? params.by : null;
   const poc = typeof params.poc === "string" && params.poc ? params.poc : null;
   const q = typeof params.q === "string" ? params.q.slice(0, 100) : "";
-  const match = searchMatcher(q);
   const people = [...new Set(all.map((it) => it.takenBy))].sort();
   const pocs = [...new Set(all.map((it) => it.pocAtTime).filter(Boolean))].sort();
-  // Dates + search only: what the By-person table counts (the person filters pick its rows instead).
-  const inDates = all.filter(
-    (it) => it.date >= range.from && it.date <= range.to && match(it.studentName, it.niatId, it.takenBy, it.pocAtTime, it.topics.join(" "), it.subtopics.join(" ")),
-  );
-  const inRange = inDates.filter((it) => (!takenBy || it.takenBy === takenBy) && (!poc || it.pocAtTime === poc));
+  // Same filter as Today's interactions and the CSV export, so "See all" and Export hold these exact rows.
+  const filter = { from: range.from, to: range.to, q, takenBy, poc };
+  const inRange = filterLog(all, filter);
   const bySupport = inRange.filter(isSupport).length;
   const recent = inRange.slice(0, 40);
+  const exportHref = withParams("/api/logs/interactions/export", {}, { from: range.from, to: range.to, q: q.trim() || null, by: takenBy, poc });
+  const allHref = withParams("/interactions/today", {}, { from: range.from, to: range.to, q: q.trim() || null, by: takenBy, poc });
   const codeRooms = await roomsByInteraction(recent.map((it) => it.id));
   const perDay = new Map<string, number>();
   for (const it of inRange) perDay.set(it.date, (perDay.get(it.date) ?? 0) + 1);
@@ -216,11 +215,11 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
           description="Took: interactions they took, for their own students or as support for another POC. Their students got: interactions with the students they were POC for at the time, by them or by a support POC. Click a number to filter."
           bodyClassName="px-0 pb-2"
         >
-          <PocSummary rows={inDates} params={params} only={[takenBy, poc].filter((v): v is string => !!v)} />
+          <PocSummary rows={all.map((it) => ({ date: it.date, takenBy: it.takenBy, poc: it.pocAtTime }))} from={range.from} to={range.to} today={today} params={params} />
         </SectionCard>
       ) : null}
 
-      <RecentLogs rows={recent} total={inRange.length} exportHref="/api/logs/interactions/export" codeRooms={codeRooms} />
+      <RecentLogs rows={recent} total={inRange.length} exportHref={exportHref} allHref={inRange.length > recent.length ? allHref : undefined} codeRooms={codeRooms} />
     </OverdueReminder>
   );
 }

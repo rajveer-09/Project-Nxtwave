@@ -18,7 +18,7 @@ import { parseRange } from "@/common/lib/range";
 
 /**
  * CSV of interactions the signed-in person can see (instructors: their own students). With ?from=&to=
- * (and optional q=) only those dates / that search, as on the Today's interactions page.
+ * (and optional q=, by=, poc=) only those rows, exactly as the Interactions / Today's interactions pages list them.
  */
 export async function GET(request: Request) {
   const user = await getOptionalSessionUser();
@@ -31,7 +31,15 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const dated = url.searchParams.has("from") || url.searchParams.has("to");
   const range = dated ? parseRange(Object.fromEntries(url.searchParams), todayIst(), 1) : null;
-  const rows = range ? filterLog(visible, { from: range.from, to: range.to, q: (url.searchParams.get("q") ?? "").slice(0, 100) }) : visible;
+  const rows = range
+    ? filterLog(visible, {
+        from: range.from,
+        to: range.to,
+        q: (url.searchParams.get("q") ?? "").slice(0, 100),
+        takenBy: url.searchParams.get("by") || null,
+        poc: url.searchParams.get("poc") || null,
+      })
+    : visible;
   const csv = toCsv(
     ["Date", "NIAT ID", "Student", "Round", "Taken by", "Assigned instructor", "POC at the time", "Taken by support", "Level", "Topics", "Subtopics", "Steps reached", "Outcome", "Rating", "Questions asked", "Off-roadmap questions", "Tweaked questions", "Remarks", "Performed well", "Improvement areas", "Action items", "Meet recording", "Transcript link"],
     rows.map((it) => [

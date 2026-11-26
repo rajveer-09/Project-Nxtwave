@@ -6,7 +6,7 @@ import { StatusPill } from "@/common/components/chips";
 import { formatDate } from "@/common/lib/dates";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/common/ui/dialog";
 import { Skeleton } from "@/common/ui/skeleton";
-import { studentHistoryAction, type HistoryEntry } from "../actions";
+import { interactionRecordAction, type HistoryEntry } from "../actions";
 import { QuestionLines } from "./interaction-timeline";
 
 const tone = (statusKey: string) => (statusKey === "Cleared" ? "accent" : statusKey === "Need to Revisit" ? "warning" : "neutral");
@@ -15,7 +15,7 @@ const label = "text-xs font-semibold text-muted-foreground";
 
 /**
  * "Inspect" on a Today's interactions row: that one interaction's full record in a pop-up (loaded
- * on click, with the same access check as the History panel). Read-only for now.
+ * on click: for whoever may see the student, or the person who took it). Read-only for now.
  */
 export function InteractionInspect({ niatId, interactionId, studentName }: { niatId: string; interactionId: string; studentName: string }) {
   const [open, setOpen] = useState(false);
@@ -27,10 +27,9 @@ export function InteractionInspect({ niatId, interactionId, studentName }: { nia
     setOpen(true);
     if (entry) return;
     startLoading(async () => {
-      const result = await studentHistoryAction(niatId);
-      const found = result.ok ? result.entries.find((e) => e.id === interactionId) : undefined;
-      if (found) setEntry(found);
-      else setError(result.ok ? "This interaction isn't there any more. It may have been deleted." : result.error);
+      const result = await interactionRecordAction(niatId, interactionId);
+      if (result.ok) setEntry(result.entry);
+      else setError(result.error);
     });
   }
 

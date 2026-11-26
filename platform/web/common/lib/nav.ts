@@ -67,7 +67,7 @@ export const NAV: NavSection[] = [
   {
     label: "Admin panel",
     items: [
-      { href: "/admin/assignments", label: "Assignments", icon: "assignments", roles: PANEL },
+      { href: "/admin/assignments", label: "Assign POC", icon: "assignments", roles: PANEL },
       { href: "/admin/staff", label: "Staff & roles", icon: "staff", roles: PANEL },
       { href: "/admin/change-log", label: "Change log", icon: "changelog", roles: ADMINS },
       { href: "/admin/student-access", label: "Student access", icon: "studentkey", roles: ADMINS },

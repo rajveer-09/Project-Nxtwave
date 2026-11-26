@@ -10,10 +10,9 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { EmptyState } from "@/common/components/empty-state";
 import { PageHeader } from "@/common/components/page-header";
-import { SectionCard } from "@/common/components/section-card";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
-import { formatDate, todayIst } from "@/common/lib/dates";
+import { todayIst } from "@/common/lib/dates";
 import type { SearchParamsRecord } from "@/common/lib/url";
 import { questionBank as loadQuestionBank } from "@nxtone/interactions-ui/curriculum/data";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
@@ -25,11 +24,13 @@ import { fullFormStudent } from "@nxtone/interactions-ui/my-students-data";
 import { getRoster, getRosterStudent, usingSampleData } from "@/common/data/roster";
 import { buildStudentDetail } from "@/common/sample-data/student-detail";
 import { latestTestTotals } from "@/modules/tests/data";
-import { STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
+import { InteractionsTable } from "@/modules/students/components/interactions-table";
 
 export const metadata = { title: "Log interaction" };
 
 const NIAT = /^N\d{2}H\d{2}[AB]\d{4}$/;
+/** How many of your latest interactions for other instructors' students the page lists. */
+const RECENT_FOR_OTHERS = 25;
 
 /**
  * The page for logging an interaction: type a student's NIAT ID (instructors also reach it from the
@@ -48,22 +49,20 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   const lookup = <StudentLookup key={raw} initial={raw} autoFocus={!raw} />;
 
   // What this person logged for students who aren't theirs (their own work, so they may see it).
-  const forOthers = await listInteractions({ takenBy: user.name, othersOnly: true, limit: 10 });
+  // Same table as Today's interactions (with Inspect, which opens entries you took for anyone's student).
+  const forOthers = await listInteractions({ takenBy: user.name, othersOnly: true, limit: RECENT_FOR_OTHERS });
   const recent = forOthers.length ? (
-    <SectionCard title="You logged recently for other students" description="Only interactions you took yourself">
-      <ul className="flex flex-col">
-        {forOthers.map((it, i) => (
-          <li key={it.id} className={`flex flex-wrap items-baseline justify-between gap-2 py-2 text-[13px] ${i ? "border-t border-muted" : ""}`}>
-            <span>
-              <span className="font-semibold">{it.studentName}</span> <span className="text-xs text-muted-foreground tabular">{it.niatId}</span>
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {formatDate(it.date)} · L{it.level} · {STATUS_LABEL[it.status]}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </SectionCard>
+    <section aria-labelledby="for-others-h" className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="for-others-h" className="text-base font-semibold">
+          You logged recently for other students
+        </h2>
+        <span className="text-xs text-muted-foreground">
+          Only interactions you took yourself · latest {forOthers.length}
+        </span>
+      </div>
+      <InteractionsTable rows={forOthers} caption="Interactions you took for other students" empty={{ title: "", description: "" }} />
+    </section>
   ) : null;
 
   if (!raw) {

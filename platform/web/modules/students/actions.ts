@@ -50,45 +50,62 @@ export type HistoryEntry = {
 
 export type HistoryStudent = { niatId: string; name: string; college: string; section: string; hall: string; instructor: string; level: number };
 
-/** A student and their interactions (newest first) for the History panel on Students and Today's interactions. */
+type Student = NonNullable<Awaited<ReturnType<typeof getRosterStudent>>>;
+
+/** A student's interactions as History entries, newest first (the oldest, last, is number 1). */
+async function historyEntries(student: Student): Promise<HistoryEntry[]> {
+  const rows = await listInteractions({ niatId: student.niatId });
+  const rooms = await roomsByInteraction(rows.map((it) => it.id));
+  return rows.map((it, i) => ({
+    id: it.id,
+    date: it.date,
+    round: it.round,
+    number: rows.length - i,
+    takenBy: it.takenBy,
+    poc: it.pocAtTime,
+    support: isSupport(it),
+    level: it.level,
+    covered: coveredLabel(it.topics, it.subtopics),
+    topics: it.topics,
+    subtopics: it.subtopics,
+    stepsDetail: Object.entries(it.stepsReached).map(([k, v]) => `${k}: ${v}`).join(", "),
+    steps: [...new Set(Object.values(it.stepsReached).filter(Boolean))].join(", "),
+    status: STATUS_LABEL[it.status] ?? it.status,
+    statusKey: it.status,
+    rating: it.rating,
+    questions: it.questions.map((q) => ({ title: q.title, step: q.step, offRoadmap: q.offRoadmap })),
+    tweakedQuestions: it.tweakedQuestions,
+    remarks: it.remarks,
+    performedWell: it.performedWell,
+    improvementAreas: it.improvementAreas,
+    actionItems: it.actionItems,
+    meetRecording: /^https:\/\//i.test(it.meetRecording) ? it.meetRecording : "",
+    ...(rooms[it.id] ? { codeRoom: rooms[it.id] } : {}),
+  }));
+}
+
+const studentInfo = (s: Student): HistoryStudent => ({ niatId: s.niatId, name: s.name, college: s.college, section: s.section, hall: s.hall, instructor: s.instructor, level: s.level });
+
+/** A student and their interactions (newest first) for the History pop-up on Students. */
 export async function studentHistoryAction(
   niatId: string,
 ): Promise<{ ok: true; name: string; student: HistoryStudent; entries: HistoryEntry[] } | { ok: false; error: string }> {
   const user = await getSessionUser();
   const student = await getRosterStudent(String(niatId).toUpperCase());
   if (!student || !canViewStudent(user, student)) return { ok: false, error: "That student isn't in your list." };
-  const rows = await listInteractions({ niatId: student.niatId });
-  const rooms = await roomsByInteraction(rows.map((it) => it.id));
-  return {
-    ok: true,
-    name: student.name,
-    student: { niatId: student.niatId, name: student.name, college: student.college, section: student.section, hall: student.hall, instructor: student.instructor, level: student.level },
-    // Newest first, so the oldest (last) is number 1.
-    entries: rows.map((it, i) => ({
-      id: it.id,
-      date: it.date,
-      round: it.round,
-      number: rows.length - i,
-      takenBy: it.takenBy,
-      poc: it.pocAtTime,
-      support: isSupport(it),
-      level: it.level,
-      covered: coveredLabel(it.topics, it.subtopics),
-      topics: it.topics,
-      subtopics: it.subtopics,
-      stepsDetail: Object.entries(it.stepsReached).map(([k, v]) => `${k}: ${v}`).join(", "),
-      steps: [...new Set(Object.values(it.stepsReached).filter(Boolean))].join(", "),
-      status: STATUS_LABEL[it.status] ?? it.status,
-      statusKey: it.status,
-      rating: it.rating,
-      questions: it.questions.map((q) => ({ title: q.title, step: q.step, offRoadmap: q.offRoadmap })),
-      tweakedQuestions: it.tweakedQuestions,
-      remarks: it.remarks,
-      performedWell: it.performedWell,
-      improvementAreas: it.improvementAreas,
-      actionItems: it.actionItems,
-      meetRecording: /^https:\/\//i.test(it.meetRecording) ? it.meetRecording : "",
-      ...(rooms[it.id] ? { codeRoom: rooms[it.id] } : {}),
-    })),
-  };
+  return { ok: true, name: student.name, student: studentInfo(student), entries: await historyEntries(student) };
+}
+
+/**
+ * One interaction's full record, for Inspect. Allowed for anyone who may see the student, and for
+ * the person who took it (an instructor who covered for another POC's student sees their own entry).
+ */
+export async function interactionRecordAction(niatId: string, interactionId: string): Promise<{ ok: true; entry: HistoryEntry } | { ok: false; error: string }> {
+  const user = await getSessionUser();
+  const student = await getRosterStudent(String(niatId).toUpperCase());
+  if (!student) return { ok: false, error: "That student isn't on the roster." };
+  const entry = (await historyEntries(student)).find((e) => e.id === String(interactionId));
+  if (!entry) return { ok: false, error: "This interaction isn't there any more. It may have been deleted." };
+  if (!canViewStudent(user, student) && entry.takenBy !== user.name) return { ok: false, error: "You can only open interactions of your students or ones you took yourself." };
+  return { ok: true, entry };
 }
