@@ -178,11 +178,15 @@ class LeetCodeClient:
         return RankingPage.model_validate(data)
 
     async def _contest_questions(self, slug: str) -> list:
-        """Questions in Q1..Qn order, from the older leaderboard endpoint (fetched once)."""
+        """Questions in Q1..Qn order, from the contest info endpoint (fetched once). The
+        leaderboard endpoint used to include them but stopped doing so in November 2026."""
         async with self._questions_lock:
             if slug not in self._questions:
-                data = await self.get_json(f"/contest/api/ranking/{slug}/", params={"pagination": "1", "region": "global"})
-                self._questions[slug] = data["questions"]
+                data = await self.get_json(f"/contest/api/info/{slug}/")
+                questions = data.get("questions")
+                if not questions:
+                    raise LeetCodeError(f"no questions for {slug}: {str(data)[:300]}")
+                self._questions[slug] = questions
             return self._questions[slug]
 
     async def past_contests(self, page: int) -> tuple[list[Contest], int]:

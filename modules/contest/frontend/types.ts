@@ -35,6 +35,11 @@ export interface ContestStatus {
   ready_at?: string | null;
   final_at?: string | null;
   error?: string | null;
+  /** While scanning: 0–1. While queued: place in the queue (1 = next). */
+  progress?: number;
+  position?: number;
+  requested_by?: string | null;
+  cancel_requested?: boolean;
 }
 
 export interface ContestListItem extends ContestStatus {
@@ -52,9 +57,32 @@ export interface WorkerStatus {
   last_seen: string | null;
 }
 
+/** The scan the worker is running now (scan_status.queue_status). */
+export interface RunningScan {
+  slug: string;
+  kind: string;
+  progress: number;
+  pages_done: number;
+  pages_total: number | null;
+  started_at: string | null;
+  ready_at: string | null;
+  requested_by: string | null;
+  cancel_requested: boolean;
+}
+
+export interface QueuedScan {
+  slug: string;
+  kind: string;
+  position: number;
+  requested_by?: string | null;
+  ready_at?: string | null;
+}
+
 export interface ContestPage {
   worker: WorkerStatus;
-  queue: { slug: string; kind: string; position: number }[];
+  running?: RunningScan | null;
+  queue: QueuedScan[];
+  typical_scan_secs?: number;
   upcoming: ContestListItem[];
   items: ContestListItem[];
   total: number;

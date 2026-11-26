@@ -39,12 +39,13 @@ const CREDITS = [3, 4, 5, 6];
 
 const epoch = (ist: string) => Math.floor(new Date(`${ist}:00+05:30`).getTime() / 1000);
 
-type State = { finalized: Set<string>; review: Map<string, DraftReview> };
+type State = { finalized: Set<string>; review: Map<string, DraftReview>; scans: { slug: string; requestedBy: string; at: number }[] };
 const g = globalThis as unknown as { __contestState?: State };
 function state(): State {
   if (!g.__contestState) {
     g.__contestState = {
       // Weekly 476 has early results until its final scan; Biweekly 170 has a manual scan waiting for review.
+      scans: [],
       finalized: new Set(["weekly-contest-475", "weekly-contest-474", "biweekly-contest-169", "weekly-contest-473", "weekly-contest-472"]),
       review: new Map([
         [
@@ -55,6 +56,68 @@ function state(): State {
     };
   }
   return g.__contestState;
+}
+
+/** Sample scans take this long each, one after another (the real ones take minutes). */
+const SAMPLE_SCAN_MS = 40_000;
+const SAMPLE_PAGES = 760;
+
+/**
+ * Requested scans: the first runs, the rest wait. A finished scan's results wait for review,
+ * like a real manual scan. Worked out on each request from the time it was asked for.
+ */
+function scanQueue(now = Date.now()) {
+  const st = state();
+  let start = st.scans[0]?.at ?? now;
+  while (st.scans.length && now - start >= SAMPLE_SCAN_MS) {
+    const done = st.scans.shift()!;
+    const def = CONTESTS.find((x) => x.slug === done.slug)!;
+    const s = summarise(resultsFor(def));
+    st.review.set(def.slug, {
+      run_id: 100 + st.review.size + st.finalized.size,
+      contest_slug: def.slug,
+      title: def.title,
+      kind: "final",
+      finished_at: new Date(start + SAMPLE_SCAN_MS).toISOString(),
+      outdated: false,
+      students: s.students,
+      solved_any: s.solved_any,
+      participated: s.participated,
+      participated_before: s.participated,
+      joined: 0,
+      left: 0,
+      changed: 0,
+    });
+    start = Math.max(start + SAMPLE_SCAN_MS, st.scans[0]?.at ?? now);
+    // The next one started when this one finished (or when it was asked for, if later).
+    if (st.scans[0]) st.scans[0].at = start;
+  }
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const head = st.scans[0];
+  const progress = head ? Math.min(0.99, (now - start) / SAMPLE_SCAN_MS) : 0;
+  const running = head
+    ? {
+        slug: head.slug,
+        kind: "final",
+        progress: Math.round(progress * 1000) / 1000,
+        pages_done: Math.round(progress * SAMPLE_PAGES),
+        pages_total: SAMPLE_PAGES,
+        started_at: iso(start),
+        ready_at: iso(start + SAMPLE_SCAN_MS),
+        requested_by: head.requestedBy,
+        cancel_requested: false,
+      }
+    : null;
+  const queue = st.scans.slice(1).map((q, i) => ({ slug: q.slug, kind: "auto", position: i + 1, requested_by: q.requestedBy, ready_at: iso(start + SAMPLE_SCAN_MS * (i + 2)) }));
+  return { worker: { alive: true, last_seen: iso(now - 20_000) }, running, queue, typical_scan_secs: SAMPLE_SCAN_MS / 1000 };
+}
+
+/** A contest's scan fields while it's being scanned or waiting (empty otherwise). */
+function scanFields(slug: string): Partial<ContestListItem> {
+  const q = scanQueue();
+  if (q.running?.slug === slug) return { state: "scanning", progress: q.running.progress, ready_at: q.running.ready_at, requested_by: q.running.requested_by };
+  const queued = q.queue.find((x) => x.slug === slug);
+  return queued ? { state: "queued", position: queued.position, ready_at: queued.ready_at, requested_by: queued.requested_by } : {};
 }
 
 function hash(text: string) {
@@ -161,6 +224,7 @@ function listItem(def: ContestDef, nowSec: number): ContestListItem {
     scanned_at: hasData ? new Date((epoch(def.startIst) + 7200) * 1000).toISOString() : null,
     final_at: st === "provisional" ? finalAt : null,
     summary: hasData ? summarise(resultsFor(def)) : null,
+    ...scanFields(def.slug),
   };
 }
 
@@ -180,8 +244,7 @@ export async function contestSample(request: Request, path: string[], user: Sess
     const upcoming = all.filter((x) => x.state === "upcoming" || x.state === "live").reverse();
     const items = all.filter((x) => x.state !== "upcoming" && x.state !== "live").filter((x) => (!type || x.contest_type === type) && match(x.title, x.slug));
     const body: ContestPage = {
-      worker: { alive: true, last_seen: new Date(Date.now() - 40_000).toISOString() },
-      queue: [],
+      ...scanQueue(),
       upcoming,
       items,
       total: items.length,
@@ -233,7 +296,7 @@ export async function contestSample(request: Request, path: string[], user: Sess
       participants_worldwide: def.worldwide,
       leetcode_url: `https://leetcode.com/contest/${def.slug}/`,
       scan: item.has_data ? { kind: item.state === "final" ? "final" : "provisional", finished_at: item.scanned_at ?? null } : null,
-      status: { state: item.state, has_data: item.has_data, in_review: item.in_review, final_at: item.final_at },
+      status: { state: item.state, has_data: item.has_data, in_review: item.in_review, final_at: item.final_at, progress: item.progress, position: item.position, ready_at: item.ready_at, requested_by: item.requested_by },
       summary: summarise(rows),
       questions,
       distributions: { colleges },
@@ -267,6 +330,21 @@ export async function contestSample(request: Request, path: string[], user: Sess
       return json(200, { published: entry[1].students, contest_slug: entry[0] });
     }
     return json(200, { discarded: 1 });
+  }
+
+  if (request.method === "GET" && a === "scan-status" && !b) return json(200, scanQueue());
+
+  // A requested rescan joins the sample queue (see scanQueue); its results then wait for review.
+  if (request.method === "POST" && a === "admin" && b === "scans" && !c) {
+    if (!isAdmin(user)) return detailError(403, "Admins only");
+    const body = (await request.json().catch(() => null)) as { slug?: string } | null;
+    const scanned = CONTESTS.find((x) => x.slug === body?.slug);
+    if (!scanned) return detailError(422, "expected e.g. weekly-contest-520 or biweekly-contest-150");
+    const now = Date.now();
+    scanQueue(now);
+    const st = state();
+    if (!st.scans.some((x) => x.slug === scanned.slug)) st.scans.push({ slug: scanned.slug, requestedBy: user.email, at: now });
+    return json(202, { id: st.scans.length, contest_slug: scanned.slug, kind: "auto", requested_by: user.email, requested_at: new Date(now).toISOString(), handled_at: null, scan_run_id: null, error: null });
   }
 
   return detailError(404, `The sample contest service doesn't implement ${request.method} ${path.join("/")} yet.`);

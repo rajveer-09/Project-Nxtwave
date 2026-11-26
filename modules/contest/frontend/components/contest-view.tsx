@@ -9,12 +9,13 @@ Date : 17 Nov 2026
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BarList } from "@/common/components/bar-list";
 import { StatusPill } from "@/common/components/chips";
+import { useConfirm } from "@/common/components/confirm";
 import { EmptyState } from "@/common/components/empty-state";
 import { SearchField } from "@/common/components/search-field";
 import { searchMatcher } from "@/common/lib/search";
@@ -24,6 +25,7 @@ import { contestApi, contestDate, mmss, pct } from "@nxtone/contest-ui/api";
 import type { ContestScope, ResultRow } from "@nxtone/contest-ui/types";
 import { cn } from "@/common/lib/utils";
 import { stateLabel, WakingNote } from "@nxtone/contest-ui/components/contests-list";
+import { ContestScanPanel } from "@nxtone/contest-ui/components/scan-activity";
 
 const STATUS_TEXT: Record<ResultRow["status"], string> = {
   solved: "Took part",
@@ -34,11 +36,27 @@ const STATUS_TEXT: Record<ResultRow["status"], string> = {
   duplicate_handle: "Handle shared",
 };
 
-export function ContestView({ slug, canReview, hasStudents }: { slug: string; canReview: boolean; hasStudents: boolean }) {
+const busy = (state: string | undefined) => state === "queued" || state === "scanning";
+
+export function ContestView({ slug, canReview, canRescan = false, hasStudents }: { slug: string; canReview: boolean; canRescan?: boolean; hasStudents: boolean }) {
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<ContestScope>(hasStudents ? "mine" : "all");
-  const detail = useQuery({ queryKey: ["contests", "detail", slug, scope], queryFn: () => contestApi.detail(slug, scope) });
+  // While a scan is queued or running, follow it every few seconds.
+  const detail = useQuery({
+    queryKey: ["contests", "detail", slug, scope],
+    queryFn: () => contestApi.detail(slug, scope),
+    refetchInterval: (q) => (busy(q.state.data?.status.state) ? 5_000 : false),
+  });
   const results = useQuery({ queryKey: ["contests", "results", slug, scope], queryFn: () => contestApi.results(slug, scope) });
+  const state = detail.data?.status.state;
+  // Pages read and whether the scanner is online, while this contest is queued or scanning.
+  const scan = useQuery({ queryKey: ["contests", "scan-status"], queryFn: contestApi.scanStatus, enabled: busy(state), refetchInterval: busy(state) ? 5_000 : false });
+  // When a scan finishes, show what it found.
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy(state)) void queryClient.invalidateQueries({ queryKey: ["contests"] });
+    wasBusy.current = busy(state);
+  }, [state, queryClient]);
   const [query, setQuery] = useState("");
   const match = searchMatcher(query);
   const shownRows = (results.data?.rows ?? []).filter((r) => match(r.name, r.roll_no, r.leetcode_handle, r.college, r.extra.section));
@@ -95,8 +113,11 @@ export function ContestView({ slug, canReview, hasStudents }: { slug: string; ca
           <a href={contestApi.exportUrl(slug, scope)} className="flex min-h-10 items-center rounded-lg border border-input bg-card px-3 text-[13px] font-semibold hover:bg-muted">
             Export CSV
           </a>
+          {canRescan ? <RescanButton slug={slug} title={d.title} busy={busy(d.status.state)} finalAt={d.final_scan_at} /> : null}
         </div>
       </div>
+
+      {busy(d.status.state) ? <ContestScanPanel status={d.status} scan={scan.data} /> : null}
 
       {canReview && d.review ? (
         <section aria-label="Scan waiting for review" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning-border bg-warning-soft px-4 py-3.5">
@@ -300,5 +321,52 @@ export function ContestView({ slug, canReview, hasStudents }: { slug: string; ca
         </>
       )}
     </div>
+  );
+}
+
+/** Super admin: ask the scanner to read this contest again. Confirms first; the results then wait for review. */
+function RescanButton({ slug, title, busy, finalAt }: { slug: string; title: string; busy: boolean; finalAt: string | null }) {
+  const queryClient = useQueryClient();
+  const { ask, dialog } = useConfirm();
+  const scan = useQuery({ queryKey: ["contests", "scan-status"], queryFn: contestApi.scanStatus });
+  const alive = scan.data?.worker.alive;
+
+  const open = () => {
+    const final = !finalAt || Date.now() >= new Date(finalAt).getTime();
+    ask({
+      title: `Rescan ${title}?`,
+      description:
+        "The scanner reads this contest from LeetCode again. The new results wait here for an admin to publish or discard them; until then everyone keeps seeing the current results.",
+      changes: [
+        {
+          label: "Results",
+          after: final ? "Final results" : `Early results (final from ${new Date(finalAt!).toLocaleDateString("en-IN", { day: "numeric", month: "short" })})`,
+        },
+        {
+          label: "Scanner",
+          after: alive === undefined ? "Checking…" : alive ? "Online, starts within a minute" : "Offline: the rescan waits until the worker is started on the scanning laptop",
+        },
+      ],
+      confirmLabel: "Rescan",
+      action: async () => {
+        try {
+          await contestApi.requestScan(slug);
+          return { ok: true as const, message: alive === false ? "Rescan queued. It starts when the scanner is back online." : "Rescan queued." };
+        } catch (error) {
+          return { ok: false as const, error: error instanceof Error ? error.message : "Couldn't request the rescan." };
+        }
+      },
+      onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["contests"] }),
+    });
+  };
+
+  return (
+    <>
+      <Button variant="outline" className="h-10 gap-1.5 text-[13px] font-semibold" disabled={busy} onClick={open} title={busy ? "A scan of this contest is already queued or running" : undefined}>
+        <RefreshCw aria-hidden="true" className={cn("size-3.5", busy && "animate-spin")} />
+        {busy ? "Scanning…" : "Rescan"}
+      </Button>
+      {dialog}
+    </>
   );
 }

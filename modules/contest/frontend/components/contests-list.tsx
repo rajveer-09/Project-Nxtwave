@@ -18,6 +18,7 @@ import type { ContestScope } from "@nxtone/contest-ui/types";
 import { contestApi, contestDate, pct } from "@nxtone/contest-ui/api";
 import type { ContestListItem } from "@nxtone/contest-ui/types";
 import { cn } from "@/common/lib/utils";
+import { ScanActivity, ScanLine } from "@nxtone/contest-ui/components/scan-activity";
 
 /** Shown while the contests service wakes from sleep (the free plan sleeps it when idle). */
 export function WakingNote() {
@@ -40,8 +41,9 @@ export function stateLabel(c: Pick<ContestListItem, "state" | "in_review" | "fin
     case "live":
       return { text: "Live now", tone: "accent" };
     case "scanning":
+      return { text: "Scanning…", tone: "accent" };
     case "queued":
-      return { text: "Scanning…", tone: "neutral" };
+      return { text: "Queued", tone: "neutral" };
     case "failed":
       return { text: "Scan failed", tone: "warning" };
     default:
@@ -68,6 +70,8 @@ export function ContestsList({ defaultScope = "all" }: { defaultScope?: ContestS
     queryKey: ["contests", "list", type, search],
     queryFn: () => contestApi.list({ type, q: search }),
     placeholderData: keepPreviousData,
+    // Follow a scan every few seconds while one is running or queued (as NxtRank did).
+    refetchInterval: (q) => (q.state.data && (q.state.data.running || q.state.data.queue.length) ? 5_000 : 60_000),
   });
   const data = query.data;
 
@@ -110,11 +114,14 @@ export function ContestsList({ defaultScope = "all" }: { defaultScope?: ContestS
             <span className={cn("size-2 rounded-full", data.worker.alive ? "bg-primary" : "bg-warning-strong")} aria-hidden="true" />
             <span>
               <b>{data.worker.alive ? "Scanner online" : "Scanner offline"}</b>
-              {data.queue.length ? ` · ${data.queue.length} in queue` : " · nothing queued"}
+              {data.running ? " · scanning" : ""}
+              {data.queue.length ? ` · ${data.queue.length} in queue` : data.running ? "" : " · nothing queued"}
             </span>
           </span>
         ) : null}
       </div>
+
+      {data ? <ScanActivity data={data} /> : null}
 
       {data?.upcoming.length ? (
         <section aria-label="Upcoming contests" className="flex flex-wrap gap-3">
@@ -169,7 +176,10 @@ export function ContestsList({ defaultScope = "all" }: { defaultScope?: ContestS
                         <div className="text-xs text-muted-foreground">{contestDate(c.start_time)}</div>
                       </td>
                       <td className="border-b border-muted px-3 py-3">
-                        <StatusPill tone={st.tone}>{st.text}</StatusPill>
+                        <div className="flex flex-col items-start gap-1.5">
+                          <StatusPill tone={st.tone}>{st.text}</StatusPill>
+                          <ScanLine status={c} worker={data.worker} />
+                        </div>
                       </td>
                       <td className="border-b border-muted px-3 py-3 tabular">
                         {c.summary ? `${c.summary.participated} · ${pct(c.summary.participation_rate)}` : "—"}

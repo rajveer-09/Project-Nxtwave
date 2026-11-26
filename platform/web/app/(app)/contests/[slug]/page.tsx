@@ -19,7 +19,8 @@ async function Content({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   // Admins publish or discard held scans; instructors start on "My students" (the contest service
   // only knows instructors' own students; everyone else starts on all students).
-  return <ContestView slug={slug} canReview={isAdminRole(user.role)} hasStudents={user.role === "instructor"} />;
+  // Only the super admin rescans (enforced again in modules/contest/frontend/service.ts).
+  return <ContestView slug={slug} canReview={isAdminRole(user.role)} canRescan={user.role === "owner" && !user.viewedBy} hasStudents={user.role === "instructor"} />;
 }
 
 export default function ContestPage({ params }: PageProps<"/contests/[slug]">) {
