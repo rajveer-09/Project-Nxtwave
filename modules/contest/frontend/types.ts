@@ -35,6 +35,10 @@ export interface ContestStatus {
   ready_at?: string | null;
   final_at?: string | null;
   error?: string | null;
+  /** While scanning: 0–1. While queued: place in the queue (1 = next). */
+  progress?: number;
+  position?: number;
+  requested_by?: string | null;
 }
 
 export interface ContestListItem extends ContestStatus {

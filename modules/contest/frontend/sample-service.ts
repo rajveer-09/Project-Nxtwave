@@ -269,5 +269,32 @@ export async function contestSample(request: Request, path: string[], user: Sess
     return json(200, { discarded: 1 });
   }
 
+  // A requested rescan: the sample "scans" at once, so its results wait for review straight away.
+  if (request.method === "POST" && a === "admin" && b === "scans" && !c) {
+    if (!isAdmin(user)) return detailError(403, "Admins only");
+    const body = (await request.json().catch(() => null)) as { slug?: string } | null;
+    const scanned = CONTESTS.find((x) => x.slug === body?.slug);
+    if (!scanned) return detailError(422, "expected e.g. weekly-contest-520 or biweekly-contest-150");
+    const s = summarise(resultsFor(scanned));
+    const runId = 100 + state().review.size + state().finalized.size;
+    state().review.set(scanned.slug, {
+      run_id: runId,
+      contest_slug: scanned.slug,
+      title: scanned.title,
+      kind: "final",
+      finished_at: new Date().toISOString(),
+      outdated: false,
+      students: s.students,
+      solved_any: s.solved_any,
+      participated: s.participated,
+      participated_before: s.participated,
+      joined: 0,
+      left: 0,
+      changed: 0,
+    });
+    const now = new Date().toISOString();
+    return json(202, { id: runId, contest_slug: scanned.slug, kind: "auto", requested_by: user.email, requested_at: now, handled_at: now, scan_run_id: runId, error: null });
+  }
+
   return detailError(404, `The sample contest service doesn't implement ${request.method} ${path.join("/")} yet.`);
 }

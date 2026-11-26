@@ -36,6 +36,11 @@ export type ServiceConfig = {
    * `sample`): e.g. reading the attendance schema directly. Returns null to fall through.
    */
   fallback?: () => ((request: Request, path: string[], user: SessionUser) => Promise<Response>) | null;
+  /**
+   * Stricter rules than the service's own, checked before anything else: a message refuses the
+   * request (403), null lets it through. E.g. only the super admin may start a contest scan.
+   */
+  guard?: (method: string, path: string[], user: SessionUser) => string | null;
 };
 
 export function sampleServicesAllowed() {
@@ -66,6 +71,8 @@ export async function forwardToService(request: Request, service: ServiceConfig,
   if (path.some((segment) => segment === "." || segment === ".." || segment === "")) {
     return json(400, "Invalid path");
   }
+  const refused = service.guard?.(request.method, path, user);
+  if (refused) return json(403, refused);
 
   const origin = process.env[service.originEnv];
   const secret = process.env[service.secretEnv];
