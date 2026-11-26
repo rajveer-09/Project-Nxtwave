@@ -20,6 +20,7 @@ import { searchMatcher } from "@/common/lib/search";
 import { Button } from "@/common/ui/button";
 import { cn } from "@/common/lib/utils";
 import { addQuestionAction, archiveQuestionAction, decideAction, structureAction, undoDecisionAction, updateQuestionAction, type StructureEdit } from "../actions";
+import type { Block } from "../blocks";
 import type { Question, QueueItem } from "../data";
 import { levelName, liveTopics, MAX_LEVEL, subtopicNames, topicSteps, type Structure, type TopicDef } from "../lib/structure";
 import { QuestionTitle } from "./question-title";
@@ -105,7 +106,7 @@ function NameForm({
   );
 }
 
-export function CurriculumAdmin({ structure, questions, queue }: { structure: Structure; questions: Question[]; queue: QueueItem[] }) {
+export function CurriculumAdmin({ structure, questions, queue, blocks = [] }: { structure: Structure; questions: Question[]; queue: QueueItem[]; blocks?: Block[] }) {
   const [tab, setTab] = useState<"roadmap" | "steps" | "review">("roadmap");
   const toReview = queue.filter((q) => !q.decision).length;
   const tabs: [typeof tab, string, number | null][] = [
@@ -130,7 +131,7 @@ export function CurriculumAdmin({ structure, questions, queue }: { structure: St
           </button>
         ))}
       </div>
-      {tab === "roadmap" ? <RoadmapEditor structure={structure} questions={questions} /> : tab === "steps" ? <StepsEditor structure={structure} questions={questions} /> : <ReviewQueue structure={structure} queue={queue} />}
+      {tab === "roadmap" ? <RoadmapEditor structure={structure} questions={questions} blocks={blocks} /> : tab === "steps" ? <StepsEditor structure={structure} questions={questions} /> : <ReviewQueue structure={structure} queue={queue} />}
     </div>
   );
 }
@@ -147,7 +148,7 @@ type Open =
   | { kind: "renameSubtopic" }
   | null;
 
-function RoadmapEditor({ structure, questions }: { structure: Structure; questions: Question[] }) {
+function RoadmapEditor({ structure, questions, blocks }: { structure: Structure; questions: Question[]; blocks: Block[] }) {
   const { ask, dialog, pending } = useConfirm();
   const [level, setLevel] = useState(structure.levels.some((l) => l.level === 1) ? 1 : (structure.levels[0]?.level ?? 0));
   const [topicId, setTopicId] = useState<string | null>(null);
@@ -514,7 +515,14 @@ function RoadmapEditor({ structure, questions }: { structure: Structure; questio
           ) : null}
         </section>
 
-        {t ? <QuestionList key={`${lvl.level}|${t.id}|${sub?.id ?? ""}`} structure={structure} level={lvl.level} topic={t} subtopic={sub?.name ?? null} path={path} questions={questions} /> : (
+        {/* Sheet notes for the whole level (e.g. Level 0's "Step 0 · not applicable"). */}
+        {blocks
+          .filter((b) => b.level === lvl.level && b.topic === null)
+          .map((b) => (
+            <BlockRules key={b.id} block={b} />
+          ))}
+
+        {t ? <QuestionList key={`${lvl.level}|${t.id}|${sub?.id ?? ""}`} structure={structure} level={lvl.level} topic={t} subtopic={sub?.name ?? null} path={path} questions={questions} blocks={blocks} /> : (
           <EmptyState title="No topics yet" description={`Add the first topic of ${levelName(lvl.level)} above.`} />
         )}
       </div>
@@ -662,6 +670,7 @@ function QuestionList({
   subtopic,
   path,
   questions,
+  blocks,
 }: {
   structure: Structure;
   level: number;
@@ -669,6 +678,7 @@ function QuestionList({
   subtopic: string | null;
   path: string;
   questions: Question[];
+  blocks: Block[];
 }) {
   const { ask, dialog, pending } = useConfirm();
   const [adding, setAdding] = useState<string | null>(null);
@@ -678,16 +688,21 @@ function QuestionList({
   const here = questions.filter((q) => q.level === level && q.topic === topic.name && q.subtopic === subtopic);
   const live = here.filter((q) => !q.archived);
   const archived = here.filter((q) => q.archived);
-  const steps = level === 0 ? [{ code: "", label: "Questions" }] : topicSteps(structure, level, topic.name);
+  // The topic's sheet blocks (rules + pool), in sheet order; questions in them are shown there.
+  const topicBlocks = subtopic === null ? blocks.filter((b) => b.level === level && b.topic === topic.name) : [];
+  const blockIds = new Set(topicBlocks.map((b) => b.id));
+  const loose = live.filter((q) => !q.blockId || !blockIds.has(q.blockId));
+  const steps = level === 0 ? [{ code: "", label: topicBlocks.length ? "Other questions (not in a block)" : "Questions" }] : topicSteps(structure, level, topic.name);
   const known = new Set(steps.map((s) => s.code));
-  const other = level === 0 ? [] : live.filter((q) => !known.has(q.step));
-  const groups = other.length ? [...steps, { code: "other", label: "Other steps (archived or past this topic's last step)" }] : steps;
+  const other = level === 0 ? [] : loose.filter((q) => !known.has(q.step));
+  // With blocks, the plain list only shows when something is outside them.
+  const groups = topicBlocks.length && !loose.length ? [] : other.length ? [...steps, { code: "other", label: "Other steps (archived or past this topic's last step)" }] : steps;
   const linkPreview = (d: Draft) => (d.url.trim() ? `${d.title.trim()} → ${d.url.trim()}` : `${d.title.trim()} (no link, plain text)`);
 
-  function startAdd(code: string) {
+  function startAdd(key: string) {
     setEditing(null);
     setDraft(BLANK);
-    setAdding(adding === code ? null : code);
+    setAdding(adding === key ? null : key);
   }
   function startEdit(q: Question) {
     setAdding(null);
@@ -696,18 +711,169 @@ function QuestionList({
   }
   const ready = !!draft.title.trim() && linkOk(draft.url);
 
+  /** One question: its row, or its edit form while editing. `stepNote` shows its step (for the "other steps" list). */
+  function questionRow(q: Question, stepNote = false) {
+    if (editing === q.id) {
+      return (
+        <form
+          key={q.id}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!ready) return;
+            const d = { title: draft.title.trim(), url: draft.url.trim(), source: draft.source.trim(), notes: draft.notes.trim() };
+            const changes = [
+              ...(d.title !== q.title ? [{ label: "Name", before: q.title, after: d.title }] : []),
+              ...(d.url !== q.url ? [{ label: "Link", before: q.url || null, after: d.url || null }] : []),
+              ...(d.source !== q.source ? [{ label: "Source", before: q.source || null, after: d.source || null }] : []),
+              ...(d.notes !== q.notes ? [{ label: "Notes", before: q.notes || null, after: d.notes || null }] : []),
+            ];
+            if (!changes.length) return setEditing(null);
+            ask({ title: `Save changes to "${q.title}"?`, changes, confirmLabel: "Save question", action: () => updateQuestionAction(q.id, d), onSuccess: () => setEditing(null) });
+          }}
+          className="flex flex-col gap-3 rounded-lg border-2 border-primary p-3"
+        >
+          <QuestionFields draft={draft} setDraft={setDraft} />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" className="h-10" onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="h-10" disabled={!ready}>
+              Save question
+            </Button>
+          </div>
+        </form>
+      );
+    }
+    return (
+      <div key={q.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 rounded-lg border border-muted bg-surface-subtle px-3 py-2.5">
+        <span className="flex min-w-0 flex-[1_1_240px] flex-col gap-1">
+          <QuestionTitle title={q.title} url={q.url} />
+          {q.body ? (
+            <details className="text-xs">
+              <summary className="cursor-pointer font-semibold text-primary">Show full question</summary>
+              <pre className="mt-1.5 overflow-x-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap">{q.body}</pre>
+            </details>
+          ) : null}
+          {stepNote || q.source || q.notes ? (
+            <span className="text-xs text-muted-foreground">
+              {stepNote ? `${q.step || "No step"} · ` : ""}
+              {q.source}
+              {q.notes ? `${q.source ? " · " : ""}${q.notes}` : ""}
+            </span>
+          ) : null}
+        </span>
+        {q.origin === "promoted" ? <StatusPill tone="accent">From review</StatusPill> : null}
+        <span className="flex gap-1">
+          <Button variant="ghost" className="h-9" disabled={pending} onClick={() => startEdit(q)}>
+            Edit
+          </Button>
+          <Button
+            variant="outline"
+            className="h-9"
+            disabled={pending}
+            onClick={() =>
+              ask({
+                title: `Archive "${q.title}"?`,
+                description: "Instructors stop seeing it. Past interactions keep it. You can restore it later.",
+                changes: [{ label: "Question", before: q.title, after: "Archived" }],
+                confirmLabel: "Archive question",
+                danger: true,
+                action: () => archiveQuestionAction(q.id, true),
+              })
+            }
+          >
+            Archive
+          </Button>
+        </span>
+      </div>
+    );
+  }
+
+  /** The add form: in a step list (blockId null) or inside a block's pool, under `poolGroup`. */
+  function addForm(where: string, step: string, blockId: string | null, poolGroup: string) {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!ready) return;
+          const d = { title: draft.title.trim(), url: draft.url.trim(), source: draft.source.trim(), notes: draft.notes.trim() };
+          ask({
+            title: "Add this question?",
+            description: "Instructors can pick it in new interactions right away.",
+            changes: [
+              { label: "Where", after: where },
+              { label: "Question", after: linkPreview(d) },
+              ...(d.source ? [{ label: "Source", after: d.source }] : []),
+              ...(d.notes ? [{ label: "Notes", after: d.notes }] : []),
+            ],
+            confirmLabel: "Add question",
+            action: () => addQuestionAction({ level, topic: topic.name, subtopic, step, ...d, tweakOf: null, blockId, poolGroup }),
+            onSuccess: () => {
+              setAdding(null);
+              setDraft(BLANK);
+            },
+          });
+        }}
+        className="flex flex-col gap-3 rounded-lg border-2 border-primary p-3"
+      >
+        <QuestionFields draft={draft} setDraft={setDraft} />
+        <div className="flex justify-end">
+          <Button type="submit" className="h-10" disabled={!ready}>
+            Add question
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
   return (
     <section aria-label={`Questions in ${path}`} className="overflow-hidden rounded-xl border border-border bg-card">
       {dialog}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="flex flex-col">
           <h2 className="text-base font-semibold">{path}</h2>
-          <span className="text-xs text-muted-foreground">Questions by step · instructors pick from these when logging</span>
+          <span className="text-xs text-muted-foreground">
+            {topicBlocks.length ? "As in the interaction sheet: each block's rules, then its pool of questions" : "Questions by step · instructors pick from these when logging"}
+          </span>
         </div>
         <span className="text-xs text-muted-foreground">{live.length} questions</span>
       </div>
+
+      {topicBlocks.map((b) => {
+        const pool = live.filter((q) => q.blockId === b.id);
+        const key = `block:${b.id}`;
+        // Runs of questions under the same heading, in pool order ("" = no heading). Runs, not unique
+        // headings: a pool can repeat one (If else has "Pick 1 from this ->" twice, each its own group).
+        const runs: { heading: string; qs: Question[] }[] = [];
+        for (const q of pool) {
+          if (runs.at(-1)?.heading === q.poolGroup) runs.at(-1)!.qs.push(q);
+          else runs.push({ heading: q.poolGroup, qs: [q] });
+        }
+        return (
+          <div key={b.id} className="flex flex-col gap-3 border-b border-muted px-4 py-4 last:border-b-0">
+            <BlockRules block={b} />
+            <div className="flex flex-col gap-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold tracking-wide text-muted-foreground uppercase">Pool of questions · {pool.length}</span>
+                <Button variant="ghost" className="h-9 text-primary" onClick={() => startAdd(key)}>
+                  {adding === key ? "Cancel" : "+ Add to this block"}
+                </Button>
+              </div>
+              {runs.map((run, i) => (
+                <div key={`${i}|${run.heading}`} className="flex flex-col gap-2">
+                  {run.heading ? <span className="text-[13px] font-semibold text-sidebar-foreground">{run.heading}</span> : null}
+                  {run.qs.map((q) => questionRow(q))}
+                </div>
+              ))}
+              {!pool.length && adding !== key ? <span className="text-[13px] text-muted-foreground">No questions in this block yet</span> : null}
+              {adding === key ? addForm(`${path} · ${b.ratingStep || `Step ${b.step}`}`, "", b.id, runs.at(-1)?.heading ?? "") : null}
+            </div>
+          </div>
+        );
+      })}
+
       {groups.map((step) => {
-        const qs = step.code === "other" ? other : live.filter((q) => (level === 0 ? true : q.step === step.code));
+        const qs = step.code === "other" ? other : loose.filter((q) => (level === 0 ? true : q.step === step.code));
         const open = adding === step.code;
         return (
           <div key={step.code || "all"} className="flex flex-col gap-2.5 border-b border-muted px-4 py-3 last:border-b-0">
@@ -724,110 +890,15 @@ function QuestionList({
                 </Button>
               ) : null}
             </div>
-            {qs.map((q) =>
-              editing === q.id ? (
-                <form
-                  key={q.id}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!ready) return;
-                    const d = { title: draft.title.trim(), url: draft.url.trim(), source: draft.source.trim(), notes: draft.notes.trim() };
-                    const changes = [
-                      ...(d.title !== q.title ? [{ label: "Name", before: q.title, after: d.title }] : []),
-                      ...(d.url !== q.url ? [{ label: "Link", before: q.url || null, after: d.url || null }] : []),
-                      ...(d.source !== q.source ? [{ label: "Source", before: q.source || null, after: d.source || null }] : []),
-                      ...(d.notes !== q.notes ? [{ label: "Notes", before: q.notes || null, after: d.notes || null }] : []),
-                    ];
-                    if (!changes.length) return setEditing(null);
-                    ask({ title: `Save changes to "${q.title}"?`, changes, confirmLabel: "Save question", action: () => updateQuestionAction(q.id, d), onSuccess: () => setEditing(null) });
-                  }}
-                  className="flex flex-col gap-3 rounded-lg border-2 border-primary p-3"
-                >
-                  <QuestionFields draft={draft} setDraft={setDraft} />
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" variant="ghost" className="h-10" onClick={() => setEditing(null)}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" className="h-10" disabled={!ready}>
-                      Save question
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                <div key={q.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-muted bg-surface-subtle px-3 py-2.5">
-                  <span className="flex min-w-0 flex-[1_1_240px] flex-col">
-                    <QuestionTitle title={q.title} url={q.url} />
-                    <span className="text-xs text-muted-foreground">
-                      {step.code === "other" ? `${q.step || "No step"} · ` : ""}
-                      {q.source || "—"}
-                      {q.notes ? ` · ${q.notes}` : ""}
-                    </span>
-                  </span>
-                  {q.origin === "promoted" ? <StatusPill tone="accent">From review</StatusPill> : null}
-                  <span className="flex gap-1">
-                    <Button variant="ghost" className="h-9" disabled={pending} onClick={() => startEdit(q)}>
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-9"
-                      disabled={pending}
-                      onClick={() =>
-                        ask({
-                          title: `Archive "${q.title}"?`,
-                          description: "Instructors stop seeing it. Past interactions keep it. You can restore it later.",
-                          changes: [{ label: "Question", before: q.title, after: "Archived" }],
-                          confirmLabel: "Archive question",
-                          danger: true,
-                          action: () => archiveQuestionAction(q.id, true),
-                        })
-                      }
-                    >
-                      Archive
-                    </Button>
-                  </span>
-                </div>
-              ),
-            )}
+            {qs.map((q) => questionRow(q, step.code === "other"))}
             {step.code !== "other" && !qs.length && !open ? (
               <span className={cn("text-[13px] font-medium", step.code.startsWith("1.") || level === 0 ? "text-muted-foreground" : "text-warning")}>No question yet for this step</span>
             ) : null}
-            {open ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!ready) return;
-                  const d = { title: draft.title.trim(), url: draft.url.trim(), source: draft.source.trim(), notes: draft.notes.trim() };
-                  ask({
-                    title: "Add this question?",
-                    description: "Instructors can pick it in new interactions right away.",
-                    changes: [
-                      { label: "Where", after: `${path}${step.code ? ` · ${step.code}` : ""}` },
-                      { label: "Question", after: linkPreview(d) },
-                      ...(d.source ? [{ label: "Source", after: d.source }] : []),
-                      ...(d.notes ? [{ label: "Notes", after: d.notes }] : []),
-                    ],
-                    confirmLabel: "Add question",
-                    action: () => addQuestionAction({ level, topic: topic.name, subtopic, step: step.code, ...d, tweakOf: null }),
-                    onSuccess: () => {
-                      setAdding(null);
-                      setDraft(BLANK);
-                    },
-                  });
-                }}
-                className="flex flex-col gap-3 rounded-lg border-2 border-primary p-3"
-              >
-                <QuestionFields draft={draft} setDraft={setDraft} />
-                <div className="flex justify-end">
-                  <Button type="submit" className="h-10" disabled={!ready}>
-                    Add to {step.code || "this topic"}
-                  </Button>
-                </div>
-              </form>
-            ) : null}
+            {open ? addForm(`${path}${step.code ? ` · ${step.code}` : ""}`, step.code, null, "") : null}
           </div>
         );
       })}
+
       {archived.length ? (
         <details className="border-t border-border px-4 py-3 text-[13px]">
           <summary className="cursor-pointer font-semibold text-muted-foreground">Archived questions ({archived.length})</summary>
@@ -844,6 +915,46 @@ function QuestionList({
         </details>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * A sheet block's rules, as in the interaction sheet: step and step-wise rating, how many to ask,
+ * hints, whether revisiting is mandatory, suggested time, and what to expect / when to stop. Only
+ * the columns the sheet fills are shown. Also used for level-wide notes (no topic).
+ */
+function BlockRules({ block: b }: { block: Block }) {
+  const rules: [string, string][] = [
+    ["How many to ask", b.ask],
+    ["Hints", b.hints],
+    ["If the student can't answer", b.revisit],
+    ["Suggested time", b.minutes ? `${b.minutes}${/\d$/.test(b.minutes) ? " min" : ""}` : ""],
+  ];
+  const shown = rules.filter(([, v]) => v.trim());
+  return (
+    <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-3.5 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {b.step ? <span className="rounded-md bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground tabular">Step {b.step}</span> : null}
+        <span className="font-semibold whitespace-pre-line">{b.ratingStep || "—"}</span>
+      </div>
+      {b.poolNote ? <p className="text-[13px] whitespace-pre-line text-sidebar-foreground">{b.poolNote}</p> : null}
+      {shown.length ? (
+        <dl className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+          {shown.map(([name, value]) => (
+            <div key={name} className="bg-surface-subtle px-3 py-2">
+              <dt className="text-[11px] font-semibold text-muted-foreground">{name}</dt>
+              <dd className="mt-0.5 text-[13px] font-semibold whitespace-pre-line">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {b.expectation ? (
+        <div className="rounded-md border-l-4 border-l-primary bg-primary/5 px-3 py-2">
+          <div className="text-[11px] font-semibold text-muted-foreground">What we expect & when to stop</div>
+          <p className="mt-0.5 text-[13px] leading-relaxed whitespace-pre-line">{b.expectation}</p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

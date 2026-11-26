@@ -15,14 +15,15 @@ import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
 import { CurriculumAdmin } from "@nxtone/interactions-ui/curriculum/components/curriculum-admin";
 import { listQuestions, offRoadmapQueue } from "@nxtone/interactions-ui/curriculum/data";
+import { listBlocks } from "@nxtone/interactions-ui/curriculum/blocks";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 
 export const metadata = { title: "Curriculum" };
 
 async function Content() {
   await requireAccess("/admin/curriculum");
-  const [structure, questions, queue] = await Promise.all([getStructure(), listQuestions(true), offRoadmapQueue()]);
-  return <CurriculumAdmin structure={structure} questions={questions} queue={queue} />;
+  const [structure, questions, queue, blocks] = await Promise.all([getStructure(), listQuestions(true), offRoadmapQueue(), listBlocks()]);
+  return <CurriculumAdmin structure={structure} questions={questions} queue={queue} blocks={blocks} />;
 }
 
 /** Read when the page is opened, not at build time. */
