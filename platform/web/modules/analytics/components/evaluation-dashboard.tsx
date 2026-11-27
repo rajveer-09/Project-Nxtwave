@@ -105,7 +105,20 @@ function Panel({ title, action, description, className, children }: { title: str
   );
 }
 
-export async function EvaluationDashboard({ range, today, scope, eyebrow }: { range: Range; today: string; scope: StudentScope | undefined; eyebrow?: React.ReactNode }) {
+/** heading: the "Cohort Telemetry & Performance" title and its description (Analytics shows it; Home doesn't). */
+export async function EvaluationDashboard({
+  range,
+  today,
+  scope,
+  eyebrow,
+  heading = true,
+}: {
+  range: Range;
+  today: string;
+  scope: StudentScope | undefined;
+  eyebrow?: React.ReactNode;
+  heading?: boolean;
+}) {
   const roster = (await getRoster()).filter((s) => inScope(scope, s));
   const ids = scope ? roster.map((s) => s.niatId).sort() : null;
   const [ev, att, conversions, structure] = await Promise.all([
@@ -205,17 +218,23 @@ export async function EvaluationDashboard({ range, today, scope, eyebrow }: { ra
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col justify-between gap-4 rounded-xl border border-border bg-card p-3.5 sm:p-4 xl:flex-row xl:items-end">
+      <header className={cn("flex flex-col justify-between gap-4 rounded-xl border border-border bg-card p-3.5 sm:p-4 xl:flex-row", heading ? "xl:items-end" : "xl:items-center")}>
         <div className="flex min-w-0 flex-col gap-0.5 xl:max-w-xl">
           {eyebrow ? <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{eyebrow}</p> : null}
-          <div className="flex items-center gap-2">
-            <BarChart2 aria-hidden="true" className="size-4 text-muted-foreground" />
-            <h1 className="text-base font-semibold tracking-tight">Cohort Telemetry &amp; Performance</h1>
-          </div>
-          <p className="text-[13px] text-muted-foreground">
-            Daily interaction metrics, revisit counts, attendance, and instructor/student analytics
-            {scope ? " for your students" : " across the cohort"} · {fmt(roster.length)} students
-          </p>
+          {heading ? (
+            <>
+              <div className="flex items-center gap-2">
+                <BarChart2 aria-hidden="true" className="size-4 text-muted-foreground" />
+                <h1 className="text-base font-semibold tracking-tight">Cohort Telemetry &amp; Performance</h1>
+              </div>
+              <p className="text-[13px] text-muted-foreground">
+                Daily interaction metrics, revisit counts, attendance, and instructor/student analytics
+                {scope ? " for your students" : " across the cohort"} · {fmt(roster.length)} students
+              </p>
+            </>
+          ) : (
+            <h1 className="sr-only">Home</h1>
+          )}
         </div>
         <div className="flex flex-wrap items-end gap-3 xl:shrink-0 xl:justify-end">
           <LiveForm className="flex min-w-0 flex-wrap items-end gap-3" aria-label="Choose dates">
