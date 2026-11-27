@@ -18,7 +18,6 @@ export default function StudentsPage({ searchParams }: PageProps<"/students">) {
   return (
     <>
       <PageHeader
-        eyebrow="One roster for every module · keyed by NIAT ID"
         title="Students"
         actions={usingSampleData() ? <StatusPill>Sample data · no database connected</StatusPill> : null}
       />

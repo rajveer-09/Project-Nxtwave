@@ -22,7 +22,7 @@ const CHIPS: { key: FlagFilter | "all"; label: string }[] = [
   { key: "all", label: "All students" },
   { key: "any", label: "Needs attention" },
   { key: "attendance", label: "Attendance < 75%" },
-  { key: "interaction", label: "No interaction 14d+" },
+  { key: "interaction", label: "No interaction in 14+ days" },
   { key: "tests", label: "Below pass in tests" },
   { key: "contests", label: "Missed contests" },
   { key: "level", label: "Stuck on level" },

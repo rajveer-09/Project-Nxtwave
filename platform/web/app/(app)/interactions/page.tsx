@@ -91,11 +91,22 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
   const daily = eachDay(range).map((day) => ({ day, label: shortDay(day), value: perDay.get(day) ?? 0 }));
   const busiest = daily.reduce((best, d) => (d.value > (best?.value ?? 0) ? d : best), null as (typeof daily)[number] | null);
   const reached = new Set(inRange.map((it) => it.niatId)).size;
-  const activity = [
-    ["Interactions", inRange.length.toLocaleString("en-IN")],
-    ["Busiest day", busiest && busiest.value ? `${busiest.label} · ${busiest.value}` : "—"],
-    ["Students reached", reached.toLocaleString("en-IN")],
-    ["Taken by support", inRange.length ? `${bySupport.toLocaleString("en-IN")} · ${Math.round((bySupport / inRange.length) * 100)}%` : "0"],
+  const n = (v: number) => v.toLocaleString("en-IN");
+  const plural = (v: number, one: string) => `${n(v)} ${one}${v === 1 ? "" : "s"}`;
+  // Each card: what it counts, the number, and a line that says how to read it.
+  const activity: { label: string; value: string; note: string }[] = [
+    { label: "Total interactions", value: n(inRange.length), note: "Logged in the selected dates" },
+    {
+      label: "Day with the most interactions",
+      value: busiest && busiest.value ? busiest.label : "—",
+      note: busiest && busiest.value ? `${plural(busiest.value, "interaction")} that day` : "No interactions in these dates",
+    },
+    { label: "Unique students given an interaction", value: n(reached), note: "Each student counted once" },
+    {
+      label: "Interactions taken by a support instructor",
+      value: inRange.length ? `${n(bySupport)} · ${Math.round((bySupport / inRange.length) * 100)}%` : "0",
+      note: "Taken by someone other than the student's own POC",
+    },
   ];
   const showPeople = adminView;
 
@@ -197,11 +208,12 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
               </>
             ) : null}
           </LiveForm>
-          <dl className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3">
-            {activity.map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-border px-3.5 py-2.5">
+          <dl className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+            {activity.map(({ label, value, note }) => (
+              <div key={label} className="flex flex-col rounded-xl border border-border px-3.5 py-2.5">
                 <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
                 <dd className="font-heading text-xl font-semibold tabular">{value}</dd>
+                <dd className="text-xs text-muted-foreground">{note}</dd>
               </div>
             ))}
           </dl>

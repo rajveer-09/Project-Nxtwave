@@ -149,7 +149,7 @@ function StudentTable({ rows, showPoc, canEdit }: { rows: TopKRow[]; showPoc: bo
           <caption className="sr-only">Top K students</caption>
           <thead>
             <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
-              {["Student", ...(showPoc ? ["POC (instructor)"] : []), "Level · topic", "Attendance 30d", "Last interaction", "Contests", "In Top K since"].map((h) => (
+              {["Student", ...(showPoc ? ["POC (instructor)"] : []), "Level · topic", "Attendance · 30 days", "Last interaction", "Contests", "In Top K since"].map((h) => (
                 <th key={h} scope="col" className="border-b border-border px-3 py-2.5 font-semibold first:pl-5">
                   {h}
                 </th>

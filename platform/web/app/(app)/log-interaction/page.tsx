@@ -73,7 +73,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
     return (
       <>
         {lookup}
-        <EmptyState title="Type a name or NIAT ID to start" description="Your own students open with their attendance, last test and contests. For anyone else's student you're saved as the person who took it." />
+        <EmptyState title="Type a name or NIAT ID to start" />
         {recent}
       </>
     );
@@ -146,7 +146,7 @@ export default function LogInteractionPage({ searchParams }: PageProps<"/log-int
       <PageHeader
         eyebrow="Interactions"
         title="Log interaction"
-        description="Type the student's name or NIAT ID. For someone else's student you're recorded as the person who took it."
+        description="Type the student's name or NIAT ID."
       />
       <Suspense fallback={<Skeleton className="h-[480px] rounded-xl" />}>
         <Content searchParams={searchParams} />
