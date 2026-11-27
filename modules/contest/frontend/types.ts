@@ -230,14 +230,97 @@ export interface ContestResults {
 }
 
 /** Scope of the results: everyone, my students, or one college (NxtRank's ContestScope). */
-export type ContestScope = "all" | "mine" | `college:${string}`;
+export type ContestScope = "all" | "mine" | "topk" | `college:${string}`;
 
 /**
- * The query for a scope. "mine" sends the students NxtOne assigns to the viewer (NIAT IDs), so
- * contests agree with the rest of NxtOne; without them it falls back to NxtRank's own list.
+ * The query for a scope. "mine" and "topk" send their students (NIAT IDs: the viewer's own students
+ * as NxtOne assigns them, or their Top K), so contests agree with the rest of NxtOne; "mine" without
+ * them falls back to NxtRank's own list.
  */
-export function scopeQuery(scope: ContestScope, myIds?: string[]) {
-  if (scope === "mine") return myIds ? `?${new URLSearchParams({ roll_nos: myIds.join(",") })}` : "?mine=true";
+export function scopeQuery(scope: ContestScope, ids?: string[]) {
+  if (scope === "topk") return `?${new URLSearchParams({ roll_nos: (ids ?? []).join(",") })}`;
+  if (scope === "mine") return ids ? `?${new URLSearchParams({ roll_nos: ids.join(",") })}` : "?mine=true";
   if (scope.startsWith("college:")) return `?${new URLSearchParams({ college: scope.slice("college:".length) })}`;
   return "";
+}
+
+// ---------------------------------------------------------------- one student (contest profile)
+
+export type HandleStatus = "valid" | "invalid" | "unchecked" | "missing" | string;
+
+export interface HistoryItem {
+  contest_slug: string;
+  contest_title: string;
+  start_time: number;
+  questions: string[];
+  status: ResultStatus;
+  /** Rank on the student's LeetCode profile. */
+  global_rank: number | null;
+  ranking_url: string | null;
+  rank_official?: boolean;
+  /** Position on the contest's global leaderboard. */
+  leaderboard_rank?: number | null;
+  college_rank: number | null;
+  solved: number | null;
+  total_time_secs: number | null;
+  problems: Record<string, ProblemResult>;
+}
+
+export interface ContestStudent {
+  id: number;
+  roll_no: string;
+  name: string;
+  college: string;
+  extra: Record<string, string>;
+  leetcode_handle: string;
+  leetcode_url: string | null;
+  handle_status: HandleStatus;
+  active: boolean;
+  /** Newest first. */
+  history: HistoryItem[];
+}
+
+export interface QuestionPerf {
+  attempted_contests: number;
+  solved: number;
+  solve_rate: number | null;
+  median_secs: number | null;
+  avg_secs: number | null;
+  best_secs: number | null;
+  wrong: number;
+  wrong_per_solve: number | null;
+  cohort_solve_rate?: number | null;
+  cohort_median_secs?: number | null;
+  cohort_wrong_per_solve?: number | null;
+}
+
+export interface StudentAnalytics {
+  contests_scanned: number;
+  contests_attended: number;
+  attendance_rate: number | null;
+  current_streak: number;
+  longest_streak: number;
+  absent_streak: number;
+  avg_solved: number | null;
+  solved_std: number | null;
+  /** Average "top x %" of all participants (lower is better). */
+  avg_top_pct: number | null;
+  best_global_rank: number | null;
+  best_college_rank: number | null;
+  consistency: number | null;
+  consistency_label: string | null;
+  trend: number | null;
+  trend_label: string | null;
+  questions: Record<string, QuestionPerf>;
+  labels: string[];
+  /** Oldest first. */
+  series: { slug: string; title: string; start_time: number; status: ResultStatus; solved: number | null; questions: number; global_rank: number | null; top_pct: number | null; college_rank: number | null; total_time_secs: number | null }[];
+  rating: {
+    current: number | null;
+    global_ranking: number | null;
+    top_percentage: number | null;
+    contests_attended: number | null;
+    synced_at: string | null;
+    history: { title: string; slug: string; start_time: number; rating: number; ranking: number | null; solved: number | null; total: number | null }[];
+  };
 }

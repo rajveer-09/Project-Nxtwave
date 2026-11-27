@@ -51,7 +51,10 @@ export function stateLabel(c: Pick<ContestListItem, "state" | "in_review" | "fin
   }
 }
 
-export function ContestsList({ myIds = [] }: { myIds?: string[] }) {
+/** Per contest, the numbers for the viewer's own students (instructors): shown instead of everyone's. */
+export type MineStats = Record<string, { handles: number; tookPart: number; avgSolved: number | null; bestRank: number | null }>;
+
+export function ContestsList({ myIds = [], mine }: { myIds?: string[]; mine?: MineStats }) {
   // A contest page opens on "My students" for someone with students of their own.
   const defaultScope: ContestScope = myIds.length ? "mine" : "all";
   const queryClient = useQueryClient();
@@ -159,7 +162,7 @@ export function ContestsList({ myIds = [] }: { myIds?: string[] }) {
               <caption className="sr-only">Contests</caption>
               <thead>
                 <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
-                  {["Contest", "Status", "Took part", "Avg solved", "Best global rank", "Worldwide"].map((h) => (
+                  {["Contest", "Status", mine ? "Your students took part" : "Took part", "Avg solved", "Best global rank", "Worldwide"].map((h) => (
                     <th key={h} scope="col" className="border-b border-border px-3 py-2.5 first:pl-5 last:pr-5">
                       {h}
                     </th>
@@ -184,10 +187,21 @@ export function ContestsList({ myIds = [] }: { myIds?: string[] }) {
                         </div>
                       </td>
                       <td className="border-b border-muted px-3 py-3 tabular">
-                        {c.summary ? `${c.summary.participated} · ${pct(c.summary.participation_rate)}` : "—"}
+                        {mine
+                          ? mine[c.slug]
+                            ? `${mine[c.slug].tookPart} of ${mine[c.slug].handles} · ${pct(mine[c.slug].handles ? mine[c.slug].tookPart / mine[c.slug].handles : null)}`
+                            : "—"
+                          : c.summary
+                            ? `${c.summary.participated} · ${pct(c.summary.participation_rate)}`
+                            : "—"}
                       </td>
-                      <td className="border-b border-muted px-3 py-3 tabular">{c.summary?.avg_solved != null ? `${c.summary.avg_solved.toFixed(1)} / 4` : "—"}</td>
-                      <td className="border-b border-muted px-3 py-3 tabular">{c.summary?.best_global_rank?.toLocaleString("en-IN") ?? "—"}</td>
+                      <td className="border-b border-muted px-3 py-3 tabular">
+                        {(() => {
+                          const avg = mine ? (mine[c.slug]?.avgSolved ?? null) : (c.summary?.avg_solved ?? null);
+                          return avg != null ? `${avg.toFixed(1)} / 4` : "—";
+                        })()}
+                      </td>
+                      <td className="border-b border-muted px-3 py-3 tabular">{(mine ? mine[c.slug]?.bestRank : c.summary?.best_global_rank)?.toLocaleString("en-IN") ?? "—"}</td>
                       <td className="border-b border-muted py-3 pr-5 pl-3 text-muted-foreground tabular">{c.participants_worldwide?.toLocaleString("en-IN") ?? "—"}</td>
                     </tr>
                   );

@@ -25,7 +25,8 @@ export type NavIcon =
   | "studentkey"
   | "logany"
   | "import"
-  | "export";
+  | "export"
+  | "topk";
 
 export type NavItem = {
   href: string;
@@ -62,6 +63,8 @@ export const NAV: NavSection[] = [
       { href: "/log-interaction", label: "Log interaction", icon: "logany", roles: LOGGERS },
       { href: "/tests", label: "Weekly tests", icon: "tests", roles: EVERYONE },
       { href: "/contests", label: "Contests", icon: "contests", roles: EVERYONE },
+      // Instructors pick their best students; senior instructors and admins see everyone's.
+      { href: "/top-k", label: "Top K", icon: "topk", roles: LOGGERS },
     ],
   },
   {

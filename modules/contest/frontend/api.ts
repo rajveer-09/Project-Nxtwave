@@ -7,7 +7,7 @@ Date : 17 Nov 2026
 */
 
 import { apiFetch } from "@/common/lib/api-client";
-import { scopeQuery, type ContestDetail, type ContestPage, type ContestResults, type ContestScope, type TopicsData, type TopicsQuery } from "@nxtone/contest-ui/types";
+import { scopeQuery, type ContestDetail, type ContestPage, type ContestResults, type ContestScope, type ContestStudent, type StudentAnalytics, type TopicsData, type TopicsQuery } from "@nxtone/contest-ui/types";
 
 /** Contest service calls, always through the same-origin proxy /api/contest/*. */
 const base = "/api/contest";
@@ -23,6 +23,10 @@ export const contestApi = {
   scanStatus: () => apiFetch<Pick<ContestPage, "worker" | "running" | "queue" | "typical_scan_secs">>(`${base}/scan-status`),
   detail: (slug: string, scope: ContestScope, myIds?: string[]) => apiFetch<ContestDetail>(`${base}/contests/${encodeURIComponent(slug)}${scopeQuery(scope, myIds)}`),
   results: (slug: string, scope: ContestScope, myIds?: string[]) => apiFetch<ContestResults>(`${base}/contests/${encodeURIComponent(slug)}/results${scopeQuery(scope, myIds)}`),
+  /** One student's contest history (by the contest service's id for them). */
+  student: (contestStudentId: number) => apiFetch<ContestStudent>(`${base}/students/${contestStudentId}`),
+  /** Their streaks, averages, question-by-question rates, charts' series and LeetCode rating. */
+  studentAnalytics: (contestStudentId: number) => apiFetch<StudentAnalytics>(`${base}/students/${contestStudentId}/analytics`),
   exportUrl: (slug: string, scope: ContestScope) => `${base}/contests/${encodeURIComponent(slug)}/export.csv${scopeQuery(scope)}`,
   publishDraft: (runId: number) => apiFetch<{ published: number; contest_slug: string }>(`${base}/admin/scans/${runId}/publish`, { method: "POST", json: {} }),
   discardDraft: (runId: number) => apiFetch<{ discarded: number }>(`${base}/admin/scans/${runId}/discard`, { method: "POST", json: {} }),
