@@ -117,3 +117,79 @@ export async function collegePerformance(limit = 8): Promise<{ contests: { slug:
   });
   return { contests: ordered, colleges };
 }
+
+export type TopKRank = {
+  niatId: string;
+  name: string;
+  /** Scanned contests among the latest `limit`, and how many they took part in. */
+  scanned: number;
+  tookPart: number;
+  solved: number;
+  avgSolved: number | null;
+  bestRank: number | null;
+  last: { title: string; status: string; solved: number | null } | null;
+};
+
+/**
+ * Top K students ranked among themselves over the latest scanned contests: by total problems solved
+ * (so taking part regularly counts, not one good contest), then how often they took part, then
+ * their best global rank.
+ */
+export async function topKRanking(niatIds: string[], limit = 10): Promise<TopKRank[]> {
+  "use cache: remote";
+  cacheLife({ stale: 300, revalidate: 900, expire: 3600 });
+  cacheTag(TAGS.roster, "contests");
+  if (!niatIds.length) return [];
+  const { rows } = await getDb().query<{ niat: string; name: string; scanned: number; took: number; solved: number; avg: number | null; best: number | null; last_title: string | null; last_status: string | null; last_solved: number | null }>(
+    `WITH recent AS (SELECT slug, title, start_time FROM contest.contests c WHERE ${SCANNED} ORDER BY start_time DESC LIMIT $2),
+     per AS (
+       SELECT upper(trim(s.roll_no)) AS niat, s.name, c.title, c.start_time, r.status, r.solved_count, r.global_rank
+       FROM recent c JOIN contest.results r ON r.contest_slug = c.slug JOIN contest.students s ON s.id = r.student_id
+       WHERE upper(trim(s.roll_no)) = ANY($1::text[])
+     )
+     SELECT niat, max(name) AS name, count(*)::int AS scanned,
+            count(*) FILTER (WHERE status IN ('solved', 'zero'))::int AS took,
+            COALESCE(sum(solved_count) FILTER (WHERE status IN ('solved', 'zero')), 0)::int AS solved,
+            round(avg(solved_count) FILTER (WHERE status IN ('solved', 'zero')), 2)::float AS avg,
+            min(global_rank) FILTER (WHERE status IN ('solved', 'zero') AND global_rank > 0) AS best,
+            (array_agg(title ORDER BY start_time DESC))[1] AS last_title,
+            (array_agg(status ORDER BY start_time DESC))[1] AS last_status,
+            (array_agg(solved_count ORDER BY start_time DESC))[1] AS last_solved
+     FROM per GROUP BY niat`,
+    [niatIds, limit],
+  );
+  return rows
+    .map((r) => ({
+      niatId: r.niat,
+      name: r.name,
+      scanned: r.scanned,
+      tookPart: r.took,
+      solved: r.solved,
+      avgSolved: r.avg,
+      bestRank: r.best,
+      last: r.last_title ? { title: r.last_title, status: r.last_status ?? "", solved: r.last_status === "solved" || r.last_status === "zero" ? r.last_solved : null } : null,
+    }))
+    .sort((a, b) => b.solved - a.solved || b.tookPart - a.tookPart || (a.bestRank ?? Infinity) - (b.bestRank ?? Infinity));
+}
+
+/** The latest scanned contests' best three among these students (by solved, then global rank). */
+export async function topThreeByContest(niatIds: string[], limit = 10): Promise<Record<string, { niatId: string; name: string; solved: number; rank: number | null }[]>> {
+  "use cache: remote";
+  cacheLife({ stale: 300, revalidate: 900, expire: 3600 });
+  cacheTag(TAGS.roster, "contests");
+  if (!niatIds.length) return {};
+  const { rows } = await getDb().query<{ slug: string; niat: string; name: string; solved: number; rank: number | null }>(
+    `WITH recent AS (SELECT slug FROM contest.contests c WHERE ${SCANNED} ORDER BY start_time DESC LIMIT $2),
+     took AS (
+       SELECT r.contest_slug AS slug, upper(trim(s.roll_no)) AS niat, s.name, r.solved_count AS solved, NULLIF(r.global_rank, 0) AS rank,
+              row_number() OVER (PARTITION BY r.contest_slug ORDER BY r.solved_count DESC, r.global_rank ASC NULLS LAST) AS n
+       FROM recent c JOIN contest.results r ON r.contest_slug = c.slug JOIN contest.students s ON s.id = r.student_id
+       WHERE upper(trim(s.roll_no)) = ANY($1::text[]) AND r.status IN ('solved', 'zero')
+     )
+     SELECT slug, niat, name, solved, rank FROM took WHERE n <= 3 ORDER BY slug, n`,
+    [niatIds, limit],
+  );
+  const out: Record<string, { niatId: string; name: string; solved: number; rank: number | null }[]> = {};
+  for (const r of rows) (out[r.slug] ??= []).push({ niatId: r.niat, name: r.name, solved: r.solved, rank: r.rank });
+  return out;
+}

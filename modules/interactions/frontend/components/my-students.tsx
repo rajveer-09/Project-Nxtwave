@@ -104,13 +104,13 @@ export function MyStudents({ students, overdueDays }: { students: MyStudent[]; o
         })}
       </div>
       {shown.length ? (
-        <div className="max-h-[420px] overflow-auto px-5 pt-2 pb-3">
+        <div className="mt-2 max-h-[420px] overflow-auto px-5 pb-3">
           <table className="w-full min-w-[640px] border-collapse text-[13px]">
             <caption className="sr-only">My students</caption>
-            <thead className="sticky top-0 bg-card">
+            <thead className="sticky top-0 z-10 bg-card">
               <tr className="text-left text-xs text-muted-foreground">
                 {["Student", "Level · topic", "Standing", "Last interaction", ""].map((h, i) => (
-                  <th key={i} scope="col" className="border-b border-border py-2 pr-3 font-semibold last:pr-0">
+                  <th key={i} scope="col" className="border-b border-border bg-card py-2 pr-3 font-semibold last:pr-0">
                     {h}
                   </th>
                 ))}

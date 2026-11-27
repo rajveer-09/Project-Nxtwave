@@ -308,7 +308,9 @@ export async function insertInteraction(
       log.currentStep ?? student.currentStep ?? null,
       log.topics || '', log.statusPostInteraction, log.rating ?? 0, log.questionsAsked || '', log.remarks || '',
       log.performedWell || '', log.improvementAreas || '', log.tweakedQuestions || '', log.actionItems || '',
-      log.meetRecording || '', log.granolaTranscript || '', log.interactionRound || 1, log.date, log.createdAt,
+      log.meetRecording || '', log.granolaTranscript || '', log.interactionRound || 1, log.date,
+      // created_at has no default: a caller that doesn't send it (the hub's log form) gets "now".
+      log.createdAt || new Date().toISOString(),
       options.createdBy ?? null,
       // Snapshot like level/step: the form sends it; older clients don't, so fall back to the student's.
       (log.currentSubtopic !== undefined ? log.currentSubtopic : student.currentSubtopic) ?? null,
@@ -417,10 +419,12 @@ async function getInteraction(id: string): Promise<InteractionLog | null> {
 
 // Editing or deleting an interaction: the student's assigned instructor or whoever logged it. Admins: 403.
 function assertCanChangeInteraction(log: InteractionLog, student: Student, actor: Actor, action: 'edit' | 'delete') {
+  // Admins correct any interaction's details (the hub's Interactions page); deleting stays with the instructors.
+  if (action === 'edit' && actor.role === 'admin') return;
   const isAssigned = actor.role === 'instructor' && !!actor.instructorId && student.instructorId === actor.instructorId;
   const isAuthor = actor.role === 'instructor' && log.createdBy === actor.id;
   if (!isAssigned && !isAuthor) {
-    throw new ForbiddenError(`Only the assigned instructor or the person who logged this interaction can ${action} it.`);
+    throw new ForbiddenError(`Only the assigned instructor, the person who logged this interaction${action === 'edit' ? ' or an admin' : ''} can ${action} it.`);
   }
 }
 

@@ -35,6 +35,22 @@ export function DailyBars({ data, valueLabel, height = 220 }: { data: Point[]; v
   );
 }
 
+/** Any number over time (e.g. a LeetCode rating), the axis fitted to the values. */
+export function ValueLine({ data, valueLabel, height = 220 }: { data: Point[]; valueLabel: string; height?: number }) {
+  const config = { value: { label: valueLabel, color: "var(--chart-1)" } } satisfies ChartConfig;
+  return (
+    <ChartContainer config={config} className="aspect-auto w-full" style={{ height }}>
+      <LineChart data={data} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
+        <CartesianGrid vertical={false} strokeOpacity={0.5} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={6} minTickGap={18} interval="preserveStartEnd" />
+        <YAxis tickLine={false} axisLine={false} width={44} allowDecimals={false} domain={["dataMin - 20", "dataMax + 20"]} />
+        <ChartTooltip cursor={{ stroke: "var(--muted-foreground)", strokeDasharray: "3 3" }} content={<ChartTooltipContent indicator="line" />} />
+        <Line dataKey="value" type="monotone" stroke="var(--color-value)" strokeWidth={2} dot={{ r: 3, strokeWidth: 0, fill: "var(--color-value)" }} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }} />
+      </LineChart>
+    </ChartContainer>
+  );
+}
+
 /** A percentage over time (e.g. attendance); days with nothing to measure are gaps, not zeros. */
 export function TrendLine({ data, valueLabel, target, height = 220 }: { data: Point[]; valueLabel: string; target?: number; height?: number }) {
   const config = { value: { label: valueLabel, color: "var(--chart-1)" } } satisfies ChartConfig;

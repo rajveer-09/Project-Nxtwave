@@ -367,6 +367,8 @@ async function dbCreateInteraction(input: InteractionInput, user: SessionUser): 
     meetRecording: input.meetRecording,
     granolaTranscript: transcript,
     interactionRound: current.round,
+    // created_at has no default in logs.interactions; without it the insert fails.
+    createdAt: new Date().toISOString(),
     level: `Level ${input.level}`,
     currentStep: current.step ?? undefined,
     currentSubtopic: current.subtopic,
@@ -399,4 +401,75 @@ async function dbOffRoadmapEntries(): Promise<OffRoadmapEntry[]> {
         ...placement(structure, r.level ?? 0, splitList(r.topics), splitList(r.subtopics)),
       })),
   );
+}
+
+// ---------------------------------------------------------------- one interaction (view / edit)
+
+/** One interaction with everything: the transcript and the questions exactly as stored. */
+export type InteractionLogDetail = { interaction: Interaction; questionsText: string };
+
+export async function getInteractionLog(id: string): Promise<InteractionLogDetail | null> {
+  if (authMode() !== "database") {
+    const it = store().interactions.find((x) => x.id === id);
+    return it ? { interaction: it, questionsText: formatQuestions(it.questions) || it.tweakedQuestions } : null;
+  }
+  const { rows } = await getDb().query<DbRow>(`${interactionSelect(true)} WHERE it.id = $1`, [id]);
+  return rows[0] ? { interaction: toInteraction(rows[0]), questionsText: rows[0].questions_asked } : null;
+}
+
+/** What can be corrected after logging (topics and who took it stay as logged). */
+export type InteractionEdit = {
+  date: string;
+  status: InteractionStatus;
+  rating: number;
+  questionsText: string;
+  stepsReached: Record<string, string>;
+  performedWell: string;
+  improvementAreas: string;
+  actionItems: string;
+  remarks: string;
+  meetRecording: string;
+};
+
+/** Saves an edit through the interactions service (it checks who may edit and the required fields). */
+export async function updateInteractionLog(id: string, edit: InteractionEdit, user: SessionUser): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (edit.date > todayIst()) return { ok: false, error: "The date can't be in the future." };
+  if (!(STATUSES as readonly string[]).includes(edit.status)) return { ok: false, error: "Choose an outcome." };
+  if (!(edit.rating >= 0 && edit.rating <= 5)) return { ok: false, error: "Rating must be between 0 and 5." };
+  const clean = (s: string) => s.replace(/\r\n/g, "\n").trim();
+  if (authMode() !== "database") {
+    const it = store().interactions.find((x) => x.id === id);
+    if (!it) return { ok: false, error: "Interaction not found." };
+    Object.assign(it, {
+      date: edit.date,
+      status: edit.status,
+      rating: edit.rating,
+      questions: parseQuestions(edit.questionsText),
+      stepsReached: edit.stepsReached,
+      performedWell: clean(edit.performedWell),
+      improvementAreas: clean(edit.improvementAreas),
+      actionItems: clean(edit.actionItems),
+      remarks: clean(edit.remarks),
+      meetRecording: edit.meetRecording.trim(),
+    });
+    return { ok: true };
+  }
+  const before = await getInteractionLog(id);
+  if (!before) return { ok: false, error: "Interaction not found. It may have been deleted." };
+  const result = await callService(INTERACTIONS_SERVICE, user, "PATCH", `/interactions/${encodeURIComponent(id)}`, {
+    date: edit.date,
+    statusPostInteraction: edit.status,
+    rating: edit.rating,
+    questionsAsked: clean(edit.questionsText),
+    stepsReached: Object.fromEntries(Object.entries(edit.stepsReached).filter(([, v]) => v)),
+    performedWell: clean(edit.performedWell),
+    improvementAreas: clean(edit.improvementAreas),
+    actionItems: clean(edit.actionItems),
+    remarks: clean(edit.remarks),
+    meetRecording: edit.meetRecording.trim(),
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+  invalidateRoster(before.interaction.niatId);
+  expire(TAGS.interactions, TAGS.student(before.interaction.niatId));
+  return { ok: true };
 }

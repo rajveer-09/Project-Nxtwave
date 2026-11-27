@@ -12,6 +12,7 @@ Date : 16 Nov 2026
  *   attendance → attendance service, progress/interactions/tests → logs schema,
  *   contests → contest service, records/timeline → core.
  */
+import type { ProgressExplore } from "@/common/domain/progress-explore";
 import { flagDetail, RISK_THRESHOLDS } from "@/common/domain/risk";
 import { ARRAY_SUBTOPICS, LEVEL_TOPICS, type RosterStudent } from "@/common/sample-data/roster";
 
@@ -91,6 +92,8 @@ export function buildStudentDetail(s: RosterStudent) {
   const currentTopicIndex = Math.max(0, topics.indexOf(s.topic));
   const stepIndex = STEP_CODES.findIndex(([code]) => code === s.step);
   const progress = {
+    /** Every level, topic and round for exploring (database only; null = the current level as below). */
+    explore: null as ProgressExplore | null,
     level: s.level,
     topic: s.topic,
     subtopic: s.subtopic,
@@ -210,6 +213,8 @@ export function buildStudentDetail(s: RosterStudent) {
   });
   const attendedResults = contestList.filter((c) => c.attended);
   const contests = {
+    /** The contest service's id for the student (database only: its topics come from the service). */
+    contestId: null as number | null,
     handle: s.lcHandle,
     rating: s.lcRating,
     attended: s.contestsAttended,

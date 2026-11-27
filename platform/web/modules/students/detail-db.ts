@@ -14,7 +14,8 @@ import type { RosterStudent } from "@/common/sample-data/roster";
 import type { buildStudentDetail, CalendarDay } from "@/common/sample-data/student-detail";
 import { listInteractions } from "@nxtone/interactions-ui/data";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
-import { studentSteps, subtopicNames } from "@nxtone/interactions-ui/curriculum/lib/structure";
+import { liveTopics, studentSteps, subtopicNames, topicSteps } from "@nxtone/interactions-ui/curriculum/lib/structure";
+import type { ExploreLevel, ExploreStep, ProgressExplore, StepState } from "@/common/domain/progress-explore";
 import { coveredLabel, STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
 
 /**
@@ -52,6 +53,25 @@ export const stepCode = (step: string | null | undefined) => step?.match(/^\d\.\
 type Term = { name: string; start: string; end: string; is_current: boolean };
 type Entry = { date: string; applies_to: string; day_type: string; counts: boolean; label: string };
 
+const DAY_TAG: Record<string, [string, string]> = {
+  holiday: ["Hol", "Holiday"],
+  exam: ["Exam", "Exams"],
+  exam_prep: ["Prep", "Exam preparation"],
+  event: ["Event", "Event (doesn't count)"],
+};
+
+/** Why a day has no class, for the calendar: a calendar entry (holiday, exams, …), Sunday, or outside the term or the student's enrolment. */
+function noClassReason(d: string, r: { dayCounts: boolean; inTerm: boolean; enrolled: boolean; label: string; dayType: string | null; joined: string | null }): { tag?: string; note?: string } {
+  if (!r.inTerm) return { tag: "—", note: "Outside the term" };
+  if (!r.enrolled) return { tag: "—", note: r.joined && d < r.joined ? "Before joining" : "After leaving" };
+  if (r.dayCounts) return {};
+  if (r.dayType && DAY_TAG[r.dayType]) {
+    const [tag, kind] = DAY_TAG[r.dayType];
+    return { tag, note: r.label ? `${kind}: ${r.label}` : kind };
+  }
+  return weekday(d) === 0 ? { tag: "Sun", note: "Sunday" } : { tag: "Off", note: r.label || "No class" };
+}
+
 /** stats.ResolveDay from modules/attendance/backend: degree entry, then ALL, then Sunday, else working. */
 function dayResolver(degree: string, joined: string | null, dropped: string | null, terms: Term[], entries: Entry[], today: string) {
   const byDate = new Map<string, Map<string, Entry>>();
@@ -64,7 +84,7 @@ function dayResolver(degree: string, joined: string | null, dropped: string | nu
     const dayCounts = e ? e.day_type === "working" || (e.day_type === "event" && e.counts) : weekday(d) !== 0;
     const inTerm = terms.some((t) => d >= t.start && d <= t.end);
     const enrolled = (!joined || d >= joined) && (!dropped || d <= dropped);
-    return { dayCounts, inTerm, enrolled, future: d > today, counted: dayCounts && inTerm && enrolled && d <= today, label: e?.label ?? "" };
+    return { dayCounts, inTerm, enrolled, future: d > today, counted: dayCounts && inTerm && enrolled && d <= today, label: e?.label ?? "", dayType: e?.day_type ?? null, joined, dropped };
   };
 }
 
@@ -83,8 +103,8 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     db.query<{ kind: string; start: string; end: string }>(
       "SELECT kind, start_date::text AS start, end_date::text AS end FROM attendance.student_periods WHERE niat_id = $1 AND cancelled_at IS NULL ORDER BY start_date", [id]),
     db.query<{ created_at: string }>("SELECT created_at FROM logs.students WHERE upper(id) = $1", [id]),
-    db.query<{ from_level: number; to_level: number; change_date: string; by: string | null; source: string }>(
-      `SELECT lc.from_level, lc.to_level, lc.change_date::text, COALESCE(st.name, u.name, lc.changed_by) AS by, lc.source
+    db.query<{ from_level: number; to_level: number; change_date: string; changed_at: string; by: string | null; source: string }>(
+      `SELECT lc.from_level, lc.to_level, lc.change_date::text, lc.changed_at, COALESCE(st.name, u.name, lc.changed_by) AS by, lc.source
        FROM logs.level_changes lc
        LEFT JOIN core.staff st ON st.instructor_code = lc.changed_by
        LEFT JOIN logs.users u ON u.id = lc.changed_by
@@ -129,7 +149,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
           : mark === "A"
             ? "absent"
             : "blank";
-    cells.push({ day: Number(d.slice(8)), status, today: d === today });
+    cells.push({ day: Number(d.slice(8)), status, today: d === today, ...noClassReason(d, r) });
   }
   const thisMonth = count(firstOfMonth, today);
 
@@ -189,7 +209,112 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     }
   }
   const startedOn = logsStudent.rows[0]?.created_at ? istYmd(logsStudent.rows[0].created_at) : null;
+
+  // A level change undone within a day (e.g. set to L0 while logging, then straight back to L1) was a
+  // correction, not a move: leave out both. Real moves down stay.
+  const DAY = 24 * 60 * 60 * 1000;
+  const oldestFirst = [...levelChanges.rows].reverse();
+  const undone = new Set<number>();
+  for (let i = 0; i < oldestFirst.length; i++) {
+    if (undone.has(i)) continue;
+    const a = oldestFirst[i];
+    const j = oldestFirst.findIndex(
+      (b, k) => k > i && !undone.has(k) && b.from_level === a.to_level && b.to_level === a.from_level && new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime() < DAY,
+    );
+    if (j > i && oldestFirst.slice(i + 1, j).every((_, k) => undone.has(i + 1 + k))) {
+      undone.add(i);
+      undone.add(j);
+    }
+  }
+  const realLevelChanges = oldestFirst.filter((_, i) => !undone.has(i)).reverse();
+
+  // Every level and topic, for exploring the section by clicking (common/domain/progress-explore.ts).
+  // A topic or subtopic's steps: up to the step the student is on (their current one), else the best
+  // step logged for it, else all done (a cleared topic) or none.
+  const explore: ProgressExplore = (() => {
+    const best = new Map<string, number>(); // "level|item" -> best step index
+    const levels: ExploreLevel[] = structure.levels.map((l) => {
+      const state = l.level < s.level ? "cleared" : l.level === s.level ? "current" : "future";
+      const names = l.level === s.level ? topics : liveTopics(structure, l.level).map((t) => t.name);
+      const at = l.level === s.level ? topicIndex : -1;
+      return {
+        level: l.level,
+        title: l.title,
+        state,
+        topics: names.map((name, i) => {
+          const tState = state === "cleared" || (state === "current" && i < at) ? "cleared" : state === "current" && i === at ? "current" : "not-started";
+          const codes = topicSteps(structure, l.level, name).map((x) => ({ code: x.code, label: STEP_SHORT[x.code] ?? x.label }));
+          const raise = (item: string, idx: number) => {
+            const key = `${l.level}|${item}`;
+            if (idx >= 0 && idx > (best.get(key) ?? -1)) best.set(key, idx);
+          };
+          for (const it of interactions) {
+            if (it.level !== l.level) continue;
+            for (const [item, step] of Object.entries(it.stepsReached)) raise(item, codes.findIndex((c) => c.code === stepCode(step)));
+            // Older rounds often have no "steps reached": when a round covered just this topic, its
+            // questions' step tags (2.1, 3.1, …) say how far it went.
+            if (it.topics.length === 1 && it.topics[0] === name) {
+              const top = Math.max(-1, ...it.questions.map((q) => codes.findIndex((c) => c.code === stepCode(q.step))));
+              raise(name, top);
+              if (it.subtopics.length === 1) raise(it.subtopics[0], top);
+            }
+          }
+          // Steps are filled up to the best step any round logged (for a topic: its own rounds and its
+          // subtopics'). Only a topic cleared with no step logged anywhere (e.g. moved on by promotion)
+          // shows all done; the student's current step is marked when it's beyond what was logged.
+          const subsOfTopic = subtopicNames(structure, l.level, name);
+          const stepsFor = (item: string, itemState: StepState | "cleared", isNow: boolean): { steps: ExploreStep[]; stepsNote: string | null } => {
+            const now = isNow ? codes.findIndex((c) => c.code === stepCode(s.step)) : -1;
+            const keys = item === name ? [name, ...subsOfTopic] : [item];
+            const reached = Math.max(-1, ...keys.map((k) => best.get(`${l.level}|${k}`) ?? -1));
+            // Cleared, but no round says which step it reached: don't guess.
+            const unknown = reached < 0 && now < 0 && (itemState === "cleared" || itemState === "done");
+            return {
+              steps: codes.map((c, j) => ({ ...c, state: j <= reached || (now >= 0 && j < now) ? "done" : j === now ? "now" : "todo" })),
+              stepsNote: unknown && codes.length ? (keys.some(logged) ? "Cleared · steps weren't recorded in its rounds" : "Cleared · no rounds logged") : null,
+            };
+          };
+          function logged(item: string) {
+            return interactions.some((it) => it.level === l.level && (it.topics.includes(item) || it.subtopics.includes(item) || item in it.stepsReached));
+          }
+          const subs = subtopicNames(structure, l.level, name);
+          const subNow = tState === "current" ? subs.indexOf(s.subtopic ?? "") : -1;
+          return {
+            name,
+            state: tState === "not-started" && logged(name) ? "covered" : tState,
+            ...stepsFor(name, tState === "cleared" ? "cleared" : "todo", tState === "current" && !subs.length),
+            subtopics: subs.map((sub, j) => {
+              const byPosition: StepState = tState === "cleared" || (tState === "current" && subNow > j) ? "done" : tState === "current" && subNow === j ? "now" : "todo";
+              const subState: StepState = byPosition === "todo" && logged(sub) ? "started" : byPosition;
+              return { name: sub, state: subState, ...stepsFor(sub, byPosition, byPosition === "now") };
+            }),
+          };
+        }),
+      };
+    });
+    return {
+      level: s.level,
+      topic: s.topic,
+      subtopic: s.subtopic,
+      levels,
+      rounds: interactions.map((it) => ({
+        id: it.id,
+        date: formatDate(it.date),
+        round: it.round,
+        by: it.takenBy,
+        status: STATUS_LABEL[it.status],
+        rating: it.rating,
+        level: it.level,
+        topics: it.topics,
+        subtopics: it.subtopics,
+        reached: Object.fromEntries(Object.entries(it.stepsReached).map(([k, v]) => [k, stepCode(v)])),
+        questions: it.questions.map((q) => ({ title: q.title, tag: q.offRoadmap ? "Off-roadmap" : (q.step ?? "") })),
+      })),
+    };
+  })();
+
   const progress: StudentDetailShape["progress"] = {
+    explore,
     level: s.level,
     topic: s.topic,
     subtopic: s.subtopic,
@@ -204,7 +329,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
       return { code, label: STEP_SHORT[code] ?? "", state: i < currentStep ? "done" : i === currentStep ? "now" : "todo" };
     }) as StudentDetailShape["progress"]["steps"],
     levelHistory: [
-      ...levelChanges.rows.map((c) => ({
+      ...realLevelChanges.map((c) => ({
         change: `L${c.from_level} → L${c.to_level}`,
         date: formatDate(c.change_date),
         by: c.by ?? (c.source === "backfill" ? "From interactions" : "—"),
@@ -226,6 +351,9 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     rating: it.rating,
     questions: it.questions.map((q) => q.title + (q.offRoadmap ? " (off-roadmap)" : q.step ? ` (${q.step})` : "")).join(", ") || it.tweakedQuestions || "—",
     stepsReached: Object.entries(it.stepsReached).map(([k, v]) => `${k}: ${v}`).join(", ") || "—",
+    /** The same, as lists, for the interactions panel. */
+    questionList: it.questions.map((q) => ({ title: q.title, tag: q.offRoadmap ? "Off-roadmap" : q.step || "" })),
+    stepList: Object.entries(it.stepsReached).map(([k, v]) => [k, String(v)] as [string, string]),
     performedWell: it.performedWell || "—",
     improvementAreas: it.improvementAreas || "—",
     actionItems: it.actionItems || "—",
@@ -335,6 +463,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     interactions: items,
     tests: { list: [], recurringAreas: [], passMark: 20, max: 50, markLabels: [] },
     contests: {
+      contestId: contest.contestId,
       handle: s.lcHandle,
       rating: s.lcRating,
       attended: contest.attended,
@@ -358,7 +487,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
 
 async function loadContests(niatId: string) {
   const db = getDb();
-  const empty = { attended: 0, scanned: 0, absentStreak: 0, bestGlobal: null, bestCollege: null, avgSolved: null, checkedOn: null, results: [], tags: [] };
+  const empty = { contestId: null, attended: 0, scanned: 0, absentStreak: 0, bestGlobal: null, bestCollege: null, avgSolved: null, checkedOn: null, results: [], tags: [] };
   const { rows } = await db.query<{
     id: number;
     checked: string | null;
@@ -401,6 +530,7 @@ async function loadContests(niatId: string) {
     ),
   ]);
   return {
+    contestId: c.id,
     attended: c.attended ?? 0,
     scanned: c.scanned ?? 0,
     absentStreak: c.absent_streak ?? 0,
@@ -426,6 +556,7 @@ async function loadContests(niatId: string) {
 }
 
 type ContestBlock = {
+  contestId: number | null;
   attended: number;
   scanned: number;
   absentStreak: number;

@@ -264,7 +264,7 @@ function Details({ entry: e, id }: { entry: HistoryEntry; id: string }) {
         {e.meetRecording ? (
           <a href={e.meetRecording} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 font-semibold text-primary hover:bg-muted">
             <Video aria-hidden="true" className="size-3.5" />
-            Meet recording
+            Recording
           </a>
         ) : null}
         {e.codeRoom ? (

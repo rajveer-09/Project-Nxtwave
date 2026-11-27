@@ -18,8 +18,12 @@ export const CONTEST_SERVICE: ServiceConfig = {
   secretEnv: "CONTEST_JWT_SECRET",
   upstreamPrefix: "/api",
   sample: contestSample,
-  // The contest service lets any admin request a scan; in NxtOne only the super admin rescans
-  // (the worker runs on one laptop and talks to LeetCode, so scans are kept deliberate).
-  guard: (method, path, user) =>
-    method === "POST" && path.length === 2 && path[0] === "admin" && path[1] === "scans" && user.role !== "owner" ? "Only the super admin can rescan a contest." : null,
+  // Everyone else is read-only here (staff without a NxtRank login are viewers there, and a viewer
+  // may still queue a scan). The contest service lets any admin request a scan; in NxtOne only the
+  // super admin rescans (the worker runs on one laptop and talks to LeetCode, so scans are deliberate).
+  guard: (method, path, user) => {
+    if (method === "GET" || method === "HEAD") return null;
+    if (path.length === 2 && path[0] === "admin" && path[1] === "scans") return user.role === "owner" ? null : "Only the super admin can rescan a contest.";
+    return user.role === "owner" || user.role === "admin" ? null : "Only admins can change contest data.";
+  },
 };

@@ -25,6 +25,7 @@ import { getRoster, getRosterStudent, usingSampleData } from "@/common/data/rost
 import { buildStudentDetail } from "@/common/sample-data/student-detail";
 import { latestTestTotals } from "@/modules/tests/data";
 import { InteractionsTable } from "@/modules/students/components/interactions-table";
+import { LogSnapshot } from "@/modules/students/components/log-snapshot";
 
 export const metadata = { title: "Log interaction" };
 
@@ -50,7 +51,10 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
 
   // What this person logged for students who aren't theirs (their own work, so they may see it).
   // Same table as Today's interactions (with Inspect, which opens entries you took for anyone's student).
-  const forOthers = await listInteractions({ takenBy: user.name, othersOnly: true, limit: RECENT_FOR_OTHERS });
+  // Only for those whose Interactions page lists just their own students: admins and senior
+  // instructors see everyone's there already, so for them this would repeat it.
+  const seesAll = user.role === "owner" || user.role === "admin" || user.role === "senior_instructor";
+  const forOthers = seesAll ? [] : await listInteractions({ takenBy: user.name, othersOnly: true, limit: RECENT_FOR_OTHERS });
   const recent = forOthers.length ? (
     <section aria-labelledby="for-others-h" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -89,7 +93,11 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
   const [questionBank, structure] = await Promise.all([loadQuestionBank(), getStructure()]);
   const isMine = canLogFor(user, student);
   const instructors = isMine ? [...new Set((await getRoster()).map((s) => s.instructor).filter((name) => name !== "Unassigned"))].sort() : [user.name];
-  const latestTest = !isMine ? null : usingSampleData() ? (buildStudentDetail(student).tests.list.at(-1)?.total ?? null) : ((await latestTestTotals([student.niatId])).get(student.niatId) ?? null);
+  // The latest weekly test and every interaction, for the snapshot above the form (any student).
+  const [latestTest, history] = await Promise.all([
+    usingSampleData() ? Promise.resolve(buildStudentDetail(student).tests.list.at(-1)?.total ?? null) : latestTestTotals([student.niatId]).then((m) => m.get(student.niatId) ?? null),
+    listInteractions({ niatId: student.niatId }),
+  ]);
   const formStudent: FormStudent = isMine ? fullFormStudent(student, latestTest) : {
     niatId: student.niatId,
     name: student.name,
@@ -112,6 +120,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
         {student.subtopic ? ` › ${student.subtopic}` : ""}.{" "}
         {isMine ? "One of your students." : "Saved with you as the person who took it; their instructor sees it in the student's history."}
       </p>
+      <LogSnapshot student={student} latestTest={latestTest} interactions={history} />
       <div className="flex flex-wrap items-start gap-5">
         <InteractionForm
           key={student.niatId}
