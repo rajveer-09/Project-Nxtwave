@@ -6,7 +6,6 @@ package seed
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"math/rand/v2"
@@ -64,17 +63,11 @@ type Result struct {
 
 // Run seeds the demo data in one transaction. today is the IST date; marks
 // are created up to the day before it, so today is left for marking.
-func Run(ctx context.Context, pool *pgxpool.Pool, ownerEmail string, today time.Time) (Result, error) {
-	if ownerEmail == "" {
-		return Result{}, errors.New("OWNER_EMAIL must be set: the seed creates it as the owner admin for dev login")
-	}
+func Run(ctx context.Context, pool *pgxpool.Pool, today time.Time) (Result, error) {
 	var res Result
 	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
 
-		if _, err := q.UpsertOwner(ctx, ownerEmail); err != nil {
-			return fmt.Errorf("owner admin: %w", err)
-		}
 		for _, d := range degrees {
 			if err := q.InsertDegreeIfMissing(ctx, db.InsertDegreeIfMissingParams{Code: d.code, Name: d.name}); err != nil {
 				return fmt.Errorf("degree %s: %w", d.code, err)

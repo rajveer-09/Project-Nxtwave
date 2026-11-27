@@ -91,14 +91,6 @@ func (s *Server) rangeSummary(w http.ResponseWriter, r *http.Request, st db.GetS
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// GET /api/public/students/{niat_id}/range?from=&to=: the student's counts
-// for those dates, within the current term.
-func (s *Server) handlePublicRange(w http.ResponseWriter, r *http.Request) {
-	if st, ok := s.loadStudent(w, r, false); ok {
-		s.rangeSummary(w, r, st, true)
-	}
-}
-
 // GET /api/admin/students/{niat_id}/range?from=&to=: the same, any dates and status.
 func (s *Server) handleAdminStudentRange(w http.ResponseWriter, r *http.Request) {
 	if st, ok := s.loadStudent(w, r, true); ok {

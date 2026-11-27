@@ -177,7 +177,7 @@ Checks (from the root): `npm run lint` (the app and every module frontend), `npm
 
 ### Service proxies
 
-`/api/attendance/*` and `/api/contest/*` forward to the Go and NxtRank services once `ATTENDANCE_API_ORIGIN`/`ATTENDANCE_JWT_SECRET` and `CONTEST_API_ORIGIN`/`CONTEST_JWT_SECRET` are set. In development, without them, they answer from sample services that follow the real contracts.
+`/api/attendance/*` and `/api/contest/*` forward to the Go and NxtRank services once `ATTENDANCE_API_ORIGIN`/`ATTENDANCE_JWT_SECRET` and `CONTEST_API_ORIGIN`/`CONTEST_JWT_SECRET` are set. In development, without them, they answer from sample services that follow the real contracts. Every service trusts NxtOne's identity token and has no sign-in of its own; the attendance service maps NxtOne roles: owner (everything), admin (everything but Owner-only routes), and instructors, senior instructors and success coaches (marking halls and reading the calendar, terms and internships; success coaches also read analytics).
 
 ## Database
 
@@ -225,10 +225,10 @@ Everything runs in Singapore, next to the database.
 | Part | Where | Settings |
 |---|---|---|
 | Database | Supabase (Postgres) | Apps connect through the transaction pooler (`aws-0-ap-southeast-1.pooler.supabase.com:6543`) as their own service roles |
-| Web app | Vercel, Root Directory `platform/web` (`vercel.json`: `sin1`, installs the workspace from the repo root) | `WEB_DATABASE_URL`, `APP_BASE_URL`, `GOOGLE_ALLOWED_DOMAIN`, `INTERACTIONS_API_ORIGIN` + `INTERACTIONS_JWT_SECRET`, `CONTEST_API_ORIGIN` + `CONTEST_JWT_SECRET` |
-| Interactions API, contest API | Render, from the Blueprint `render.yaml` (one Docker web service each) | Listed at the top of `render.yaml` |
+| Web app | Vercel, Root Directory `platform/web` (`vercel.json`: `sin1`, installs the workspace from the repo root) | `WEB_DATABASE_URL`, `APP_BASE_URL`, `GOOGLE_ALLOWED_DOMAIN`, `INTERACTIONS_API_ORIGIN` + `INTERACTIONS_JWT_SECRET`, `CONTEST_API_ORIGIN` + `CONTEST_JWT_SECRET`, `ATTENDANCE_API_ORIGIN` + `ATTENDANCE_JWT_SECRET` |
+| Interactions, contest and attendance APIs | Render, from the Blueprint `render.yaml` (one Docker web service each) | Listed at the top of `render.yaml` |
 
-Each `*_JWT_SECRET` on Vercel equals that service's `IDENTITY_JWT_SECRET` on Render. Node connections to the pooler need `?uselibpqcompat=true&sslmode=require`; the contest API's need `?sslmode=require`. The root `Dockerfile` still runs all three in one container, for a single-host deploy.
+Each `*_JWT_SECRET` on Vercel equals that service's `IDENTITY_JWT_SECRET` on Render. Node connections to the pooler need `?uselibpqcompat=true&sslmode=require`; the contest API's need `?sslmode=require`; the attendance API (Go, prepared statements) uses the session pooler (`:5432`) with `?sslmode=require`. The root `Dockerfile` still runs the web app, interactions and contest in one container, for a single-host deploy.
 
 Code rooms sync live over a WebSocket to the interactions service (`modules/interactions/backend/src/rooms`, `/rooms/socket`); the web app hands out a short-lived ticket (`/api/rooms/[id]/ticket`) and falls back to polling when sockets are off (`CODE_ROOM_SOCKETS=off` on Vercel) or unreachable.
 

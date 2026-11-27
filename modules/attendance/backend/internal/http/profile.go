@@ -87,13 +87,6 @@ func toStudentJSON(s db.GetStudentRow) studentJSON {
 	}
 }
 
-// toPublicStudentJSON is what a student sees about themselves: no Level.
-func toPublicStudentJSON(s db.GetStudentRow) studentJSON {
-	out := toStudentJSON(s)
-	out.Level = ""
-	return out
-}
-
 func toTermJSON(r rules) *termJSON {
 	if !r.has {
 		return nil

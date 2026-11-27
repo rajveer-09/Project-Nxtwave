@@ -21,13 +21,9 @@ type Querier interface {
 	CountMarksByDateAndDegree(ctx context.Context, arg CountMarksByDateAndDegreeParams) ([]CountMarksByDateAndDegreeRow, error)
 	CountMarksForStudents(ctx context.Context, niatIds []string) (int64, error)
 	CountStudentMarks(ctx context.Context, niatID string) (int64, error)
-	// Returns no row when the email is already taken.
-	CreateAdmin(ctx context.Context, arg CreateAdminParams) (Admin, error)
 	// Admin form: add one student. Returns no row when the NIAT ID already exists.
 	CreateStudent(ctx context.Context, arg CreateStudentParams) (Student, error)
 	CreateTerm(ctx context.Context, arg CreateTermParams) (Term, error)
-	// Marks and imports they made keep their values; updated_by and uploaded_by become NULL.
-	DeleteAdmin(ctx context.Context, id int64) (int64, error)
 	DeleteCalendarEntriesByKeys(ctx context.Context, arg DeleteCalendarEntriesByKeysParams) (int64, error)
 	DeleteCalendarRange(ctx context.Context, arg DeleteCalendarRangeParams) (int64, error)
 	// Removes one category's marks in a date range; marks of any other category
@@ -42,9 +38,9 @@ type Querier interface {
 	// Permanent bulk delete; marks and remarks go with the students (ON DELETE CASCADE).
 	DeleteStudentsByIDs(ctx context.Context, niatIds []string) ([]string, error)
 	DeleteTerm(ctx context.Context, id int64) (int64, error)
-	EndSessions(ctx context.Context, id int64) error
-	GetAdminByEmail(ctx context.Context, email string) (Admin, error)
-	GetAdminByID(ctx context.Context, id int64) (Admin, error)
+	// NxtOne sign-in: the row that records what this person changes (updated_by, created_by, ...),
+	// found by email or created. Access comes from NxtOne's identity token, never from role or active here.
+	EnsureAdmin(ctx context.Context, arg EnsureAdminParams) (int64, error)
 	GetMentorByName(ctx context.Context, arg GetMentorByNameParams) (Mentor, error)
 	GetPeriod(ctx context.Context, id int64) (StudentPeriod, error)
 	GetSetting(ctx context.Context, key string) (Setting, error)
@@ -60,9 +56,6 @@ type Querier interface {
 	// Adds marks only on days that have none; existing marks are left as they are.
 	InsertMarksKeepExisting(ctx context.Context, arg InsertMarksKeepExistingParams) (int64, error)
 	InsertMentorIfMissing(ctx context.Context, arg InsertMentorIfMissingParams) error
-	// Startup: make sure OWNER_EMAIL exists. Never changes an existing admin
-	// (role, status or password), so in-app changes survive restarts.
-	InsertOwnerIfMissing(ctx context.Context, email string) error
 	InsertPeriod(ctx context.Context, arg InsertPeriodParams) (StudentPeriod, error)
 	// Batched forms of InsertPeriod, UpdatePeriod and CancelPeriod for imports:
 	// sent together in one round trip, each still failing on a missing row.
@@ -73,7 +66,6 @@ type Querier interface {
 	InsertTermIfMissing(ctx context.Context, arg InsertTermIfMissingParams) error
 	ListActivePeriodsForStudents(ctx context.Context, niatIds []string) ([]StudentPeriod, error)
 	ListActiveStudentsInSection(ctx context.Context, arg ListActiveStudentsInSectionParams) ([]Student, error)
-	ListAdmins(ctx context.Context) ([]Admin, error)
 	ListCalendarDays(ctx context.Context, arg ListCalendarDaysParams) ([]CalendarDay, error)
 	ListCalendarDeletions(ctx context.Context) ([]ListCalendarDeletionsRow, error)
 	// Every calendar entry with where it came from. Batch and admin details are
@@ -106,9 +98,6 @@ type Querier interface {
 	// without a sheet position go last, by section and name.
 	ListStudentsForExport(ctx context.Context) ([]ListStudentsForExportRow, error)
 	ListTerms(ctx context.Context) ([]Term, error)
-	// Taken inside a transaction before changing any role or status, so two
-	// concurrent changes cannot both remove the last active Owner.
-	LockActiveOwners(ctx context.Context) ([]int64, error)
 	LockCalendarDeletion(ctx context.Context, id int64) (LockCalendarDeletionRow, error)
 	// Serialises period changes per student inside a transaction.
 	LockStudents(ctx context.Context, niatIds []string) ([]string, error)
@@ -121,24 +110,11 @@ type Querier interface {
 	RestoreDeletedEntries(ctx context.Context, deletionID int64) ([]RestoreDeletedEntriesRow, error)
 	// Public name search. Returns no NIAT IDs.
 	SearchActiveStudentsByName(ctx context.Context, arg SearchActiveStudentsByNameParams) ([]SearchActiveStudentsByNameRow, error)
-	// Fills the display name from the Google profile on first sign-in.
-	SetAdminNameIfEmpty(ctx context.Context, arg SetAdminNameIfEmptyParams) error
 	SetCalendarDeletionRestored(ctx context.Context, arg SetCalendarDeletionRestoredParams) error
 	SetImportBatchSummary(ctx context.Context, arg SetImportBatchSummaryParams) error
-	// `server create-owner`: create or promote the configured Owner and set the
-	// password. Ends any existing sessions for that admin.
-	SetOwnerPassword(ctx context.Context, arg SetOwnerPasswordParams) (Admin, error)
-	// `server set-password EMAIL`: emergency reset from the console.
-	SetPasswordByEmail(ctx context.Context, arg SetPasswordByEmailParams) (Admin, error)
-	// Owner reset (must_change = true) or own change (false). Ends existing sessions.
-	SetPasswordByID(ctx context.Context, arg SetPasswordByIDParams) (Admin, error)
 	// Student import: remember each row's position in the file (any action but
 	// error), so the export can follow the sheet's order. updated_at is left alone.
 	SetStudentSheetOrders(ctx context.Context, arg SetStudentSheetOrdersParams) error
-	UpdateAdminAccess(ctx context.Context, arg UpdateAdminAccessParams) (Admin, error)
-	// Owner edit of name and email. A changed email ends that admin's sessions.
-	// A taken email fails on the unique constraint.
-	UpdateAdminProfile(ctx context.Context, arg UpdateAdminProfileParams) (Admin, error)
 	// An admin's correction: the entries become manual entries (an imported-entry
 	// reset will no longer remove them) and the edit is recorded.
 	UpdateCalendarEntriesByKeys(ctx context.Context, arg UpdateCalendarEntriesByKeysParams) (int64, error)
@@ -156,8 +132,6 @@ type Querier interface {
 	// the stored one keeps the stored category, so re-saving a day does not
 	// drop its INTERNSHIP or REGISTRATION_PENDING tag; a changed status clears it.
 	UpsertMarks(ctx context.Context, arg UpsertMarksParams) (int64, error)
-	// Makes OWNER_EMAIL an active owner on startup. Never demotes anyone else.
-	UpsertOwner(ctx context.Context, email string) (Admin, error)
 	// Student import: insert new IDs, update existing ones. NULL optional values
 	// (blank cells) keep what is stored; required fields always overwrite.
 	UpsertStudentFromImport(ctx context.Context, arg UpsertStudentFromImportParams) error

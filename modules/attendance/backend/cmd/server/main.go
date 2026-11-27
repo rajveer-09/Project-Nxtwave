@@ -6,11 +6,9 @@
 //	server migrate down-all  roll back every migration
 //	server seed              load demo data (idempotent)
 //	server seed --clear-demo delete N99 demo students and their marks
-//	server create-owner      one-time setup: set the OWNER_EMAIL admin's password (prompted)
-//	server create-owner --reset  replace the Owner's password
-//	server set-password EMAIL    emergency password reset for an existing admin (prompted)
 //
-// With APP_ENV=production, seed and migrate down/down-all are refused.
+// With APP_ENV=production, seed and migrate down/down-all are refused. There is no sign-in here:
+// NxtOne signs every request with an identity token (IDENTITY_JWT_SECRET).
 package main
 
 import (
@@ -28,7 +26,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"attendance-dashboard/api/internal/auth"
 	"attendance-dashboard/api/internal/config"
 	"attendance-dashboard/api/internal/db"
 	apihttp "attendance-dashboard/api/internal/http"
@@ -59,18 +56,12 @@ func run(log *slog.Logger, args []string) error {
 		switch {
 		case len(args) == 2 && args[0] == "migrate":
 			return runMigrate(log, cfg.DatabaseURL, migrations.Direction(args[1]))
-		case len(args) == 1 && args[0] == "create-owner":
-			return runCreateOwner(cfg, false)
-		case len(args) == 2 && args[0] == "create-owner" && args[1] == "--reset":
-			return runCreateOwner(cfg, true)
-		case len(args) == 2 && args[0] == "set-password":
-			return runSetPassword(cfg, args[1])
 		case len(args) == 1 && args[0] == "seed":
 			return runSeed(log, cfg, false)
 		case len(args) == 2 && args[0] == "seed" && args[1] == "--clear-demo":
 			return runSeed(log, cfg, true)
 		}
-		return fmt.Errorf("unknown command %q (want: migrate up|down|down-all, seed [--clear-demo], create-owner [--reset], set-password EMAIL)", strings.Join(args, " "))
+		return fmt.Errorf("unknown command %q (want: migrate up|down|down-all, seed [--clear-demo])", strings.Join(args, " "))
 	}
 
 	if os.Getenv("MIGRATE_ON_START") == "true" {
@@ -97,33 +88,14 @@ func serve(log *slog.Logger, cfg config.Config) error {
 	defer pool.Close()
 	queries := db.New(pool)
 
-	if cfg.OwnerEmail != "" {
-		// Only inserts a missing Owner; never changes an existing admin or password.
-		if err := queries.InsertOwnerIfMissing(ctx, cfg.OwnerEmail); err != nil {
-			return fmt.Errorf("ensure owner admin (are migrations applied?): %w", err)
-		}
-	} else {
-		log.Warn("OWNER_EMAIL is not set; no one can sign in until an admin exists")
-	}
-
-	var google auth.Provider
-	if cfg.GoogleConfigured() {
-		google = auth.NewGoogle(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL())
-	} else {
-		log.Warn("Google sign-in is not configured; /api/auth/google/login will answer 503")
-	}
-
 	srv := &http.Server{
 		Addr: ":" + cfg.Port,
 		Handler: apihttp.NewServer(apihttp.Deps{
-			Log:           log,
-			Store:         queries,
-			Pool:          pool,
-			Google:        google,
-			Signer:        auth.NewSigner(cfg.SessionSecret),
-			AppBaseURL:    cfg.AppBaseURL,
-			SecureCookies: cfg.SecureCookies(),
-			Location:      ist,
+			Log:            log,
+			Store:          queries,
+			Pool:           pool,
+			IdentitySecret: []byte(cfg.IdentitySecret),
+			Location:       ist,
 		}).Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -167,12 +139,12 @@ func runSeed(log *slog.Logger, cfg config.Config, clearDemo bool) error {
 		log.Info("demo data cleared (N99 students only)", "students_deleted", students, "marks_deleted", marks)
 		return nil
 	}
-	res, err := seed.Run(ctx, pool, cfg.OwnerEmail, stats.TodayIST(time.Now()))
+	res, err := seed.Run(ctx, pool, stats.TodayIST(time.Now()))
 	if err != nil {
 		return err
 	}
 	log.Info("seed done", "students_inserted", res.StudentsInserted, "marks_inserted", res.MarksInserted,
-		"marked_until", stats.DateKey(res.MarkedUntil), "owner_email", cfg.OwnerEmail)
+		"marked_until", stats.DateKey(res.MarkedUntil))
 	return nil
 }
 

@@ -4,31 +4,29 @@ package config
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"slices"
 	"strings"
 
 	"github.com/joho/godotenv"
+
+	"attendance-dashboard/api/internal/auth"
 )
 
 const (
 	// localDatabaseURL matches the Postgres service in docker-compose.yml.
 	localDatabaseURL = "postgres://attendance:attendance@localhost:5433/attendance?sslmode=disable"
-	// devSessionSecret keeps local sessions valid across restarts. Never used in production.
-	devSessionSecret    = "dev-only-insecure-session-secret-do-not-use"
-	minSessionSecretLen = 32
+	// devIdentitySecret matches ATTENDANCE_JWT_SECRET in infra/docker-compose.yml. Never used in production.
+	devIdentitySecret = "local-dev-attendance-identity-secret-0001"
 )
 
 type Config struct {
-	Env                string // "development" or "production"
-	DatabaseURL        string
-	Port               string
-	AppBaseURL         string
-	SessionSecret      string
-	GoogleClientID     string
-	GoogleClientSecret string
-	OwnerEmail         string
+	Env         string // "development" or "production"
+	DatabaseURL string
+	Port        string
+	// IdentitySecret verifies NxtOne's identity tokens: the same value as ATTENDANCE_JWT_SECRET in
+	// NxtOne (platform/web). People sign in to NxtOne only.
+	IdentitySecret string
 }
 
 func (c Config) IsProduction() bool { return c.Env == "production" }
@@ -55,14 +53,10 @@ func fromEnv(env string, getenv func(string) string) (Config, error) {
 	get := func(key string) string { return strings.TrimSpace(getenv(key)) }
 
 	cfg := Config{
-		Env:                env,
-		DatabaseURL:        get("DATABASE_URL"),
-		Port:               get("PORT"),
-		AppBaseURL:         strings.TrimRight(get("APP_BASE_URL"), "/"),
-		SessionSecret:      get("SESSION_SECRET"),
-		GoogleClientID:     get("GOOGLE_CLIENT_ID"),
-		GoogleClientSecret: get("GOOGLE_CLIENT_SECRET"),
-		OwnerEmail:         strings.ToLower(get("OWNER_EMAIL")),
+		Env:            env,
+		DatabaseURL:    get("DATABASE_URL"),
+		Port:           get("PORT"),
+		IdentitySecret: get("IDENTITY_JWT_SECRET"),
 	}
 	if cfg.Port == "" {
 		cfg.Port = "8080"
@@ -71,10 +65,8 @@ func fromEnv(env string, getenv func(string) string) (Config, error) {
 	if cfg.IsProduction() {
 		var missing []string
 		for key, val := range map[string]string{
-			"DATABASE_URL":   cfg.DatabaseURL,
-			"APP_BASE_URL":   cfg.AppBaseURL,
-			"SESSION_SECRET": cfg.SessionSecret,
-			"OWNER_EMAIL":    cfg.OwnerEmail,
+			"DATABASE_URL":        cfg.DatabaseURL,
+			"IDENTITY_JWT_SECRET": cfg.IdentitySecret,
 		} {
 			if val == "" {
 				missing = append(missing, key)
@@ -88,43 +80,13 @@ func fromEnv(env string, getenv func(string) string) (Config, error) {
 		if cfg.DatabaseURL == "" {
 			cfg.DatabaseURL = localDatabaseURL
 		}
-		if cfg.AppBaseURL == "" {
-			cfg.AppBaseURL = "http://localhost:3000"
-		}
-		if cfg.SessionSecret == "" {
-			cfg.SessionSecret = devSessionSecret
+		if cfg.IdentitySecret == "" {
+			cfg.IdentitySecret = devIdentitySecret
 		}
 	}
 
-	if len(cfg.SessionSecret) < minSessionSecretLen {
-		return Config{}, fmt.Errorf("SESSION_SECRET must be at least %d characters", minSessionSecretLen)
-	}
-	u, err := url.Parse(cfg.AppBaseURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") {
-		return Config{}, fmt.Errorf("APP_BASE_URL must be an origin like https://example.com, got %q", cfg.AppBaseURL)
-	}
-	if cfg.IsProduction() && u.Scheme != "https" {
-		return Config{}, errors.New("APP_BASE_URL must use https in production")
+	if len(cfg.IdentitySecret) < auth.MinSecretLen {
+		return Config{}, fmt.Errorf("IDENTITY_JWT_SECRET must be at least %d characters", auth.MinSecretLen)
 	}
 	return cfg, nil
-}
-
-func (c Config) GoogleConfigured() bool {
-	return c.GoogleClientID != "" && c.GoogleClientSecret != ""
-}
-
-// SecureCookies is false only for a plain-http local APP_BASE_URL, so the
-// session cookie still works in browsers that refuse Secure cookies over http.
-func (c Config) SecureCookies() bool {
-	u, err := url.Parse(c.AppBaseURL)
-	if err != nil {
-		return true
-	}
-	local := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"
-	return u.Scheme != "http" || !local
-}
-
-// GoogleRedirectURL is the OAuth callback, reached through the web app's /api rewrite.
-func (c Config) GoogleRedirectURL() string {
-	return c.AppBaseURL + "/api/auth/google/callback"
 }

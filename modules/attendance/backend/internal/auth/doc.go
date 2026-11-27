@@ -1,3 +1,2 @@
-// Package auth holds admin sign-in: Google OAuth with server-side ID token
-// verification, and stateless HMAC-signed session cookies.
+// Package auth verifies NxtOne's identity tokens: the only sign-in this service accepts.
 package auth

@@ -14,27 +14,6 @@ import (
 	"attendance-dashboard/api/internal/stats"
 )
 
-// GET /api/public/students/{niat_id}: profile, term summary and monthly summaries.
-func (s *Server) handlePublicProfile(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.loadStudent(w, r, false)
-	if !ok {
-		return
-	}
-	resp, err := s.profile(r.Context(), st, toPublicStudentJSON(st), 0, false)
-	if err != nil {
-		s.internalError(w, "profile", err)
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-// GET /api/public/students/{niat_id}/month?ym=YYYY-MM: the mark for each day.
-func (s *Server) handlePublicMonth(w http.ResponseWriter, r *http.Request) {
-	if st, ok := s.loadStudent(w, r, false); ok {
-		s.month(w, r, st)
-	}
-}
-
 // lowThreshold is the default "low attendance" line (75%).
 const lowThreshold = 75
 

@@ -62,7 +62,7 @@ services:
       MIGRATE_ON_START: "true"
       DATABASE_URL: postgres://attendance_svc:local-attendance@postgres:5432/studenthub?sslmode=disable
       PORT: "8080"
-      APP_BASE_URL: http://localhost:3000
+      IDENTITY_JWT_SECRET: local-dev-attendance-identity-secret-0001
     ports: ["8080:8080"]
 
   contest-api:
@@ -128,13 +128,13 @@ services:
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
-      # The interactions service already verifies identity tokens.
+      # The interactions and attendance services verify identity tokens.
       INTERACTIONS_API_ORIGIN: http://interactions-api:8090
       INTERACTIONS_JWT_SECRET: local-dev-interactions-identity-secret-01
-      # Uncomment once the services verify identity tokens. Until then the web app
-      # answers /api/attendance and /api/contest from its built-in sample services.
-      # ATTENDANCE_API_ORIGIN: http://attendance-api:8080
-      # ATTENDANCE_JWT_SECRET: local-dev-attendance-identity-secret-0001
+      ATTENDANCE_API_ORIGIN: http://attendance-api:8080
+      ATTENDANCE_JWT_SECRET: local-dev-attendance-identity-secret-0001
+      # Uncomment to use the contest service; until then the web app answers /api/contest
+      # from its built-in sample service.
       # CONTEST_API_ORIGIN: http://contest-api:8000
       # CONTEST_JWT_SECRET: local-dev-contest-identity-secret-00000001
       # Real sign-in against core.staff (create a user with `npm run create-staff`):

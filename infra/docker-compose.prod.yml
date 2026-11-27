@@ -80,8 +80,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # The web app reads attendance straight from the database until this API verifies identity
-  # tokens; then add ATTENDANCE_API_ORIGIN: http://attendance-api:8080 to the web service.
+  # With this profile, add ATTENDANCE_API_ORIGIN: http://attendance-api:8080 to the web service;
+  # without it the web app reads attendance straight from the database and saves hall marks only.
   attendance-api:
     build: ../modules/attendance/backend
     profiles: ["attendance"]

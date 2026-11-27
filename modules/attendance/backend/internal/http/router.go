@@ -4,13 +4,13 @@ package http
 import (
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"attendance-dashboard/api/internal/auth"
 	"attendance-dashboard/api/internal/db"
 )
 
@@ -22,37 +22,32 @@ type Deps struct {
 	Store Store
 	// Pool runs transactions (saving marks). Unit tests that never save may leave it nil.
 	Pool *pgxpool.Pool
-	// Google is nil when sign-in is not configured (local dev without credentials).
-	Google        auth.Provider
-	Signer        *auth.Signer
-	AppBaseURL    string
-	SecureCookies bool
-	Location      *time.Location // Asia/Kolkata
+	// IdentitySecret verifies NxtOne's identity tokens (= ATTENDANCE_JWT_SECRET in NxtOne).
+	IdentitySecret []byte
+	Location       *time.Location // Asia/Kolkata
 }
 
 type Server struct {
-	log           *slog.Logger
-	store         Store
-	pool          *pgxpool.Pool
-	google        auth.Provider
-	signer        *auth.Signer
-	appBaseURL    string
-	secureCookies bool
-	loc           *time.Location
-	now           func() time.Time
+	log            *slog.Logger
+	store          Store
+	pool           *pgxpool.Pool
+	identitySecret []byte
+	loc            *time.Location
+	now            func() time.Time
+
+	idsMu sync.Mutex
+	ids   map[string]int64 // email -> attendance.admins id (adminID)
 }
 
 func NewServer(d Deps) *Server {
 	return &Server{
-		log:           d.Log,
-		store:         d.Store,
-		pool:          d.Pool,
-		google:        d.Google,
-		signer:        d.Signer,
-		appBaseURL:    d.AppBaseURL,
-		secureCookies: d.SecureCookies,
-		loc:           d.Location,
-		now:           time.Now,
+		log:            d.Log,
+		store:          d.Store,
+		pool:           d.Pool,
+		identitySecret: d.IdentitySecret,
+		loc:            d.Location,
+		now:            time.Now,
+		ids:            map[string]int64{},
 	}
 }
 
@@ -65,24 +60,9 @@ func (s *Server) Routes() http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", s.handleHealth)
 
-		r.Route("/auth", func(r chi.Router) {
-			// Google sign-in is optional and off unless GOOGLE_CLIENT_ID/SECRET are set.
-			if s.google != nil {
-				r.Get("/google/login", s.handleGoogleLogin)
-				r.Get("/google/callback", s.handleGoogleCallback)
-			}
-			r.With(RateLimitByIP(10, time.Minute)).Post("/login", s.handleLogin)
-			r.Post("/logout", s.handleLogout)
-			r.With(s.requireAdmin).Get("/me", s.handleMe)
-			r.With(RateLimitByIP(10, time.Minute), s.requireAdmin).Post("/password", s.handleChangePassword)
-		})
-
-		r.Get("/public/students/{niat_id}", s.handlePublicProfile)
-		r.Get("/public/students/{niat_id}/month", s.handlePublicMonth)
-		r.Get("/public/students/{niat_id}/range", s.handlePublicRange)
-
+		// Everything else needs NxtOne's identity token (middleware.go); people sign in to NxtOne only.
 		r.Route("/admin", func(r chi.Router) {
-			r.Use(s.requireAdmin, s.requirePasswordChanged)
+			r.Use(s.requireStaff)
 			r.Get("/students", s.handleAdminStudents)
 			r.Post("/students", s.handleCreateStudent)
 			r.Get("/students/{niat_id}", s.handleAdminStudent)
@@ -97,9 +77,9 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/internships", s.handleListInternships)
 			r.Put("/internships/{id}", s.handleUpdateInternship)
 			r.Post("/internships/{id}/cancel", s.handleCancelInternship)
-			r.With(s.requireOwner).Get("/analytics", s.handleAnalytics)
-			r.With(s.requireOwner).Get("/analytics/export.xlsx", s.handleAnalyticsExport)
-			r.With(s.requireOwner).Get("/analytics/students", s.handleAnalyticsStudents)
+			r.With(s.requireAnalytics).Get("/analytics", s.handleAnalytics)
+			r.With(s.requireAnalytics).Get("/analytics/export.xlsx", s.handleAnalyticsExport)
+			r.With(s.requireAnalytics).Get("/analytics/students", s.handleAnalyticsStudents)
 			r.Get("/halls", s.handleListHalls)
 			r.Get("/attendance/sheet", s.handleAdminSheet)
 			r.Put("/attendance", s.handleSaveAttendance)
@@ -124,15 +104,6 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/calendar/deletions/{id}", s.handleGetCalendarDeletion)
 			r.Post("/calendar/deletions/{id}/restore", s.handleRestoreCalendarDeletion)
 			r.Delete("/calendar", s.handleDeleteCalendar)
-			r.Route("/admins", func(r chi.Router) {
-				r.Use(s.requireOwner)
-				r.Get("/", s.handleListAdmins)
-				r.Post("/", s.handleCreateAdmin)
-				r.Patch("/{id}", s.handleUpdateAdmin)
-				r.Delete("/{id}", s.handleDeleteAdmin)
-				r.Post("/{id}/password", s.handleResetAdminPassword)
-				r.With(RateLimitByIP(10, time.Minute)).Post("/{id}/make-owner", s.handleMakeOwner)
-			})
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

@@ -27,3 +27,12 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+// decodeJSON reads a small JSON body (8 KB at most), or answers 400 and returns false.
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(dst); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "The request body is not valid JSON.", nil)
+		return false
+	}
+	return true
+}
