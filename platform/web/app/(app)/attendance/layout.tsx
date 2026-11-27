@@ -28,7 +28,7 @@ async function SourcePill() {
 export default function AttendanceLayout({ children }: LayoutProps<"/attendance">) {
   return (
     <>
-      <PageHeader eyebrow="Attendance" title="Attendance" actions={
+      <PageHeader eyebrow="DSA attendance" title="DSA attendance" actions={
           <Suspense fallback={null}>
             <SourcePill />
           </Suspense>

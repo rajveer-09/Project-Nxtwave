@@ -101,7 +101,7 @@ export function ExportView({ embedded = false }: { embedded?: boolean } = {}) {
           {downloadButton}
         </div>
       ) : (
-        <PageHeader eyebrow="Admin panel" title="Attendance export" description={blurb} actions={downloadButton} />
+        <PageHeader eyebrow="Admin panel" title="DSA attendance export" description={blurb} actions={downloadButton} />
       )}
 
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4" aria-label="Dates to export">

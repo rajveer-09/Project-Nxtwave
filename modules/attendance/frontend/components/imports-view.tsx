@@ -38,7 +38,7 @@ export function ImportsView() {
     <div className="flex flex-col gap-5">
       <PageHeader
         eyebrow="Admin panel"
-        title="Attendance data"
+        title="DSA attendance data"
         description="Bring sheets in or take attendance out. Imports show a preview first; nothing is saved before you confirm."
       />
       <div className="inline-flex max-w-full flex-wrap self-start rounded-lg bg-muted p-0.5" role="tablist" aria-label="Import or export">

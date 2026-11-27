@@ -28,8 +28,8 @@ export type AtRiskStudent = {
 };
 
 export const homeKpis: HomeKpi[] = [
-  { module: "Attendance", label: "Present today", value: "91.4%", sub: "792 of 866 marked · 2 halls not marked yet", delta: "+1.2 pts vs last Monday", trend: "good" },
-  { module: "Attendance", label: "Last 30 days", value: "84.7%", sub: "63 students below 75%", delta: "−0.8 pts vs previous 30 days", trend: "bad" },
+  { module: "DSA attendance", label: "Present today", value: "91.4%", sub: "792 of 866 marked · 2 halls not marked yet", delta: "+1.2 pts vs last Monday", trend: "good" },
+  { module: "DSA attendance", label: "Last 30 days", value: "84.7%", sub: "63 students below 75%", delta: "−0.8 pts vs previous 30 days", trend: "bad" },
   { module: "Interactions", label: "Logged this week", value: "142", sub: "38 students with none in 14+ days", delta: "+18 vs last week", trend: "good" },
   { module: "Contests", label: "Weekly 476 participation", value: "48%", sub: "412 of 864 verified handles", delta: "−3 pts vs Weekly 475", trend: "bad" },
 ];

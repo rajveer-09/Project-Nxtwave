@@ -132,7 +132,7 @@ export function AnalyticsView() {
       <div className="print:hidden">
         <PageHeader
           eyebrow="Admin panel"
-          title="Attendance analytics"
+          title="DSA attendance analytics"
           description="Attendance across degrees and halls, ready to share."
           actions={
             <div className="flex flex-wrap gap-2">

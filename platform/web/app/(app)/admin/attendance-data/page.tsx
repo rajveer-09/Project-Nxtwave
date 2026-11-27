@@ -12,7 +12,7 @@ import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
 import { ImportsView } from "@nxtone/attendance-ui/components/imports-view";
 
-export const metadata = { title: "Attendance data" };
+export const metadata = { title: "DSA attendance data" };
 
 async function Content() {
   await connection();

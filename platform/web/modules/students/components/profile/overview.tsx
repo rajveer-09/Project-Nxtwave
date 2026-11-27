@@ -104,7 +104,7 @@ export function Snapshot({ d }: { d: StudentDetail }) {
   const s = d.snapshot;
   const tiles = [
     {
-      label: "Attendance",
+      label: "DSA attendance",
       value: s.attendance30d === null ? "—" : `${s.attendance30d}%`,
       sub: s.attendance30d === null ? "Nothing marked in 30 days" : `Last 30 days · term ${s.attendanceTerm ?? "—"}%`,
       warn: s.attendance30d !== null && s.attendance30d < 75,
@@ -138,7 +138,7 @@ export function Snapshot({ d }: { d: StudentDetail }) {
 }
 
 const SECTIONS = [
-  ["attendance", "Attendance"],
+  ["attendance", "DSA attendance"],
   ["progress", "DSA progress"],
   ["interactions", "Interactions"],
   ["tests", "Weekly tests"],

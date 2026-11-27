@@ -16,7 +16,7 @@ import { getRoster } from "@/common/data/roster";
 import { todayIst } from "@/common/lib/dates";
 import { canMarkAttendance } from "@nxtone/attendance-ui/db-service";
 
-export const metadata = { title: "Mark attendance" };
+export const metadata = { title: "Mark DSA attendance" };
 
 async function Sheet() {
   await connection();

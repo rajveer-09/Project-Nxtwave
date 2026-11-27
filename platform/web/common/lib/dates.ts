@@ -11,6 +11,12 @@ export function todayIst(now: Date = new Date()): string {
   return new Date(now.getTime() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+/** "Good morning" before 12:00, "Good afternoon" until 17:00, then "Good evening" (India time). */
+export function greetingIst(now: Date = new Date()): string {
+  const hour = new Date(now.getTime() + 5.5 * 60 * 60 * 1000).getUTCHours();
+  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+}
+
 /** "2026-11-16" + -7 → "2026-11-09" */
 export function addDays(ymd: string, days: number): string {
   const [y, m, d] = ymd.split("-").map(Number);

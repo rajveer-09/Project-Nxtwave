@@ -17,7 +17,7 @@ export function AttendanceSection({ d, student = false }: { d: StudentDetail; st
   const a = d.attendance;
   return (
     <section id="attendance" aria-labelledby="attendance-h" className="flex scroll-mt-6 flex-col gap-3.5">
-      <SectionHeading id="attendance" title="Attendance" link={student ? undefined : { href: "/attendance", label: "Open attendance sheet" }} />
+      <SectionHeading id="attendance" title="DSA attendance" link={student ? undefined : { href: "/attendance", label: "Open attendance sheet" }} />
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-[1_1_380px] rounded-xl border border-border bg-card p-4">
           <div className="mb-3 flex items-baseline justify-between gap-2">

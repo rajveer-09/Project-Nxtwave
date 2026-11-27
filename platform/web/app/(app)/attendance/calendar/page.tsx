@@ -13,7 +13,7 @@ import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
 import { todayIst } from "@/common/lib/dates";
 
-export const metadata = { title: "Attendance calendar" };
+export const metadata = { title: "DSA attendance calendar" };
 
 async function Content() {
   await connection();

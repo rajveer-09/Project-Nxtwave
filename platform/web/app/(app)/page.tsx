@@ -11,7 +11,7 @@ import { Suspense } from "react";
 import { getSessionUser } from "@/common/auth/session";
 import { studentScope } from "@/common/auth/student-access";
 import { usingSampleData } from "@/common/data/roster";
-import { formatDate, todayIst } from "@/common/lib/dates";
+import { formatDate, greetingIst, todayIst } from "@/common/lib/dates";
 import { parseRange } from "@/common/lib/range";
 import type { SearchParamsRecord } from "@/common/lib/url";
 import { EvaluationDashboard } from "@/modules/analytics/components/evaluation-dashboard";
@@ -32,7 +32,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
       range={parseRange(await searchParams, today, 1)}
       today={today}
       scope={studentScope(user)}
-      eyebrow={`Good morning, ${user.name.split(" ")[0]} · ${formatDate(today)}`}
+      eyebrow={`${greetingIst()}, ${user.name.split(" ")[0]} · ${formatDate(today)}`}
     />
   );
 }

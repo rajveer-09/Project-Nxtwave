@@ -190,7 +190,7 @@ async function loadHomeData(): Promise<HomeData> {
 
   const kpis: HomeKpi[] = [
     {
-      module: "Attendance",
+      module: "DSA attendance",
       label: d?.date === today ? "Present today" : d?.date ? `Present on ${formatDate(d.date)}` : "Present today",
       value: todayPct === null ? "—" : `${todayPct}%`,
       sub: d?.marked ? `${d.present} of ${d.marked} marked${hallsLeft > 0 ? ` · ${hallsLeft} hall${hallsLeft === 1 ? "" : "s"} not marked yet` : ""}` : "Nothing marked yet",
@@ -198,7 +198,7 @@ async function loadHomeData(): Promise<HomeData> {
       trend: todayPct !== null && prevPct !== null ? (todayPct >= prevPct ? "good" : "bad") : "neutral",
     },
     {
-      module: "Attendance",
+      module: "DSA attendance",
       label: "Last 30 days",
       value: avg30 === null ? "—" : `${avg30}%`,
       sub: `${below} student${below === 1 ? "" : "s"} below ${RISK_THRESHOLDS.attendancePct}%`,
