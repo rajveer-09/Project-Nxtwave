@@ -15,6 +15,7 @@ import { Suspense } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { PageHeader } from "@/common/components/page-header";
 import { RecentLogs } from "@nxtone/interactions-ui/components/recent-logs";
+import { InteractionInspect } from "@/modules/students/components/interaction-inspect";
 import { OverdueBanner, OverduePill, OverdueReminder } from "@nxtone/interactions-ui/components/overdue-banner";
 import { OVERDUE_COOKIE, overdueStartsOpen, parseOverduePref } from "@nxtone/interactions-ui/lib/overdue-cookie";
 import { MyStudents } from "@nxtone/interactions-ui/components/my-students";
@@ -219,7 +220,15 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
         </SectionCard>
       ) : null}
 
-      <RecentLogs rows={recent} total={inRange.length} exportHref={exportHref} allHref={inRange.length > recent.length ? allHref : undefined} codeRooms={codeRooms} />
+      <RecentLogs
+        rows={recent}
+        total={inRange.length}
+        exportHref={exportHref}
+        allHref={inRange.length > recent.length ? allHref : undefined}
+        codeRooms={codeRooms}
+        linkStudents={user.role === "owner" || user.role === "admin" || user.role === "senior_instructor"}
+        actions={Object.fromEntries(recent.map((it) => [it.id, <InteractionInspect key={it.id} niatId={it.niatId} interactionId={it.id} studentName={it.studentName} />]))}
+      />
     </OverdueReminder>
   );
 }

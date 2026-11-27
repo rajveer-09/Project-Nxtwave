@@ -41,7 +41,7 @@ export async function GET(request: Request) {
       })
     : visible;
   const csv = toCsv(
-    ["Date", "NIAT ID", "Student", "Round", "Taken by", "Assigned instructor", "POC at the time", "Taken by support", "Level", "Topics", "Subtopics", "Steps reached", "Outcome", "Rating", "Questions asked", "Off-roadmap questions", "Tweaked questions", "Remarks", "Performed well", "Improvement areas", "Action items", "Meet recording", "Transcript link"],
+    ["Date", "NIAT ID", "Student", "Round", "Taken by", "Assigned instructor", "POC at the time", "Taken by support", "Level", "Topics", "Subtopics", "Steps reached", "Outcome", "Rating", "Questions asked", "Off-roadmap questions", "Tweaked questions", "Remarks", "Performed well", "Improvement areas", "Action items", "Recording link", "Transcript link"],
     rows.map((it) => [
       it.date,
       it.niatId,

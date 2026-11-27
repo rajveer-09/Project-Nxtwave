@@ -768,18 +768,18 @@ export function InteractionForm({
             <div className="flex flex-wrap gap-3">
               <label className={cn(label, "flex-[1_1_240px]")}>
                 Transcript link
-                <input type="url" value={f.transcriptUrl} onChange={(e) => set("transcriptUrl", e.target.value)} placeholder="https://… (shared Wispr Flow note or doc)" aria-invalid={!!errors.transcriptUrl} aria-describedby="err-turl" className={input} />
+                <input type="url" value={f.transcriptUrl} onChange={(e) => set("transcriptUrl", e.target.value)} placeholder="https://… (shared note or doc)" aria-invalid={!!errors.transcriptUrl} aria-describedby="err-turl" className={input} />
                 <FieldError id="err-turl" message={errors.transcriptUrl} />
               </label>
               <label className={cn(label, "flex-[1_1_240px]")}>
-                Meet recording link
-                <input type="url" value={f.meetRecording} onChange={(e) => set("meetRecording", e.target.value)} placeholder="https://drive.google.com/…" aria-invalid={!!errors.meetRecording} aria-describedby="err-rec" className={input} />
+                Recording link
+                <input type="url" value={f.meetRecording} onChange={(e) => set("meetRecording", e.target.value)} placeholder="https://…" aria-invalid={!!errors.meetRecording} aria-describedby="err-rec" className={input} />
                 <FieldError id="err-rec" message={errors.meetRecording} />
               </label>
             </div>
             <label className={label}>
               <span className="flex flex-wrap justify-between gap-2">
-                <span>Paste transcript (from Wispr Flow)</span>
+                <span>Paste transcript</span>
                 <span className="font-normal text-muted-foreground">{words ? `${words.toLocaleString("en-IN")} words` : "Nothing pasted yet"}</span>
               </span>
               <textarea

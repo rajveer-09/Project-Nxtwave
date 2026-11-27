@@ -81,10 +81,11 @@ export function createApp() {
     if (typeof log.id !== 'string' || !log.id.trim()) return c.json({ error: 'Missing interaction id.' }, 400);
     return c.json(await addInteraction(log as InteractionLog, actor), 201);
   }, ['instructor', 'admin']));
-  // Edit or delete (with a reason): assigned instructor or the author (checked in the queries).
+  // Edit: assigned instructor, the author, or an admin (the hub's Owner / Admin). Delete (with a
+  // reason): assigned instructor or the author. Both checked in the queries.
   app.patch('/api/interactions/:id', (c) => withActor(c, async (actor) => {
     return c.json(await updateInteraction(c.req.param('id'), await body<InteractionLog>(c), actor));
-  }, ['instructor']));
+  }, ['instructor', 'admin']));
   app.delete('/api/interactions/:id', (c) => withActor(c, async (actor) => {
     const { reason } = await body<{ reason: string }>(c);
     return c.json(await deleteInteraction(c.req.param('id'), typeof reason === 'string' ? reason : '', actor));

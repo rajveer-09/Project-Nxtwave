@@ -12,6 +12,10 @@ export type CalendarCell = {
   day: number | null;
   status: "present" | "absent" | "holiday" | "upcoming" | "blank";
   today?: boolean;
+  /** Short reason a day has no class, shown under the date: "Sun", "Hol", "Exam", "Prep", … */
+  tag?: string;
+  /** The full reason, on hover and for screen readers (e.g. the holiday's name). */
+  note?: string;
 };
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -23,7 +27,7 @@ const STYLE: Record<CalendarCell["status"], string> = {
   upcoming: "border border-border bg-card text-[#6B7080] dark:text-[#A3A9B7]",
   blank: "",
 };
-const TAG: Record<CalendarCell["status"], string> = { present: "P", absent: "A", holiday: "Sun", upcoming: "", blank: "" };
+const TAG: Record<CalendarCell["status"], string> = { present: "P", absent: "A", holiday: "Off", upcoming: "", blank: "" };
 const SR: Record<CalendarCell["status"], string> = { present: "present", absent: "absent", holiday: "holiday", upcoming: "upcoming", blank: "" };
 
 /**
@@ -52,10 +56,11 @@ export function CalendarMonth({ label, cells }: { label: string; cells: Calendar
                 STYLE[cell.status],
                 cell.today && "ring-2 ring-accent-strong",
               )}
+              title={cell.note || undefined}
             >
               <span className="text-xs font-semibold" aria-hidden="true">{cell.day}</span>
-              <span className="text-[10px] font-bold" aria-hidden="true">{TAG[cell.status]}</span>
-              <span className="sr-only">{`${cell.day}: ${SR[cell.status]}${cell.today ? ", today" : ""}`}</span>
+              <span className="text-[10px] font-bold" aria-hidden="true">{cell.tag ?? TAG[cell.status]}</span>
+              <span className="sr-only">{`${cell.day}: ${cell.note || SR[cell.status]}${cell.today ? ", today" : ""}`}</span>
             </li>
           ),
         )}
@@ -63,7 +68,7 @@ export function CalendarMonth({ label, cells }: { label: string; cells: Calendar
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-[#DCE4FB] dark:bg-[#1E2A52]" />P · present</span>
         <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-[#F8D9C2] dark:bg-[#4A2A14]" />A · absent</span>
-        <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-muted" />Holiday</span>
+        <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-muted" />No class · Sun, holiday, exam</span>
         <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm border border-border bg-card" />Upcoming</span>
       </div>
     </div>
