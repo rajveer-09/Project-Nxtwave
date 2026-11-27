@@ -41,17 +41,17 @@ const STATUS_TEXT: Record<ResultRow["status"], string> = {
 const busy = (state: string | undefined) => state === "queued" || state === "scanning";
 
 /** myIds: the viewer's own students as NxtOne assigns them (NIAT IDs); none = no "My students". */
-export function ContestView({ slug, canReview, canRescan = false, myIds = [] }: { slug: string; canReview: boolean; canRescan?: boolean; myIds?: string[] }) {
+export function ContestView({ slug, canReview, canRescan = false, myIds = [], topKIds = [] }: { slug: string; canReview: boolean; canRescan?: boolean; myIds?: string[]; topKIds?: string[] }) {
   const hasStudents = myIds.length > 0;
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<ContestScope>(hasStudents ? "mine" : "all");
   // While a scan is queued or running, follow it every few seconds.
   const detail = useQuery({
     queryKey: ["contests", "detail", slug, scope],
-    queryFn: () => contestApi.detail(slug, scope, myIds),
+    queryFn: () => contestApi.detail(slug, scope, scope === "topk" ? topKIds : myIds),
     refetchInterval: (q) => (busy(q.state.data?.status.state) ? 5_000 : false),
   });
-  const results = useQuery({ queryKey: ["contests", "results", slug, scope], queryFn: () => contestApi.results(slug, scope, myIds) });
+  const results = useQuery({ queryKey: ["contests", "results", slug, scope], queryFn: () => contestApi.results(slug, scope, scope === "topk" ? topKIds : myIds) });
   const state = detail.data?.status.state;
   // Pages read and whether the scanner is online, while this contest is queued or scanning.
   const scan = useQuery({ queryKey: ["contests", "scan-status"], queryFn: contestApi.scanStatus, enabled: busy(state), refetchInterval: busy(state) ? 5_000 : false });
@@ -93,6 +93,7 @@ export function ContestView({ slug, canReview, canRescan = false, myIds = [] }: 
 
   const scopes: { value: ContestScope; label: string }[] = [
     ...(hasStudents ? [{ value: "mine" as ContestScope, label: "My students" }] : []),
+    ...(topKIds.length ? [{ value: "topk" as ContestScope, label: `Top K (${topKIds.length})` }] : []),
     { value: "all", label: "Everyone" },
     ...d.colleges.map((c) => ({ value: `college:${c}` as ContestScope, label: c })),
   ];
@@ -282,7 +283,7 @@ export function ContestView({ slug, canReview, canRescan = false, myIds = [] }: 
                         <td className="border-b border-muted py-2.5 pr-2.5 pl-4 font-bold tabular">{r.college_rank ? `#${r.college_rank}` : "—"}</td>
                         <td className="border-b border-muted px-2.5 py-2.5">
                           {r.roll_no ? (
-                            <Link href={`/students/${r.roll_no}`} className="font-semibold text-foreground hover:text-primary">
+                            <Link href={`/contests/students/${r.roll_no}?from=${slug}`} className="font-semibold text-foreground hover:text-primary" title="Open their contest profile">
                               {r.name}
                             </Link>
                           ) : (

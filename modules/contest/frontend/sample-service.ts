@@ -8,7 +8,7 @@ Date : 17 Nov 2026
 
 import "server-only";
 import type { SessionUser } from "@/common/auth/roles";
-import type { ContestDetail, ContestListItem, ContestPage, ContestResults, DraftReview, QuestionStat, QuestionTopics, ResultRow, Summary, TopicsData } from "@nxtone/contest-ui/types";
+import type { ContestDetail, ContestListItem, ContestPage, ContestResults, DraftReview, QuestionStat, QuestionTopics, ResultRow, StudentAnalytics, Summary, TopicsData, ContestStudent } from "@nxtone/contest-ui/types";
 import { toCsv } from "@/common/lib/csv";
 import { searchMatcher } from "@/common/lib/search";
 import { buildStudentDetail } from "@/common/sample-data/student-detail";
@@ -410,6 +410,85 @@ export async function contestSample(request: Request, path: string[], user: Sess
     const data = topicsFor(last, (r) => !picked || picked.has((r.roll_no ?? "").toUpperCase()), true);
     return json(200, picked ? { ...data, students: ROSTER.filter((s) => picked.has(s.niatId)).length } : data);
   }
+  // One student's contest profile: history (newest first) and analytics.
+  if (request.method === "GET" && a === "students" && /^\d+$/.test(b ?? "") && (!c || c === "analytics")) {
+    const id = Number(b);
+    const st = ROSTER[id - 1];
+    if (!st) return detailError(404, "unknown student");
+    const nowSec = Math.floor(Date.now() / 1000);
+    const scanned = CONTESTS.filter((d) => listItem(d, nowSec).has_data);
+    const mine = scanned.map((def) => ({ def, row: resultsFor(def).find((r) => r.student_id === id)! }));
+    const took = (r: ResultRow) => r.status === "solved" || r.status === "zero";
+    if (!c) {
+      const body: ContestStudent = {
+        id,
+        roll_no: st.niatId,
+        name: st.name,
+        college: st.college,
+        extra: { Section: st.section },
+        leetcode_handle: st.lcHandle ?? "",
+        leetcode_url: st.lcHandle ? `https://leetcode.com/u/${st.lcHandle}/` : null,
+        handle_status: st.lcHandle ? "valid" : "missing",
+        active: true,
+        history: mine.map(({ def, row }) => ({
+          contest_slug: def.slug,
+          contest_title: def.title,
+          start_time: epoch(def.startIst),
+          questions: LABELS,
+          status: row.status,
+          global_rank: row.global_rank,
+          ranking_url: row.ranking_url,
+          rank_official: true,
+          leaderboard_rank: row.global_rank,
+          college_rank: row.college_rank,
+          solved: took(row) ? row.solved : null,
+          total_time_secs: took(row) ? Object.values(row.problems).reduce((n, p) => Math.max(n, p.solve_secs), 0) || null : null,
+          problems: row.problems,
+        })),
+      };
+      return json(200, body);
+    }
+    const attended = mine.filter(({ row }) => took(row));
+    const solvedCounts = attended.map(({ row }) => row.solved ?? 0);
+    const questions = Object.fromEntries(
+      LABELS.map((label) => {
+        const solvedHere = attended.filter(({ row }) => row.problems[label]);
+        const secs = solvedHere.map(({ row }) => row.problems[label].solve_secs).sort((x, y) => x - y);
+        return [label, { attempted_contests: attended.length, solved: solvedHere.length, solve_rate: attended.length ? solvedHere.length / attended.length : null, median_secs: secs[Math.floor(secs.length / 2)] ?? null, avg_secs: null, best_secs: secs[0] ?? null, wrong: 0, wrong_per_solve: solvedHere.length ? 0.4 : null, cohort_solve_rate: [0.7, 0.45, 0.2, 0.06][LABELS.indexOf(label)], cohort_median_secs: [900, 1800, 2700, 3600][LABELS.indexOf(label)] }];
+      }),
+    );
+    const series = [...mine].reverse().map(({ def, row }) => ({ slug: def.slug, title: def.title, start_time: epoch(def.startIst), status: row.status, solved: took(row) ? row.solved : null, questions: 4, global_rank: row.global_rank, top_pct: row.global_rank && def.worldwide ? Math.round((row.global_rank / def.worldwide) * 10000) / 100 : null, college_rank: row.college_rank, total_time_secs: null }));
+    const body: StudentAnalytics = {
+      contests_scanned: mine.length,
+      contests_attended: attended.length,
+      attendance_rate: mine.length ? attended.length / mine.length : null,
+      current_streak: took(mine[0]?.row ?? ({ status: "absent" } as ResultRow)) ? attended.length : 0,
+      longest_streak: attended.length,
+      absent_streak: took(mine[0]?.row ?? ({ status: "absent" } as ResultRow)) ? 0 : 1,
+      avg_solved: solvedCounts.length ? solvedCounts.reduce((x, y) => x + y, 0) / solvedCounts.length : null,
+      solved_std: null,
+      avg_top_pct: series.filter((x) => x.top_pct !== null).reduce((n, x, _, arr) => n + (x.top_pct ?? 0) / arr.length, 0) || null,
+      best_global_rank: Math.min(...attended.map(({ row }) => row.global_rank ?? Infinity)) || null,
+      best_college_rank: Math.min(...attended.map(({ row }) => row.college_rank ?? Infinity)) || null,
+      consistency: attended.length >= 3 ? 72 : null,
+      consistency_label: attended.length >= 3 ? "Consistent" : null,
+      trend: 0,
+      trend_label: "steady",
+      questions,
+      labels: LABELS,
+      series,
+      rating: {
+        current: 1500 + (id % 7) * 40,
+        global_ranking: 400000 + id * 100,
+        top_percentage: 55.2,
+        contests_attended: attended.length,
+        synced_at: "2026-11-26T19:00:00+00:00",
+        history: series.filter((x) => took({ status: x.status } as ResultRow)).map((x, i) => ({ title: x.title, slug: x.slug, start_time: x.start_time, rating: 1450 + i * 18 + (id % 5) * 10, ranking: x.global_rank, solved: x.solved, total: 4 })),
+      },
+    };
+    return json(200, body);
+  }
+
   if (request.method === "GET" && a === "students" && /^\d+$/.test(b ?? "") && c === "topics") {
     const last = Number(url.searchParams.get("last")) || null;
     return json(200, topicsFor(last, (r) => r.student_id === Number(b), false));

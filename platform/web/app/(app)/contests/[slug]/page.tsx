@@ -12,6 +12,8 @@ import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
 import { isAdminRole } from "@/common/auth/roles";
 import { myStudentIds } from "@nxtone/contest-ui/my-students";
+import { canAccess } from "@/common/lib/nav";
+import { topKIds, topKReady } from "@/modules/top-k/data";
 
 export const metadata = { title: "Contest" };
 
@@ -20,7 +22,9 @@ async function Content({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   // Admins publish or discard held scans; anyone with students of their own starts on "My students"
   // (as NxtOne assigns them). Only the super admin rescans (enforced again in modules/contest/frontend/service.ts).
-  return <ContestView slug={slug} canReview={isAdminRole(user.role)} canRescan={user.role === "owner" && !user.viewedBy} myIds={await myStudentIds(user)} />;
+  // "Top K" scope: the viewer's Top K (everyone's for senior instructors and admins).
+  const topK = canAccess(user.role, "/top-k") && (await topKReady()) ? await topKIds(user) : [];
+  return <ContestView slug={slug} canReview={isAdminRole(user.role)} canRescan={user.role === "owner" && !user.viewedBy} myIds={await myStudentIds(user)} topKIds={topK} />;
 }
 
 export default function ContestPage({ params }: PageProps<"/contests/[slug]">) {

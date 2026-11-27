@@ -256,6 +256,15 @@ function Pills<T>({ label, options, value, onChange }: { label: string; options:
   );
 }
 
+function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{title}</span>
+      {children}
+    </div>
+  );
+}
+
 /**
  * Contests › Topics: everyone, one college, or (for someone with students of their own) their
  * students as NxtOne assigns them, over the last N contests. Colleges come from NxtOne's roster
@@ -282,16 +291,17 @@ export function TopicsView({ colleges, myIds }: { colleges: Record<string, strin
 
   return (
     <section aria-label="Topics" className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <h2 className="text-base font-semibold">Topics</h2>
-          <p className="text-xs text-muted-foreground">
-            How {mine ? (college ? `your ${college} students` : "your students") : college ? `${college} students` : "all students"} do on each LeetCode topic in contests they took part in.
-            {ids && data.data?.students !== undefined ? ` ${data.data.students} of these ${ids.length} students are in the contest tracker.` : ""}
-          </p>
-        </div>
-        <div className="flex flex-col items-start gap-2 sm:items-end">
-          {myIds.length ? (
+      <div className="flex flex-col gap-0.5">
+        <h2 className="text-base font-semibold">Topics</h2>
+        <p className="text-xs text-muted-foreground">
+          How {mine ? (college ? `your ${college} students` : "your students") : college ? `${college} students` : "all students"} do on each LeetCode topic in contests they took part in.
+          {ids && data.data?.students !== undefined ? ` ${data.data.students} of these ${ids.length} students are in the contest tracker.` : ""}
+        </p>
+      </div>
+      {/* The filters sit in their own row, each group labelled, so changing one never moves the others. */}
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3 rounded-lg border border-border bg-surface-subtle px-3 py-2.5">
+        {myIds.length ? (
+          <FilterGroup title="Whose">
             <Pills
               label="Whose results"
               options={[
@@ -301,11 +311,17 @@ export function TopicsView({ colleges, myIds }: { colleges: Record<string, strin
               value={whose}
               onChange={setWhose}
             />
-          ) : null}
+          </FilterGroup>
+        ) : null}
+        <FilterGroup title="Contests">
           <Pills label="Contests" options={PERIODS} value={last} onChange={setLast} />
-        </div>
+        </FilterGroup>
+        {names.length > 1 ? (
+          <FilterGroup title="College">
+            <Pills label="College" options={[["", "All colleges"], ...names.map((c): [string, string] => [c, c])]} value={college} onChange={setCollege} />
+          </FilterGroup>
+        ) : null}
       </div>
-      {names.length > 1 ? <Pills label="College" options={[["", "All colleges"], ...names.map((c): [string, string] => [c, c])]} value={college} onChange={setCollege} /> : null}
       {outdated ? (
         <p className="rounded-lg border border-warning-border bg-warning-soft px-3 py-2 text-[13px]">The contest service hasn&apos;t been updated yet, so it can&apos;t pick out these students. Showing everyone for now.</p>
       ) : null}
