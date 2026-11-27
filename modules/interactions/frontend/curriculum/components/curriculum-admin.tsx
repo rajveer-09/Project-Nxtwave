@@ -8,7 +8,7 @@ Date : 17 Nov 2026
 
 "use client";
 
-import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { useConfirm } from "@/common/components/confirm";
@@ -921,9 +921,11 @@ function QuestionList({
 /**
  * A sheet block's rules, as in the interaction sheet: step and step-wise rating, how many to ask,
  * hints, whether revisiting is mandatory, suggested time, and what to expect / when to stop. Only
- * the columns the sheet fills are shown. Also used for level-wide notes (no topic).
+ * the columns the sheet fills are shown. Also used for level-wide notes (no topic). The rules start
+ * hidden behind "Show rules" so the questions stay in view; "How many to ask" stays visible.
  */
 function BlockRules({ block: b }: { block: Block }) {
+  const [open, setOpen] = useState(false);
   const rules: [string, string][] = [
     ["How many to ask", b.ask],
     ["Hints", b.hints],
@@ -931,12 +933,35 @@ function BlockRules({ block: b }: { block: Block }) {
     ["Suggested time", b.minutes ? `${b.minutes}${/\d$/.test(b.minutes) ? " min" : ""}` : ""],
   ];
   const shown = rules.filter(([, v]) => v.trim());
+  const hasRules = !!(shown.length || b.expectation || b.poolNote);
+  const panelId = `block-rules-${b.id}`;
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-3.5 py-3">
       <div className="flex flex-wrap items-center gap-2">
         {b.step ? <span className="rounded-md bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground tabular">Step {b.step}</span> : null}
-        <span className="font-semibold whitespace-pre-line">{b.ratingStep || "—"}</span>
+        <span className="font-semibold whitespace-pre-line">{b.ratingStep || "Continued"}</span>
+        {b.ask && !open ? <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">{b.ask}</span> : null}
+        {hasRules ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen(!open)}
+            className="ml-auto inline-flex h-8 items-center gap-1 rounded-md border border-input bg-card px-2.5 text-xs font-semibold hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+            {open ? "Hide rules" : "Show rules"}
+          </button>
+        ) : null}
       </div>
+      {open ? <BlockRuleDetails id={panelId} block={b} shown={shown} /> : null}
+    </div>
+  );
+}
+
+function BlockRuleDetails({ id, block: b, shown }: { id: string; block: Block; shown: [string, string][] }) {
+  return (
+    <div id={id} className="flex flex-col gap-2.5">
       {b.poolNote ? <p className="text-[13px] whitespace-pre-line text-sidebar-foreground">{b.poolNote}</p> : null}
       {shown.length ? (
         <dl className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
