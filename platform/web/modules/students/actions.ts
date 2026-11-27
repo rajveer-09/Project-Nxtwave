@@ -10,6 +10,7 @@ Date : 18 Nov 2026
 
 import { getSessionUser } from "@/common/auth/session";
 import { canViewStudent } from "@/common/auth/student-access";
+import { canLogForOthers } from "@nxtone/interactions-ui/lib/permissions";
 import { getRosterStudent } from "@/common/data/roster";
 import { listInteractions } from "@nxtone/interactions-ui/data";
 import { coveredLabel, isSupport, STATUS_LABEL } from "@nxtone/interactions-ui/lib/types";
@@ -42,11 +43,23 @@ export type HistoryEntry = {
   performedWell: string;
   improvementAreas: string;
   actionItems: string;
-  /** https link to the Meet recording, "" when none. */
+  /** https link to the recording, "" when none. */
   meetRecording: string;
   /** Code room saved with this interaction, if any. */
   codeRoom?: string;
+  /** Only when one interaction is opened (Inspect): the transcript link and pasted text, if any. */
+  transcriptLink?: string;
+  transcriptText?: string;
 };
+
+/** The stored transcript ("Transcript: <link>" and / or the pasted text) as its link and its text. */
+function splitTranscript(stored: string): { transcriptLink?: string; transcriptText?: string } {
+  const raw = stored.replace(/\r\n/g, "\n").trim();
+  if (!raw) return {};
+  const m = /^Transcript:\s*(https?:\/\/\S+)\s*/i.exec(raw);
+  const text = (m ? raw.slice(m[0].length) : raw).trim();
+  return { ...(m ? { transcriptLink: m[1] } : {}), ...(text ? { transcriptText: text } : {}) };
+}
 
 export type HistoryStudent = { niatId: string; name: string; college: string; section: string; hall: string; instructor: string; level: number };
 
@@ -92,7 +105,8 @@ export async function studentHistoryAction(
 ): Promise<{ ok: true; name: string; student: HistoryStudent; entries: HistoryEntry[] } | { ok: false; error: string }> {
   const user = await getSessionUser();
   const student = await getRosterStudent(String(niatId).toUpperCase());
-  if (!student || !canViewStudent(user, student)) return { ok: false, error: "That student isn't in your list." };
+  // Their own students, or (to log for them) any student for those who log for others.
+  if (!student || !(canViewStudent(user, student) || canLogForOthers(user))) return { ok: false, error: "That student isn't in your list." };
   return { ok: true, name: student.name, student: studentInfo(student), entries: await historyEntries(student) };
 }
 
@@ -106,6 +120,8 @@ export async function interactionRecordAction(niatId: string, interactionId: str
   if (!student) return { ok: false, error: "That student isn't on the roster." };
   const entry = (await historyEntries(student)).find((e) => e.id === String(interactionId));
   if (!entry) return { ok: false, error: "This interaction isn't there any more. It may have been deleted." };
-  if (!canViewStudent(user, student) && entry.takenBy !== user.name) return { ok: false, error: "You can only open interactions of your students or ones you took yourself." };
-  return { ok: true, entry };
+  if (!canViewStudent(user, student) && !canLogForOthers(user) && entry.takenBy !== user.name) return { ok: false, error: "You can only open interactions of your students or ones you took yourself." };
+  // The transcript only here, for the one interaction opened (lists leave the long text out).
+  const full = (await listInteractions({ niatId: student.niatId })).find((it) => it.id === entry.id);
+  return { ok: true, entry: { ...entry, ...splitTranscript(full?.transcriptText ?? "") } };
 }

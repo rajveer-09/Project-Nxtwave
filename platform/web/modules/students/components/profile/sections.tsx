@@ -139,7 +139,7 @@ export function ContestsSection({ d, student = false }: { d: StudentDetail; stud
             "· no handle on file"
           )
         }
-        link={student ? undefined : { href: "/contests", label: "All contests" }}
+        link={student ? undefined : c.contestId !== null ? { href: `/contests/students/${d.student.niatId}`, label: "Contest profile" } : { href: "/contests", label: "All contests" }}
       />
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
         {stats.map(([label, value, warn]) => (

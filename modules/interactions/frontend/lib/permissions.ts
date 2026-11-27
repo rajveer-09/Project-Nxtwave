@@ -27,7 +27,8 @@ export function canLogFor(user: SessionUser, student: { instructor: string }): b
 /**
  * Logging for someone else's student (sidebar "Log interaction"): instructors, senior instructors
  * and admins type a NIAT ID and log what they took themselves. "Taken by" is always the person
- * logging, and they see nothing more of that student than the form needs.
+ * logging. To log well they see the student's stats and interaction history (the Log interaction
+ * page's snapshot, History and Inspect), not the rest of the student's page.
  */
 export function canLogForOthers(user: Pick<SessionUser, "role">): boolean {
   return user.role === "instructor" || user.role === "senior_instructor" || user.role === "admin" || user.role === "owner";
