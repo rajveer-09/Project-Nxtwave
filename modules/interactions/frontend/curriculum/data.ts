@@ -288,7 +288,7 @@ export async function addQuestion(user: SessionUser, input: QuestionInput, origi
     createdBy: user.name,
     archived: false,
   };
-  if (fromDb()) await withChange(user, "ui", "Curriculum", (db) => insertQuestion(question, db));
+  if (fromDb()) await withChange(user, "ui", "Question Bank", (db) => insertQuestion(question, db));
   else await insertQuestion(question);
   return { ok: true, question };
 }
@@ -314,7 +314,7 @@ export async function updateQuestion(
     Object.assign(current, { title, url: patch.url, source: patch.source, notes: patch.notes });
     return { ok: true };
   }
-  await withChange(user, "ui", "Curriculum", (db) =>
+  await withChange(user, "ui", "Question Bank", (db) =>
     db.query("UPDATE core.curriculum_questions SET title = $2, url = $3, source = $4, notes = $5 WHERE id = $1", [id, title, patch.url, patch.source, patch.notes]),
   );
   expire(TAGS.curriculum);
@@ -324,7 +324,7 @@ export async function updateQuestion(
 export async function setArchived(user: SessionUser, id: string, archived: boolean): Promise<{ ok: true } | Fail> {
   if (!canEditCurriculum(user)) return { ok: false, error: DENIED };
   if (fromDb()) {
-    const { rows } = await withChange(user, "ui", "Curriculum", (db) => db.query("UPDATE core.curriculum_questions SET archived = $2 WHERE id = $1 RETURNING id", [id, archived]));
+    const { rows } = await withChange(user, "ui", "Question Bank", (db) => db.query("UPDATE core.curriculum_questions SET archived = $2 WHERE id = $1 RETURNING id", [id, archived]));
     expire(TAGS.curriculum);
     return rows.length ? { ok: true } : { ok: false, error: "Question not found." };
   }

@@ -18,7 +18,7 @@ import { listQuestions, offRoadmapQueue } from "@nxtone/interactions-ui/curricul
 import { listBlocks } from "@nxtone/interactions-ui/curriculum/blocks";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 
-export const metadata = { title: "Curriculum" };
+export const metadata = { title: "Question Bank" };
 
 async function Content() {
   await requireAccess("/admin/curriculum");
@@ -37,7 +37,7 @@ export default function CurriculumPage() {
     <>
       <PageHeader
         eyebrow="Admin panel"
-        title="Curriculum & question bank"
+        title="Question Bank"
         description="The roadmap instructors follow when they log interactions: levels, topics, subtopics, steps and questions. Changes apply to new interactions; past logs keep what was asked."
         actions={
           <Suspense fallback={null}>

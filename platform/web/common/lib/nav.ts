@@ -74,7 +74,7 @@ export const NAV: NavSection[] = [
       { href: "/admin/staff", label: "Staff & roles", icon: "staff", roles: PANEL },
       { href: "/admin/change-log", label: "Change log", icon: "changelog", roles: ADMINS },
       { href: "/admin/student-access", label: "Student access", icon: "studentkey", roles: ADMINS },
-      { href: "/admin/curriculum", label: "Curriculum", icon: "curriculum", roles: PANEL },
+      { href: "/admin/curriculum", label: "Question Bank", icon: "curriculum", roles: PANEL },
       { href: "/admin/messages", label: "Messages", icon: "messages", roles: ADMINS },
       { href: "/admin/attendance-data", label: "DSA attendance data", icon: "import", roles: ADMINS },
       { href: "/admin/attendance-analytics", label: "DSA attendance analytics", icon: "analytics", roles: ATTENDANCE_ANALYTICS },

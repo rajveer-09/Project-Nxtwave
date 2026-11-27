@@ -23,7 +23,7 @@ export const metadata = { title: "Super admin" };
 
 const RULES: [Role, string][] = [
   ["owner", "Superadmin panel and everything else. Super admins are set in the database only: nobody can add, change or remove one from NxtOne, including other super admins."],
-  ["admin", "Admin panel: assignments, staff (including other admins), change log, curriculum, messages. Never sees super admins."],
+  ["admin", "Admin panel: assignments, staff (including other admins), change log, question bank, messages. Never sees super admins."],
   ["senior_instructor", "Senior SDI panel: assignments and their team. Never sees admins or super admins, and no change log."],
   ["instructor", "No panel. My students: the students assigned to them."],
   ["success_coach", "No panel. My students: the students they coach."],

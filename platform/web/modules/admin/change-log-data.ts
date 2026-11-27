@@ -39,7 +39,7 @@ export const ENTITY_LABEL: Record<string, string> = {
   staff_role: "Role",
   staff: "Staff",
   student_account: "Student sign-in",
-  curriculum: "Curriculum",
+  curriculum: "Question Bank",
 };
 
 // Curriculum rows (platform/db/core/migrations/20261118000005): field = kind of item, action = what happened.

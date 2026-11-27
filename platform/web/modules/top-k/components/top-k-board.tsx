@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/common/components/confirm";
 import { EmptyState } from "@/common/components/empty-state";
 import { Pager, usePages } from "@/common/components/pager";
 import { searchMatcher } from "@/common/lib/search";
@@ -103,19 +104,39 @@ function AddPanel({ candidates, mine }: { candidates: TopKRow[]; mine: boolean }
   );
 }
 
+/** Removing asks first: a pop-up names the student and only removes after "Remove". */
 function RemoveButton({ s }: { s: TopKRow }) {
-  const { mark, pending } = useMark();
+  const { ask, dialog, pending } = useConfirm();
+  const remove = () =>
+    ask({
+      title: `Remove ${s.name} from Top K?`,
+      description: "They leave Top K and its contest results. You can add them back any time.",
+      changes: [
+        { label: "Student", after: `${s.name} · ${s.niatId}` },
+        { label: "POC", after: s.instructor || "—" },
+        ...(s.markedBy ? [{ label: "Added by", after: `${s.markedBy}${s.markedAt ? ` · ${day(s.markedAt)}` : ""}` }] : []),
+      ],
+      confirmLabel: "Remove",
+      danger: true,
+      action: async () => {
+        const r = await markTopKAction([s.niatId], false);
+        return r.ok ? { ok: true as const, message: `${s.name} removed from Top K.` } : { ok: false as const, error: r.error };
+      },
+    });
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() => mark([s.niatId], false, s.name)}
-      aria-label={`Remove ${s.name} from Top K`}
-      title="Remove from Top K"
-      className="inline-flex size-8 items-center justify-center rounded-lg border border-input text-muted-foreground hover:border-warning-border hover:text-warning disabled:opacity-50"
-    >
-      <X aria-hidden="true" className="size-4" />
-    </button>
+    <>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={remove}
+        aria-label={`Remove ${s.name} from Top K`}
+        title="Remove from Top K"
+        className="inline-flex size-8 items-center justify-center rounded-lg border border-input text-muted-foreground hover:border-warning-border hover:text-warning disabled:opacity-50"
+      >
+        <X aria-hidden="true" className="size-4" />
+      </button>
+      {dialog}
+    </>
   );
 }
 

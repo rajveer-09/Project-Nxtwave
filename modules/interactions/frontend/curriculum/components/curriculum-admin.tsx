@@ -116,7 +116,7 @@ export function CurriculumAdmin({ structure, questions, queue, blocks = [] }: { 
   ];
   return (
     <div className="flex flex-col gap-5">
-      <div role="tablist" aria-label="Curriculum sections" className="flex flex-wrap gap-1 border-b border-border">
+      <div role="tablist" aria-label="Question Bank sections" className="flex flex-wrap gap-1 border-b border-border">
         {tabs.map(([key, text, count]) => (
           <button
             key={key}

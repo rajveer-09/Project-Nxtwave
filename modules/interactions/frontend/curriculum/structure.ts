@@ -75,7 +75,7 @@ async function edit(user: SessionUser, work: (db: Db) => Promise<Result>): Promi
   if (!canEditCurriculum(user)) return fail("Only senior instructors and admins change the curriculum.");
   if (!fromDb()) return fail("Editing the roadmap needs the database.");
   try {
-    const result = await withChange(user, "ui", "Curriculum", async (db) => {
+    const result = await withChange(user, "ui", "Question Bank", async (db) => {
       const r = await work(db);
       if (!r.ok) throw new Refused(r.error);
       return r;

@@ -107,7 +107,7 @@ export function LevelConversions({ counted, notCounted, colleges, levels }: { co
       ) : null}
 
       <p className="text-xs text-muted-foreground">
-        From 13 Oct 2026, 4 PM, a conversion counts once every required topic of the level (set in Curriculum) has its own Cleared interaction, dated by the
+        From 13 Oct 2026, 4 PM, a conversion counts once every required topic of the level (set in Question Bank) has its own Cleared interaction, dated by the
         topic cleared last; a level changed before that is listed as not counted. Conversions from before then are dated by the last interaction before the
         promotion. A promotion that was undone isn&apos;t counted. Colleges and instructors are the current ones.
       </p>
