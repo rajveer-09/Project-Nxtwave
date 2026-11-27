@@ -6,7 +6,8 @@ Date : 25 Nov 2026
 
 */
 
-import { AlertTriangle, BarChart2, CalendarCheck, CalendarRange, CheckCircle2, Download, Percent, UserCheck, Users, UserX } from "lucide-react";
+import Link from "next/link";
+import { BarChart2, CalendarCheck, Download, Percent, UserCheck, Users, UserX } from "lucide-react";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 import { BarList } from "@/common/components/bar-list";
 import { TrendLine } from "@/common/components/charts";
@@ -14,6 +15,7 @@ import { DateRange } from "@/common/components/date-range";
 import { LiveForm } from "@/common/components/live-form";
 import { getRoster } from "@/common/data/roster";
 import { RISK_THRESHOLDS } from "@/common/domain/risk";
+import { STANDING_LABEL, STANDINGS, type Standing } from "@/common/domain/standing";
 import { inScope, type StudentScope } from "@/common/auth/student-access";
 import { eachDay, shortDay, type Range } from "@/common/lib/range";
 import { cn } from "@/common/lib/utils";
@@ -51,6 +53,43 @@ function Tile({ icon: Icon, label, value, sub, warn }: { icon: typeof Users; lab
   );
 }
 
+// Gray not started, blue ongoing, orange to redo, teal cleared (as in the DSA progress view).
+const STANDING_DOT: Record<Standing, string> = {
+  pending: "bg-muted-foreground/60",
+  in_progress: "bg-primary",
+  revisit: "bg-warning-strong",
+  cleared: "bg-chart-4",
+};
+
+const STANDING_SUB: Record<Standing, string> = {
+  pending: "at current level",
+  in_progress: "evaluation ongoing",
+  revisit: "re-evaluate",
+  cleared: "ready for next level",
+};
+
+/** Where students stand at their current level; each card opens those students. */
+function StandingTile({ href, label, value, sub, dot, className }: { href: string; label: string; value: string; sub: string; dot?: string; className?: string }) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex min-w-0 flex-col rounded-xl border border-border bg-card p-3.5 hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:p-4",
+        className,
+      )}
+    >
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 sm:mt-2">
+        <span className="font-heading text-2xl leading-tight font-semibold tracking-tight tabular sm:text-[28px]">{value}</span>
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground sm:text-xs">
+          {dot ? <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", dot)} /> : null}
+          {sub}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 function Panel({ title, action, description, className, children }: { title: string; action?: React.ReactNode; description?: string; className?: string; children: React.ReactNode }) {
   return (
     <section className={cn("min-w-0 rounded-xl border border-border bg-card p-3.5 sm:p-4", className)}>
@@ -80,7 +119,7 @@ export async function EvaluationDashboard({ range, today, scope, eyebrow }: { ra
   const dates = `${shortDay(range.from)} – ${shortDay(range.to)}`;
 
   // Tiles
-  const pastStart = roster.filter((s) => s.level > 0 || s.topic !== "Introduction" || (s.step !== "" && s.step !== "Introduction")).length;
+  const standingCounts = Object.fromEntries(STANDINGS.map((st) => [st, roster.filter((s) => s.standing === st).length])) as Record<Standing, number>;
   const markedToday = att.today.present + att.today.absent;
 
   // Level distribution and topic progression (curriculum order; topics nobody is on show 0)
@@ -193,11 +232,21 @@ export async function EvaluationDashboard({ range, today, scope, eyebrow }: { ra
         </div>
       </header>
 
-      <section aria-label="Today" className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
-        <Tile icon={CalendarRange} label="Interactions Taken" value={fmt(ev.today.interactions)} sub="Total interactions taken today" />
-        <Tile icon={CheckCircle2} label="Successful Completion" value={fmt(ev.today.cleared)} sub="Students cleared today" />
-        <Tile icon={AlertTriangle} label="Revisit Count" value={fmt(ev.today.revisit)} sub="Students needing rework today" />
-        <Tile icon={Users} label="Level/Topic Crossed" value={fmt(pastStart)} sub="Students advanced beyond Level 0 or an intro topic" />
+      <section aria-label="Where students stand" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
+        <StandingTile href="/students" label="Total students" value={fmt(roster.length)} sub="across all levels" className="col-span-2 sm:col-span-1" />
+        {STANDINGS.map((st) => (
+          <StandingTile
+            key={st}
+            href={`/students?standing=${st}`}
+            label={STANDING_LABEL[st]}
+            value={fmt(standingCounts[st])}
+            sub={STANDING_SUB[st]}
+            dot={STANDING_DOT[st]}
+          />
+        ))}
+      </section>
+
+      <section aria-label="DSA attendance" className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <Tile
           icon={CalendarCheck}
           label="Attendance Today"
