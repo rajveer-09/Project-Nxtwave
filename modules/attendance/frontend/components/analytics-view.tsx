@@ -209,7 +209,6 @@ export function AnalyticsView() {
                   setParam({ to: e.target.value || null });
                 }}
               />
-              {!customOk ? <span className="text-xs text-muted-foreground">Choose both dates (To on or after From).</span> : null}
             </div>
           ) : null}
         </div>
