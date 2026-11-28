@@ -6,13 +6,12 @@ Date : 18 Nov 2026
 
 */
 
-import { addDays } from "@/common/lib/dates";
+import { addDays, isRealDate } from "@/common/lib/dates";
 
 /** A validated from–to date range from the URL (?from=YYYY-MM-DD&to=YYYY-MM-DD), defaulting to the last `days` days. */
 export type Range = { from: string; to: string; days: number };
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const valid = (v: unknown): v is string => typeof v === "string" && DATE.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
+const valid = isRealDate;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 

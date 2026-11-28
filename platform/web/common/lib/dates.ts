@@ -17,6 +17,16 @@ export function greetingIst(now: Date = new Date()): string {
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 
+/**
+ * A real calendar date like 2026-11-16 between 2000 and 2100. Dates typed into a date box (or a URL) can
+ * be partial or nonsense, e.g. 0000-11-28, which the database rejects; anything else is not a date.
+ */
+export function isRealDate(v: unknown): v is string {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v) || v < "2000-01-01" || v > "2100-12-31") return false;
+  const [y, m, d] = v.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10) === v;
+}
+
 /** "2026-11-16" + -7 → "2026-11-09" */
 export function addDays(ymd: string, days: number): string {
   const [y, m, d] = ymd.split("-").map(Number);

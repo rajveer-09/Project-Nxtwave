@@ -11,6 +11,7 @@ import { isAdminRole } from "@/common/auth/roles";
 import { toCsv } from "@/common/lib/csv";
 import { todayIst } from "@/common/lib/dates";
 import { ENTITIES, listChanges, SOURCES, type ChangeEntry } from "@/modules/admin/change-log-data";
+import { isRealDate } from "@/common/lib/dates";
 
 /** CSV of the change log with the page's filters (admins and super admins; same masking as the page). */
 export async function GET(request: Request) {
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
   if (!isAdminRole(user.role)) return Response.json({ error: "Admins only" }, { status: 403 });
   const url = new URL(request.url);
   const get = (k: string) => url.searchParams.get(k) || undefined;
-  const date = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+  const date = (v: string | undefined) => (isRealDate(v) ? v : undefined);
   const filter = {
     q: get("q")?.slice(0, 100),
     source: (SOURCES as readonly string[]).includes(get("source") ?? "") ? get("source") : undefined,

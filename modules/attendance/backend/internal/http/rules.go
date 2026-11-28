@@ -133,9 +133,11 @@ func markJSON(st stats.Status) *string {
 	return &v
 }
 
+// parseDate: a real calendar date like 2026-10-28 between 2000 and 2100 (a half-typed date box can
+// send e.g. 0000-11-28, which the database rejects).
 func parseDate(s string) (time.Time, error) {
 	t, err := time.Parse(time.DateOnly, s)
-	if err != nil {
+	if err != nil || t.Year() < 2000 || t.Year() > 2100 {
 		return time.Time{}, fmt.Errorf("%q is not a date like 2026-10-28", s)
 	}
 	return t, nil

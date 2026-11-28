@@ -7,6 +7,7 @@ Date : 16 Nov 2026
 */
 
 import { z } from "zod";
+import { isRealDate } from "@/common/lib/dates";
 
 /** Outcome values used by the Interactions app today (kept so old logs map 1:1). */
 export const STATUSES = ["Cleared", "In Progress", "Need to Revisit"] as const;
@@ -63,7 +64,7 @@ const httpsUrl = z
 export const interactionInput = z
   .object({
     niatId: z.string().regex(/^N\d{2}H\d{2}[AB]\d{4}$/, "Pick a student"),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
+    date: z.string().refine(isRealDate, "Pick a date"),
     takenBy: z.string().trim().min(1, "Pick who took the interaction"),
     level: z.number().int().min(0).max(7),
     topics: z.array(z.string().min(1)).min(1, "Pick a topic").max(1, "Pick one topic: log other topics as separate interactions"),

@@ -9,7 +9,7 @@ Date : 17 Nov 2026
 import "server-only";
 import type { SessionUser } from "@/common/auth/roles";
 import { getDb } from "@/common/db/pool";
-import { addDays, todayIst } from "@/common/lib/dates";
+import { addDays, isRealDate, todayIst } from "@/common/lib/dates";
 import type { CalendarDay, CalendarEntry, CalendarMonth, DayType, Hall, InternshipListItem, SheetRow, TermRow } from "@nxtone/attendance-ui/types";
 
 /**
@@ -134,12 +134,8 @@ function notCountedReason(day: Day) {
   return `${when} does not count.`;
 }
 
-/** time.Parse(time.DateOnly): a real calendar date like 2026-10-28. */
-function isDate(v: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [y, m, d] = v.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10) === v;
-}
+/** A real calendar date like 2026-10-28 (2000 to 2100). */
+const isDate = (v: string) => isRealDate(v);
 const badDate = (v: string) => `${JSON.stringify(v)} is not a date like 2026-10-28`;
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 

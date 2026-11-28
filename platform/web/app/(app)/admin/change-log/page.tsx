@@ -17,6 +17,7 @@ import { requireAccess } from "@/common/auth/guard";
 import { withParams, type SearchParamsRecord } from "@/common/lib/url";
 import { ENTITIES, ENTITY_LABEL, listChanges, SOURCE_LABEL, SOURCES, type ChangeFilter } from "@/modules/admin/change-log-data";
 import { ChangeTable } from "@/modules/admin/components/change-table";
+import { isRealDate } from "@/common/lib/dates";
 
 export const metadata = { title: "Change log" };
 
@@ -25,7 +26,7 @@ const field =
   "h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
 function parse(params: SearchParamsRecord): ChangeFilter {
-  const date = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+  const date = (v: string | undefined) => (isRealDate(v) ? v : undefined);
   const page = Number(one(params.page));
   return {
     q: one(params.q)?.slice(0, 100),

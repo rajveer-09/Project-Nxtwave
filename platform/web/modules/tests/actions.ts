@@ -13,6 +13,7 @@ import { z } from "zod";
 import { getSessionUser, viewOnly } from "@/common/auth/session";
 import { createTest, publishFormat, saveResults, submitResults, unlockResults } from "@/modules/tests/data";
 import { BANDS, FIELD_TYPES } from "@/modules/tests/types";
+import { isRealDate } from "@/common/lib/dates";
 
 const value = z.union([z.number(), z.string().max(4000), z.array(z.string().max(200)).max(50), z.boolean(), z.null()]);
 const rowsSchema = z
@@ -60,8 +61,8 @@ export async function unlockTestResults(testId: string, instructor: string): Pro
 const testSchema = z.object({
   name: z.string().trim().min(1).max(80),
   band: z.enum(BANDS),
-  heldOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  dueAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+  heldOn: z.string().refine(isRealDate),
+  dueAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/).refine((v) => isRealDate(v.slice(0, 10))),
   formatId: z.string().min(1),
 });
 
