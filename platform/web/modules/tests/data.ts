@@ -402,11 +402,14 @@ export async function unlockResults(user: SessionUser, testId: string, instructo
   return removed ? { ok: true } : { ok: false, error: "Those results aren't submitted." };
 }
 
+/** Who can create weekly tests: owners, admins and senior instructors. */
+export const canCreateTests = (role: SessionUser["role"]) => role === "owner" || role === "admin" || role === "senior_instructor";
+
 export async function createTest(
   user: SessionUser,
   input: { name: string; band: Band; heldOn: string; dueAt: string; formatId: string },
 ): Promise<{ ok: true; test: WeeklyTest } | Fail> {
-  if (user.role !== "owner" && user.role !== "admin") return { ok: false, error: "Only admins create tests." };
+  if (!canCreateTests(user.role)) return { ok: false, error: "Only admins and senior instructors create tests." };
   const version = await getFormatVersion(input.formatId);
   if (!version) return { ok: false, error: "Pick a format." };
   if (!input.name.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(input.heldOn)) return { ok: false, error: "Give the test a name and a date." };

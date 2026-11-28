@@ -16,7 +16,7 @@ import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
 import { isAdminRole } from "@/common/auth/roles";
 import { formatDate, todayIst } from "@/common/lib/dates";
-import { getResults, listFormats, listSubmissions, listTests, studentsFor } from "@/modules/tests/data";
+import { canCreateTests, getResults, listFormats, listSubmissions, listTests, studentsFor } from "@/modules/tests/data";
 import { getRoster, usingSampleData } from "@/common/data/roster";
 import { bandLabel, bandOf } from "@/modules/tests/types";
 
@@ -31,7 +31,9 @@ async function Content() {
   const admin = isAdminRole(user.role);
   const tests = await listTests();
   const myBands = new Set((await getRoster()).filter((s) => s.instructor === user.name).map((s) => bandOf(s.level)));
-  const visible = admin ? tests : tests.filter((t) => myBands.has(t.band));
+  const canCreate = canCreateTests(user.role);
+  // Instructors see their own bands; a senior instructor also sees the tests they created.
+  const visible = admin ? tests : tests.filter((t) => myBands.has(t.band) || t.createdBy === user.name);
   const now = new Date().toISOString();
 
   const rows = await Promise.all(
@@ -69,7 +71,7 @@ async function Content() {
           </>
         }
       />
-      {admin ? <NewTestForm formats={formats} suggestedName={`Weekly Test ${nextNumber}`} today={todayIst()} /> : null}
+      {canCreate ? <NewTestForm formats={formats} suggestedName={`Weekly Test ${nextNumber}`} today={todayIst()} /> : null}
       <section aria-label="Tests" className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-[13px]">
