@@ -73,9 +73,8 @@ export function PasswordForm({ enabled }: { enabled: boolean }) {
             spellCheck={false}
             required
             defaultValue={state.kind === kind ? state.email : ""}
-            placeholder={student ? "N24H01A00XX" : "name@nxtwave.co.in"}
             disabled={!enabled}
-            className={cn(inputClass, student && "uppercase tabular placeholder:normal-case")}
+            className={cn(inputClass, student && "uppercase tabular")}
           />
         </label>
         <label className="flex flex-col gap-2 text-sm font-medium">
