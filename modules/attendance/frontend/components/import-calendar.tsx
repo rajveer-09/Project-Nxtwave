@@ -39,7 +39,10 @@ export function ImportCalendar() {
   const save = useMutation({
     mutationFn: () => attendanceApi.importCalendar(file!, { commit: true, skipErrors }),
     onSuccess: (res) => {
-      setDone(`Imported ${res.file_name}: ${res.summary.new} new, ${res.summary.updated} updated${res.summary.errors ? `, ${res.summary.errors} row(s) with errors skipped` : ""}.`);
+      setDone(
+        `Imported ${res.file_name}: ${res.summary.new} new, ${res.summary.updated} updated${res.summary.errors ? `, ${res.summary.errors} row(s) with errors skipped` : ""}. ` +
+          "Find this upload and its entries under DSA attendance › Calendar › Import history.",
+      );
       reset();
       // Calendar entries change which days count, so refresh every attendance view.
       void queryClient.invalidateQueries({ queryKey: ["attendance"] });
@@ -55,7 +58,7 @@ export function ImportCalendar() {
       title="Import calendar"
       description={
         <>
-          Upload a .xlsx or .csv file (max 10 MB) with columns Date, Day Type (Working, Holiday, Exam or Event), Applies To (All, BITS or CDU), Label and optional Counts (Yes/No, for
+          Upload a .xlsx or .csv file (max 10 MB) with columns Date, Day Type (Working, Holiday, Exam, Exam Preparation or Event), Applies To (All, BITS or CDU), Label and optional Counts (Yes/No, for
           events). Entries are matched by date and Applies To, so uploading the same file again changes nothing. Attendance marks are never deleted. <SampleLink kind="calendar" />
         </>
       }
@@ -101,7 +104,7 @@ export function ImportCalendar() {
           </div>
 
           <div className={tableWrap}>
-            <table className="w-full min-w-[680px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className={theadRow}>
                   <th className={th}>Row</th>
@@ -109,6 +112,7 @@ export function ImportCalendar() {
                   <th className={th}>Type</th>
                   <th className={th}>Applies to</th>
                   <th className={th}>Label</th>
+                  <th className={th}>Counts</th>
                   <th className={th}>Result</th>
                   <th className={th}>Details</th>
                 </tr>
@@ -118,12 +122,11 @@ export function ImportCalendar() {
                   <tr key={r.row} className={`border-t border-border align-top ${r.action === "error" ? "bg-red-50/40 dark:bg-red-950/20" : ""}`}>
                     <td className={`${td} text-muted-foreground tabular`}>{r.row}</td>
                     <td className={`${td} whitespace-nowrap`}>{/^\d{4}-\d{2}-\d{2}$/.test(r.date) ? formatDate(r.date) : r.date || "—"}</td>
-                    <td className={td}>
-                      {TYPE_LABEL[r.day_type] ?? (r.day_type || "—")}
-                      {r.day_type === "event" ? <span className="text-xs text-muted-foreground"> ({r.counts ? "counts" : "not counted"})</span> : null}
-                    </td>
+                    <td className={td}>{TYPE_LABEL[r.day_type] ?? (r.day_type || "—")}</td>
                     <td className={td}>{r.applies_to === "ALL" ? "All" : r.applies_to || "—"}</td>
                     <td className={td}>{r.label || "—"}</td>
+                    {/* Whether the day counts toward attendance: working always, holiday / exam / exam preparation never, events as the sheet says. */}
+                    <td className={td}>{r.action === "error" ? "—" : r.counts ? "Yes" : "No"}</td>
                     <td className={td}>
                       <Badge tone={ACTION[r.action].tone}>{ACTION[r.action].label}</Badge>
                     </td>
