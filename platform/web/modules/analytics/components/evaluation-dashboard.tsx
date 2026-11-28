@@ -7,7 +7,7 @@ Date : 25 Nov 2026
 */
 
 import Link from "next/link";
-import { CalendarCheck, Download, Percent, UserCheck, Users, UserX } from "lucide-react";
+import { CalendarCheck, Download, UserCheck, Users, UserX } from "lucide-react";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 import { BarList } from "@/common/components/bar-list";
 import { TrendLine } from "@/common/components/charts";
@@ -276,12 +276,12 @@ export async function EvaluationDashboard({
         ))}
       </section>
 
-      <section aria-label="DSA attendance" className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+      <section aria-label="DSA attendance" className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3">
         {isToday ? (
           <>
             <Tile
               icon={CalendarCheck}
-              label="Attendance Today"
+              label="DSA Attendance Today"
               value={markedToday ? pctText(att.today.pct) : "—"}
               sub={markedToday ? `${fmt(markedToday)} students marked today` : "Not marked yet, or a day off"}
               warn={att.today.pct !== null && att.today.pct < MIN}
@@ -329,14 +329,6 @@ export async function EvaluationDashboard({
             />
           </>
         )}
-        <Tile
-          icon={Percent}
-          label="Average Attendance"
-          value={pctText(att.period.pct)}
-          sub={`${dates} · counted days · ${MIN}% minimum`}
-          warn={att.period.pct !== null && att.period.pct < MIN}
-          split={att.period.pct !== null ? split((c) => ({ value: pctText(datesOf(c)?.pct ?? null), warn: low(datesOf(c)?.pct) })) : undefined}
-        />
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -371,11 +363,11 @@ export async function EvaluationDashboard({
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Attendance by Day" description={`Present ÷ marked, counted days · ${MIN}% line · days off are gaps`}>
-          <TrendLine data={attendanceSeries} valueLabel="Attendance" target={MIN} />
+        <Panel title="DSA Attendance by Day" description={`Present ÷ marked, counted days · ${MIN}% line · days off are gaps`}>
+          <TrendLine data={attendanceSeries} valueLabel="DSA attendance" target={MIN} />
           <p className="sr-only">{attendanceSeries.filter((d) => d.value !== null).map((d) => `${d.label}: ${d.value}%`).join(", ")}</p>
         </Panel>
-        <Panel title="Attendance by Hall" description={`${dates} · below ${MIN}% in orange · students marked`}>
+        <Panel title="DSA Attendance by Hall" description={`${dates} · below ${MIN}% in orange · students marked`}>
           {att.byHall.length ? (
             <BarList
               items={att.byHall.map((h) => ({ label: h.hall, value: h.pct, display: `${h.pct}% · ${h.students}`, warn: h.pct < MIN }))}

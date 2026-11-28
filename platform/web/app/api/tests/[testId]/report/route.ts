@@ -32,7 +32,7 @@ export async function GET(request: Request, { params }: RouteContext<"/api/tests
       "NIAT ID", "Student", "College", "Section", "Instructor", "Result", `Total /${report.max}`, "Previous test total",
       ...fields.map((f) => (f.type === "marks" ? `${f.label} /${f.max}` : f.label)),
       "Semester attendance %", "Semester present", "Semester counted days", "Last week attendance %", "Last week present", "Last week counted days",
-      "Level", "Topic", "Topic no.", "Topics in level", "Subtopic", "Step", "Roadmap progress %", "Attendance as of",
+      "Level", "Topic", "Topic no.", "Topics in level", "Subtopic", "Step", "Roadmap progress %", "DSA attendance as of",
     ],
     report.rows.map((r) => {
       const took = tookTest(r);

@@ -14,13 +14,13 @@ import { cn } from "@/common/lib/utils";
 export type TimelineEvent = { date: string; module: "attendance" | "interactions" | "tests" | "contests"; title: string; detail: string };
 
 const MODULES = {
-  attendance: ["Attendance", "bg-accent text-accent-strong"],
+  attendance: ["DSA attendance", "bg-accent text-accent-strong"],
   interactions: ["Interaction", "bg-muted text-sidebar-foreground"],
   tests: ["Weekly test", "bg-warning-soft text-warning"],
   contests: ["Contest", "bg-[#EDE9FE] dark:bg-[#2E1F5E] text-[#5B21B6] dark:text-[#C4B5FD]"],
 } as const;
 
-const FILTERS = [["all", "All"], ["attendance", "Attendance"], ["interactions", "Interactions"], ["tests", "Weekly tests"], ["contests", "Contests"]] as const;
+const FILTERS = [["all", "All"], ["attendance", "DSA attendance"], ["interactions", "Interactions"], ["tests", "Weekly tests"], ["contests", "Contests"]] as const;
 
 export function Timeline({ events }: { events: TimelineEvent[] }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>("all");

@@ -22,7 +22,7 @@ const TABS = [
 export function AttendanceTabs() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Attendance sections" className="flex flex-wrap gap-1 border-b border-border">
+    <nav aria-label="DSA attendance sections" className="flex flex-wrap gap-1 border-b border-border">
       {TABS.map((tab) => {
         const active = pathname === tab.href;
         return (

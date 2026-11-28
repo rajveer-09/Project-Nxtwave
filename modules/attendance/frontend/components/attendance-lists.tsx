@@ -88,7 +88,7 @@ export function InternshipsList({ today }: { today: string }) {
             <caption className="sr-only">Internship and registration-pending periods</caption>
             <thead>
               <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
-                {["Student", "Group", "Kind", "Dates", "Attendance days", "Status"].map((h) => (
+                {["Student", "Group", "Kind", "Dates", "DSA attendance days", "Status"].map((h) => (
                   <th key={h} scope="col" className={th}>
                     {h}
                   </th>

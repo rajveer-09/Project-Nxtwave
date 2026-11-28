@@ -126,7 +126,7 @@ const SOURCE: Record<string, string> = {
   ui: "NxtOne",
   excel: "Excel import",
   "interactions-api": "Interactions app",
-  "attendance-api": "Attendance app",
+  "attendance-api": "DSA attendance app",
   database: "Database edit",
   migration: "Data migration",
 };

@@ -35,11 +35,11 @@ export const homeKpis: HomeKpi[] = [
 ];
 
 export const atRiskStudents: AtRiskStudent[] = [
-  { niatId: "N99H01A0142", name: "Aarav Mehta", college: "BITS", section: "S004", hall: "Hall 3", attendance30d: 61, lastInteractionDays: 19, contestsAttended: 0, flags: [{ key: "attendance", detail: "Attendance 61% (below 75%)" }, { key: "interaction", detail: "No interaction for 19 days" }, { key: "contests", detail: "Missed the last 4 contests" }] },
-  { niatId: "N99H01B0154", name: "Ananya Iyer", college: "CDU", section: "IB-2", hall: "Hall 11", attendance30d: 72, lastInteractionDays: 15, contestsAttended: 3, flags: [{ key: "attendance", detail: "Attendance 72% (below 75%)" }, { key: "interaction", detail: "No interaction for 15 days" }] },
+  { niatId: "N99H01A0142", name: "Aarav Mehta", college: "BITS", section: "S004", hall: "Hall 3", attendance30d: 61, lastInteractionDays: 19, contestsAttended: 0, flags: [{ key: "attendance", detail: "DSA attendance 61% (below 75%)" }, { key: "interaction", detail: "No interaction for 19 days" }, { key: "contests", detail: "Missed the last 4 contests" }] },
+  { niatId: "N99H01B0154", name: "Ananya Iyer", college: "CDU", section: "IB-2", hall: "Hall 11", attendance30d: 72, lastInteractionDays: 15, contestsAttended: 3, flags: [{ key: "attendance", detail: "DSA attendance 72% (below 75%)" }, { key: "interaction", detail: "No interaction for 15 days" }] },
   { niatId: "N99H01A0311", name: "Kabir Nair", college: "BITS", section: "S009", hall: "Hall 7", attendance30d: 88, lastInteractionDays: 23, contestsAttended: 2, flags: [{ key: "interaction", detail: "No interaction for 23 days" }, { key: "level", detail: "6 weeks at the current level" }] },
-  { niatId: "N99H01B0087", name: "Diya Reddy", college: "CDU", section: "IB-2", hall: "Hall 11", attendance30d: 68, lastInteractionDays: 6, contestsAttended: 1, flags: [{ key: "attendance", detail: "Attendance 68% (below 75%)" }] },
-  { niatId: "N99H01A0420", name: "Meera Pillai", college: "BITS", section: "S001", hall: "Hall 1", attendance30d: 70, lastInteractionDays: 9, contestsAttended: 1, flags: [{ key: "attendance", detail: "Attendance 70% (below 75%)" }] },
+  { niatId: "N99H01B0087", name: "Diya Reddy", college: "CDU", section: "IB-2", hall: "Hall 11", attendance30d: 68, lastInteractionDays: 6, contestsAttended: 1, flags: [{ key: "attendance", detail: "DSA attendance 68% (below 75%)" }] },
+  { niatId: "N99H01A0420", name: "Meera Pillai", college: "BITS", section: "S001", hall: "Hall 1", attendance30d: 70, lastInteractionDays: 9, contestsAttended: 1, flags: [{ key: "attendance", detail: "DSA attendance 70% (below 75%)" }] },
   { niatId: "N99H01A0098", name: "Rohan Gupta", college: "BITS", section: "S004", hall: "Hall 3", attendance30d: 79, lastInteractionDays: 4, contestsAttended: 0, flags: [{ key: "contests", detail: "Missed the last 4 contests" }] },
 ];
 

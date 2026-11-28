@@ -101,7 +101,7 @@ function seed(): Message[] {
     ),
     mk(
       "Hall 3 and Hall 11 attendance not marked",
-      "Attendance for Hall 3 and Hall 11 is still open for today. Please mark it before 11:00.",
+      "DSA attendance for Hall 3 and Hall 11 is still open for today. Please mark it before 11:00.",
       "urgent",
       { mode: "roles", roles: ["admin"], college: null, hall: null },
       "2026-11-16T10:05:00+05:30",

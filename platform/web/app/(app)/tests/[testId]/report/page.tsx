@@ -110,7 +110,7 @@ async function Content({ params, searchParams }: { params: Promise<{ testId: str
             <Tile label="Highest · lowest" value={s.highest === null ? "—" : `${s.highest} · ${s.lowest}`} sub={`of ${s.passed + s.below} with all marks in`} />
             <Tile label="Pass rate" value={fmt(s.passRate, "%")} sub={`${s.passed} passed · ${s.below} below ${format.passMark}`} warn={s.below > 0} />
             <Tile label="Semester attendance" value={fmt(s.semester, "%")} sub="average, counted days" warn={s.semester !== null && s.semester < 75} />
-            <Tile label="Attendance last week" value={fmt(s.week, "%")} sub={`${formatDate(week.from)} – ${formatDate(week.to)}`} warn={s.week !== null && s.week < 75} />
+            <Tile label="DSA attendance last week" value={fmt(s.week, "%")} sub={`${formatDate(week.from)} – ${formatDate(week.to)}`} warn={s.week !== null && s.week < 75} />
             <Tile label="Roadmap progress" value={fmt(s.progress, "%")} sub="average through their level" />
           </dl>
 

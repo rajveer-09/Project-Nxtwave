@@ -92,7 +92,7 @@ export function StudentsTable({
             <Th>College · Section</Th>
             <Th>Hall</Th>
             {showInstructor ? <Th>Instructor</Th> : null}
-            <SortHeader label={"Attendance · 30 days"} sortKey="attendance" query={query} params={params} basePath={basePath} />
+            <SortHeader label={"DSA attendance · 30 days"} sortKey="attendance" query={query} params={params} basePath={basePath} />
             <SortHeader label="Level" sortKey="level" query={query} params={params} basePath={basePath} />
             <SortHeader label="LeetCode" sortKey="rating" query={query} params={params} basePath={basePath} />
             <SortHeader label="Last interaction" sortKey="interaction" query={query} params={params} basePath={basePath} />

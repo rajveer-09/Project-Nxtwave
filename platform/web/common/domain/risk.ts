@@ -22,7 +22,7 @@ export const RISK_THRESHOLDS = {
 export type FlagKey = "attendance" | "interaction" | "contests" | "level" | "tests";
 
 export const FLAG_LABEL: Record<FlagKey, string> = {
-  attendance: `Attendance < ${RISK_THRESHOLDS.attendancePct}%`,
+  attendance: `DSA attendance < ${RISK_THRESHOLDS.attendancePct}%`,
   interaction: `No interaction ${RISK_THRESHOLDS.interactionGapDays}d+`,
   contests: "Missed contests",
   level: "Stuck on level",
@@ -60,7 +60,7 @@ export function flagsWithDetail(flags: FlagKey[], input: RiskInput): FlagWithDet
 export function flagDetail(key: FlagKey, input: RiskInput): string {
   switch (key) {
     case "attendance":
-      return `Attendance ${input.attendance30d}% (below ${RISK_THRESHOLDS.attendancePct}%)`;
+      return `DSA attendance ${input.attendance30d}% (below ${RISK_THRESHOLDS.attendancePct}%)`;
     case "interaction":
       return input.daysSinceInteraction === null ? "No interaction yet" : `No interaction for ${input.daysSinceInteraction} days`;
     case "contests":

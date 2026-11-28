@@ -98,7 +98,7 @@ export function ImportAttendance() {
         <FilePicker
           inputRef={inputRef}
           file={file}
-          label="Attendance sheet"
+          label="DSA attendance sheet"
           onPick={(f) => {
             setFile(f);
             setPreview(null);

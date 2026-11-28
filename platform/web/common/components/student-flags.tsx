@@ -26,7 +26,7 @@ const T = RISK_THRESHOLDS;
 
 /** What each flag is called (popover, legend, screen-reader label). */
 const TITLE: Record<FlagKey, string> = {
-  attendance: `Attendance below ${T.attendancePct}%`,
+  attendance: `DSA attendance below ${T.attendancePct}%`,
   tests: "Below pass in tests",
   interaction: `No interaction for ${T.interactionGapDays}+ days`,
   level: "Stuck on level",

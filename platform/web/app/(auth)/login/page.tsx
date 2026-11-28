@@ -17,7 +17,7 @@ import { DevRolePicker, PasswordForm } from "@/modules/login/sign-in-forms";
 export const metadata = { title: "Sign in" };
 
 const POINTS = [
-  { icon: ChartNoAxesCombined, title: "Every learner, one view", text: "Attendance, progress, feedback and contests together, always up to date." },
+  { icon: ChartNoAxesCombined, title: "Every learner, one view", text: "DSA attendance, progress, feedback and contests together, always up to date." },
   { icon: Sparkles, title: "Made for every role", text: "Students see their own journey. Instructors, coaches and admins see what they need." },
   { icon: ShieldCheck, title: "Every change on record", text: "Who changed what, and when, is kept for the people who need to know." },
 ];

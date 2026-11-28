@@ -27,7 +27,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   ui: "NxtOne",
   excel: "Excel import",
   "interactions-api": "Interactions service",
-  "attendance-api": "Attendance service",
+  "attendance-api": "DSA attendance service",
   "contest-api": "Contests service",
   database: "Database edit",
   migration: "Data migration",
@@ -35,7 +35,7 @@ export const SOURCE_LABEL: Record<string, string> = {
 export const ENTITY_LABEL: Record<string, string> = {
   student_assignment: "Assignment",
   student: "Student",
-  attendance_student: "Attendance roster",
+  attendance_student: "DSA attendance roster",
   staff_role: "Role",
   staff: "Staff",
   student_account: "Student sign-in",
@@ -80,7 +80,7 @@ const FIELD_LABEL: Record<string, string> = {
   joined_on: "Joined on",
   dropped_on: "Dropped on",
   platform: "NxtOne role",
-  attendance: "Attendance role",
+  attendance: "DSA attendance role",
   logs: "Interactions role",
   contest: "Contests role",
 };

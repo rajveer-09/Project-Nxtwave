@@ -249,7 +249,7 @@ export function CollegeCards({ cards, attendanceMin = 75 }: { cards: CollegeCard
               ["Today", String(c.today), undefined],
               ["Cleared", String(c.cleared), "text-accent-strong"],
               ["Revisit", String(c.revisit), "text-destructive"],
-              ["Attendance", c.attendance === null ? "—" : `${c.attendance}%`, c.attendance !== null && c.attendance < attendanceMin ? "text-warning" : undefined],
+              ["DSA attendance", c.attendance === null ? "—" : `${c.attendance}%`, c.attendance !== null && c.attendance < attendanceMin ? "text-warning" : undefined],
             ].map(([label, value, tone]) => (
               <div key={label} className="flex flex-col rounded-md border border-border bg-card px-2.5 py-2 last:col-span-2 sm:last:col-span-1">
                 <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>

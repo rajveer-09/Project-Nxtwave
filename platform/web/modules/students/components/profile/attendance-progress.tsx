@@ -32,7 +32,7 @@ export function AttendanceSection({ d, student = false }: { d: StudentDetail; st
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[480px] border-collapse text-[13px]">
-                <caption className="sr-only">Attendance by month</caption>
+                <caption className="sr-only">DSA attendance by month</caption>
                 <thead>
                   <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
                     <th scope="col" className="border-b border-border px-4 py-2.5">Month</th>

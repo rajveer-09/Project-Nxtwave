@@ -160,7 +160,7 @@ export function ResultsEntry({
                 <tr className="bg-surface-subtle text-left text-xs text-muted-foreground">
                   <th scope="col" className="border-b border-border py-2.5 pr-2 pl-4">Student</th>
                   <th scope="col" className="border-b border-border px-2 py-2.5">
-                    <span title="Filled in automatically: attendance this semester and last week, and roadmap progress">Attendance · roadmap</span>
+                    <span title="Filled in automatically: attendance this semester and last week, and roadmap progress">DSA attendance · roadmap</span>
                   </th>
                   <th scope="col" className="border-b border-border px-2 py-2.5">Took test</th>
                   {columns.map((f) => (

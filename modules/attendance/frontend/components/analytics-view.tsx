@@ -140,7 +140,7 @@ export function AnalyticsView() {
         <PageHeader
           eyebrow="Admin panel"
           title="DSA attendance analytics"
-          description="Attendance across degrees and halls."
+          description="DSA attendance across degrees and halls."
           actions={
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" className="h-10 px-3.5" onClick={exportExcel} disabled={!a || exporting}>
@@ -550,7 +550,7 @@ function Kpis({ a, onDrill }: { a: Analytics; onDrill: OnDrill }) {
           <Kpi label="Students absent" value={num(t.absent)} onClick={open("Students absent", "absent", "absent", t.absent)} />
         </>
       )}
-      <Kpi label="Attendance" value={pct(t.pct)} hero note={<Change a={a} />} onClick={open("Attendance by student", "all", "pct", t.students)} />
+      <Kpi label="DSA attendance" value={pct(t.pct)} hero note={<Change a={a} />} onClick={open("DSA attendance by student", "all", "pct", t.students)} />
       <Kpi
         label={multi ? "Students with unmarked days" : "Students unmarked"}
         value={num(unmarked)}
@@ -623,7 +623,7 @@ const tallyLines = (name: string, t: Tally | DayTally, multi: boolean) => [
   `Present ${num(t.present)}${multi ? " student-days" : ""}`,
   `Absent ${num(t.absent)}`,
   `Unmarked ${num(t.unmarked)}`,
-  `Attendance ${pct(t.pct)}`,
+  `DSA attendance ${pct(t.pct)}`,
 ];
 
 /** Present | absent share of the marked days. */
@@ -688,7 +688,7 @@ function DegreeSection({ a, onDrill }: { a: Analytics; onDrill: OnDrill }) {
               <th className={th}>Absent{multi ? <span className="block font-normal">student-days</span> : null}</th>
               <th className={th}>Unmarked</th>
               {multi ? <th className={th}>Present / day</th> : null}
-              <th className="py-2 pl-2 text-right font-medium">Attendance</th>
+              <th className="py-2 pl-2 text-right font-medium">DSA attendance</th>
             </tr>
           </thead>
           <tbody className="tabular">
@@ -768,7 +768,7 @@ function HallPctChart({ a, onDrill }: { a: Analytics; onDrill: OnDrill }) {
   const tip = useTip();
   const groups = byDegree(a.halls);
   return (
-    <Panel title="Attendance % by hall" subtitle="Highest first, within each degree">
+    <Panel title="DSA attendance % by hall" subtitle="Highest first, within each degree">
       <div className={cn("grid gap-6", groups.length > 1 && "md:grid-cols-2")}>
         {groups.map(([deg, halls]) => (
           <div key={deg} className="flex flex-col gap-2">
@@ -822,7 +822,7 @@ function HallTable({ a, onDrill }: { a: Analytics; onDrill: OnDrill }) {
               <th className={th}>Unmarked</th>
               {multi ? <th className={th}>Present / day</th> : null}
               <th className="hidden w-40 px-3 py-2 text-left font-medium sm:table-cell">Present vs absent</th>
-              <th className="py-2 pl-2 text-right font-medium">Attendance</th>
+              <th className="py-2 pl-2 text-right font-medium">DSA attendance</th>
             </tr>
           </thead>
           <tbody className="tabular">

@@ -109,8 +109,8 @@ export function reportText(lang: ReportLang) {
         ? `${average !== null ? `పరీక్ష రాసిన అందరి సగటు ${average} · ` : ""}ఉత్తీర్ణత మార్కు ${passMark}`
         : `${average !== null ? `Average of all who took it ${average} · ` : ""}pass mark ${passMark}`,
 
-    semesterAttendance: te ? "ఈ సెమిస్టర్ హాజరు" : "Attendance this semester",
-    weekAttendance: te ? "గత వారం హాజరు" : "Attendance last week",
+    semesterAttendance: te ? "ఈ సెమిస్టర్ హాజరు" : "DSA attendance this semester",
+    weekAttendance: te ? "గత వారం హాజరు" : "DSA attendance last week",
     daysOf: (present: number, counted: number) => (te ? `${counted} పని దినాల్లో ${present} రోజులు హాజరు` : `${present} of ${counted} counted days`),
     weekDaysOf: (present: number, counted: number, from: string, to: string) =>
       te ? `${counted} పని దినాల్లో ${present} రోజులు · ${range(from, to)}` : `${present} of ${counted} days · ${range(from, to)}`,
@@ -155,7 +155,7 @@ export function reportText(lang: ReportLang) {
 
     footerNote: te
       ? "హాజరు: విద్యార్థి చేరిన రోజు నుండి, టర్మ్‌లోని పని దినాలను మాత్రమే లెక్కిస్తాం. రోడ్‌మ్యాప్ పురోగతి అంటే ప్రస్తుత లెవెల్‌లో విద్యార్థి ఎంత భాగం పూర్తి చేశారో."
-      : "Attendance counts only working days in the term, from the day the student joined. Roadmap progress is how far through their current level the student is.",
+      : "DSA attendance counts only working days in the term, from the day the student joined. Roadmap progress is how far through their current level the student is.",
     generated: (iso: string) => (te ? `రూపొందించిన తేదీ ${date(iso)}` : `Generated ${date(iso)}`),
   };
 }

@@ -216,7 +216,7 @@ export function StudentInteractions({ rows }: { rows: StudentRow[] }) {
                 <th scope="col" className={th}>Interactions</th>
                 <th scope="col" className={th}>Cleared</th>
                 <th scope="col" className={th}>Revisits</th>
-                <th scope="col" className={th}>Attendance</th>
+                <th scope="col" className={th}>DSA attendance</th>
                 <th scope="col" className={th}>Last</th>
               </tr>
             </thead>
@@ -255,8 +255,8 @@ export function StudentInteractions({ rows }: { rows: StudentRow[] }) {
               ["Cleared", num(detail.cleared, "good")],
               ["Revisits", num(detail.revisits, "warn")],
               ["Last interaction", detail.last ? formatDate(detail.last) : "—"],
-              ["Attendance · 30 days", att(detail.attendance30d)],
-              ["Attendance · this term", att(detail.attendanceTerm)],
+              ["DSA attendance · 30 days", att(detail.attendance30d)],
+              ["DSA attendance · this term", att(detail.attendanceTerm)],
               ["Current status", STANDING_LABEL[detail.standing]],
             ]
           }

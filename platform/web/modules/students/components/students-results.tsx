@@ -21,7 +21,7 @@ import { cn } from "@/common/lib/utils";
 const CHIPS: { key: FlagFilter | "all"; label: string }[] = [
   { key: "all", label: "All students" },
   { key: "any", label: "Needs attention" },
-  { key: "attendance", label: "Attendance < 75%" },
+  { key: "attendance", label: "DSA attendance < 75%" },
   { key: "interaction", label: "No interaction in 14+ days" },
   { key: "tests", label: "Below pass in tests" },
   { key: "contests", label: "Missed contests" },

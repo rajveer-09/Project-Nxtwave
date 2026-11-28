@@ -40,7 +40,7 @@ const columns: ColumnDef<AtRiskStudent>[] = [
   },
   {
     accessorKey: "attendance30d",
-    header: "Attendance · 30 days",
+    header: "DSA attendance · 30 days",
     cell: ({ getValue }) => {
       const value = getValue<number | null>();
       if (value === null) return <span className="text-muted-foreground">—</span>;

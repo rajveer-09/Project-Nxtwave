@@ -30,7 +30,9 @@ export function isRealDate(v: unknown): v is string {
 /** "2026-11-16" + -7 → "2026-11-09" */
 export function addDays(ymd: string, days: number): string {
   const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+  const t = Date.UTC(y, m - 1, d + days);
+  // A half-typed date box gives "" or junk: hand it back rather than throw (which would crash the page).
+  return Number.isNaN(t) ? ymd : new Date(t).toISOString().slice(0, 10);
 }
 
 /** "2026-11-16" → "16 Nov 2026" */

@@ -329,7 +329,7 @@ export function HallSheet({
           ) : (
             <>
               <ul
-                aria-label={`Attendance for ${hallName}. Use the arrow keys to move between students and P or A to mark.`}
+                aria-label={`DSA attendance for ${hallName}. Use the arrow keys to move between students and P or A to mark.`}
                 onKeyDown={onKeyDown}
                 className="divide-y divide-border overflow-hidden rounded-xl border border-border"
               >
@@ -362,7 +362,7 @@ export function HallSheet({
                         </div>
                       </div>
                       {row.counted ? (
-                        <div role="group" aria-label={`Attendance for ${row.name}`} className="inline-flex self-start overflow-hidden rounded-lg border border-input sm:self-auto">
+                        <div role="group" aria-label={`DSA attendance for ${row.name}`} className="inline-flex self-start overflow-hidden rounded-lg border border-input sm:self-auto">
                           {CHOICES.map((c) => {
                             const on = mark === c.value;
                             return (

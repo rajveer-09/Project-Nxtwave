@@ -42,7 +42,7 @@ export function LogSnapshot({ student: s, latestTest, interactions }: { student:
     <section aria-label={`${s.name} at a glance`} className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
         <Tile label="Level" value={`Level ${s.level}`} sub={where || "—"} />
-        <Tile label="Attendance · 30 days" value={s.attendance30d === null ? "—" : `${s.attendance30d}%`} warn={s.attendance30d !== null && s.attendance30d < 75} sub={`${s.college} · ${s.section}`} />
+        <Tile label="DSA attendance · 30 days" value={s.attendance30d === null ? "—" : `${s.attendance30d}%`} warn={s.attendance30d !== null && s.attendance30d < 75} sub={`${s.college} · ${s.section}`} />
         <Tile label="Interactions" value={interactions.length} sub={`last ${ago(s.lastInteractionDays)}`} warn={s.lastInteractionDays === null || s.lastInteractionDays >= 14} />
         <Tile label="Last outcome" value={last ? STATUS_LABEL[last.status] : "—"} sub={last ? `rating ${last.rating} / 5` : "no interaction yet"} warn={last?.status === "Need to Revisit"} />
         <Tile label="Weekly test" value={latestTest === null ? "—" : `${latestTest}`} sub={latestTest === null ? "no result yet" : "latest total"} />

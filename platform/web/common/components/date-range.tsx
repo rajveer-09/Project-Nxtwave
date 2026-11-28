@@ -9,7 +9,7 @@ Date : 18 Nov 2026
 "use client";
 
 import { useRef, useState } from "react";
-import { addDays } from "@/common/lib/dates";
+import { addDays, isRealDate } from "@/common/lib/dates";
 import { useResetWhenShown } from "@/common/lib/use-reset-when-shown";
 import { cn } from "@/common/lib/utils";
 
@@ -80,15 +80,23 @@ export function DateRange({ from, to, today, max = 400, quick = ["Today"] }: { f
           type="date"
           name="from"
           value={range.from}
-          max={range.to}
-          min={addDays(range.to, -max)}
+          max={isRealDate(range.to) ? range.to : today}
+          min={isRealDate(range.to) ? addDays(range.to, -max) : undefined}
           onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
           className={field}
         />
       </label>
       <label className={cn("flex flex-col gap-1 text-xs font-medium text-muted-foreground", !custom && "hidden")}>
         To
-        <input type="date" name="to" value={range.to} min={range.from} max={today} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className={field} />
+        <input
+          type="date"
+          name="to"
+          value={range.to}
+          min={isRealDate(range.from) ? range.from : undefined}
+          max={today}
+          onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
+          className={field}
+        />
       </label>
     </div>
   );
