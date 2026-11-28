@@ -29,7 +29,7 @@ function NextField() {
 
 const KINDS = [
   { value: "student", label: "Student" },
-  { value: "staff", label: "Staff" },
+  { value: "staff", label: "Faculty" },
 ] as const;
 
 /** Student or Staff, then the matching sign-in field. Staff covers instructors, coaches and admins. */
@@ -61,8 +61,8 @@ export function PasswordForm({ enabled }: { enabled: boolean }) {
         <Suspense fallback={null}>
           <NextField />
         </Suspense>
-        <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-          {student ? "NIAT ID" : "Work email"}
+        <label className="flex flex-col gap-2 text-sm font-medium">
+          Username
           <input
             key={kind}
             name="email"
@@ -73,12 +73,12 @@ export function PasswordForm({ enabled }: { enabled: boolean }) {
             spellCheck={false}
             required
             defaultValue={state.kind === kind ? state.email : ""}
-            placeholder={student ? "N24H01A0031" : "name@nxtwave.co.in"}
+            placeholder={student ? "N24H01A00XX" : "name@nxtwave.co.in"}
             disabled={!enabled}
             className={cn(inputClass, student && "uppercase tabular placeholder:normal-case")}
           />
         </label>
-        <label className="flex flex-col gap-1.5 text-[13px] font-medium">
+        <label className="flex flex-col gap-2 text-sm font-medium">
           Password
           <input name="password" type="password" autoComplete="current-password" required disabled={!enabled} className={inputClass} />
         </label>
@@ -90,9 +90,6 @@ export function PasswordForm({ enabled }: { enabled: boolean }) {
         <Button type="submit" size="lg" className="mt-1 h-12 rounded-xl text-[15px] font-semibold" disabled={!enabled || pending}>
           {pending ? "Signing in…" : "Sign in"}
         </Button>
-        <p className="text-[13px] text-muted-foreground">
-          First time signing in? Use the default password you were given. You&apos;ll choose your own next.
-        </p>
       </form>
     </div>
   );
