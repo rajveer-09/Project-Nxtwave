@@ -48,7 +48,7 @@ export type AttendanceOverview = {
   today: Marks;
   /** Every counted mark in the chosen dates. */
   period: Marks & { students: number };
-  byDay: { day: string; pct: number | null }[];
+  byDay: { day: string; pct: number | null; present: number; absent: number }[];
   byHall: { hall: string; pct: number; students: number }[];
   /** The chosen dates per college (students: how many have a mark). */
   byCollege: (Marks & { college: string; students: number })[];
@@ -148,7 +148,7 @@ export async function getAttendanceOverview(from: string, to: string, today: str
   return {
     today: marks(day.rows[0]),
     period: { ...marks(period.rows[0]), students: period.rows[0].students },
-    byDay: byDay.rows.map((r) => ({ day: r.day, pct: pct(r.p, r.m) })),
+    byDay: byDay.rows.map((r) => ({ day: r.day, pct: pct(r.p, r.m), present: r.p, absent: r.m - r.p })),
     byHall: byHall.rows
       .filter((r) => r.m > 0)
       .map((r) => ({ hall: r.hall, pct: Math.round((r.p * 100) / r.m), students: r.students }))
