@@ -21,7 +21,7 @@ import { daysBetween } from "@/common/lib/range";
  */
 
 const COUNTED_MARKS = `
-  SELECT a.niat_id, a.date, a.status, s.hall_no
+  SELECT a.niat_id, a.date, a.status, a.updated_at, s.hall_no
   FROM attendance.attendance a
   JOIN attendance.students s ON s.niat_id = a.niat_id AND s.status = 'active'
   LEFT JOIN attendance.calendar_days cd ON cd.date = a.date AND cd.applies_to = s.degree_code
@@ -54,7 +54,18 @@ export type AttendanceOverview = {
   byCollege: (Marks & { college: string; students: number })[];
   /** Today per college. */
   todayByCollege: (Marks & { college: string })[];
+  /**
+   * Today's final updates: the marks saved by 1 PM and by 5 PM IST, overall and per college; null
+   * until that time has come.
+   */
+  finals: { at: "1 PM" | "5 PM"; total: Marks; byCollege: (Marks & { college: string })[] | null; due: boolean }[];
 };
+
+/** Today's final updates (IST). */
+const FINALS = [
+  { at: "1 PM", time: "13:00" },
+  { at: "5 PM", time: "17:00" },
+] as const;
 
 /**
  * Attendance for the evaluation dashboard (Home and Analytics): today, the chosen dates, per day, per hall and
@@ -66,7 +77,8 @@ export async function getAttendanceOverview(from: string, to: string, today: str
   cacheTag(TAGS.roster, TAGS.home);
   const db = getDb();
   type Row = { p: number; m: number };
-  const [day, period, byDay, byHall, byCollege, todayByCollege] = await Promise.all([
+  const finalAt = FINALS.map((f) => `${today}T${f.time}:00+05:30`);
+  const [day, period, byDay, byHall, byCollege, todayByCollege, finals] = await Promise.all([
     db.query<Row>(`SELECT count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x`, [today, today, ids]),
     db.query<Row & { students: number }>(
       `SELECT count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m, count(DISTINCT niat_id)::int AS students FROM (${SCOPED_MARKS}) x`,
@@ -83,6 +95,13 @@ export async function getAttendanceOverview(from: string, to: string, today: str
       [from, to, ids],
     ),
     db.query<Row & { college: string }>(`SELECT college, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x GROUP BY 1`, [today, today, ids]),
+    // Marks saved by each final-update time, per college (GROUPING SETS: '' row is everyone).
+    db.query<{ at: number; college: string | null; p: number; m: number }>(
+      `SELECT f.i AS at, x.college, count(*) FILTER (WHERE x.status = 'P')::int AS p, count(*)::int AS m
+       FROM (${SCOPED_MARKS}) x JOIN unnest($4::timestamptz[]) WITH ORDINALITY f(t, i) ON x.updated_at <= f.t
+       GROUP BY GROUPING SETS ((f.i, x.college), (f.i))`,
+      [today, today, ids, finalAt],
+    ),
   ]);
   const marks = (r: Row): Marks => ({ present: r.p, absent: r.m - r.p, pct: pct(r.p, r.m) });
   return {
@@ -95,6 +114,16 @@ export async function getAttendanceOverview(from: string, to: string, today: str
       .sort((a, b) => Number(a.hall.match(/\d+/)?.[0] ?? 999) - Number(b.hall.match(/\d+/)?.[0] ?? 999)),
     byCollege: byCollege.rows.map((r) => ({ college: r.college, students: r.students, ...marks(r) })),
     todayByCollege: todayByCollege.rows.map((r) => ({ college: r.college, ...marks(r) })),
+    finals: FINALS.map((f, i) => {
+      const rows = finals.rows.filter((r) => Number(r.at) === i + 1);
+      const total = rows.find((r) => r.college === null);
+      return {
+        at: f.at,
+        due: Date.now() >= Date.parse(finalAt[i]),
+        total: marks(total ?? { p: 0, m: 0 }),
+        byCollege: rows.filter((r) => r.college !== null).map((r) => ({ college: r.college as string, ...marks(r) })),
+      };
+    }),
   };
 }
 

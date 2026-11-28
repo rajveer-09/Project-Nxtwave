@@ -42,7 +42,25 @@ const pctText = (n: number | null) => (n === null ? "—" : `${n}%`);
 
 type Split = { label: string; value: string; warn?: boolean }[];
 
-function Tile({ icon: Icon, label, value, sub, warn, split }: { icon: typeof Users; label: string; value: string; sub: string; warn?: boolean; split?: Split }) {
+type Finals = { label: string; value: string | null; warn?: boolean }[];
+
+function Tile({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  warn,
+  split,
+  finals,
+}: {
+  icon: typeof Users;
+  label: string;
+  value: string;
+  sub: string;
+  warn?: boolean;
+  split?: Split;
+  finals?: Finals;
+}) {
   return (
     <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3.5 sm:p-4">
       <div className="flex items-start gap-1.5 text-xs font-medium text-muted-foreground sm:gap-2">
@@ -62,6 +80,18 @@ function Tile({ icon: Icon, label, value, sub, warn, split }: { icon: typeof Use
         </dl>
       ) : null}
       <div className="mt-1 text-[11px] leading-snug text-muted-foreground sm:mt-1.5 sm:text-xs">{sub}</div>
+      {finals?.length ? (
+        <dl className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-t border-border pt-2 text-xs">
+          {finals.map((f) => (
+            <div key={f.label} className="flex items-baseline gap-1">
+              <dt className="text-muted-foreground">{f.label} final</dt>
+              <dd className={cn("font-semibold tabular", f.value === null ? "font-normal text-muted-foreground" : f.warn ? "text-warning" : "text-foreground")}>
+                {f.value ?? "pending"}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </div>
   );
 }
@@ -158,6 +188,9 @@ export async function EvaluationDashboard({
   const todayOf = (college: string) => att.todayByCollege.find((x) => x.college === college);
   const datesOf = (college: string) => att.byCollege.find((x) => x.college === college);
   const low = (p: number | null | undefined) => p !== null && p !== undefined && p < MIN;
+  // 1 PM and 5 PM final updates (Today only): "pending" until that time.
+  const finals = (pick: (m: { present: number; absent: number; pct: number | null }) => { value: string; warn?: boolean }): Finals =>
+    att.finals.map((f) => ({ label: f.at, ...(f.due ? pick(f.total) : { value: null }) }));
 
   // Level distribution and topic progression (curriculum order; topics nobody is on show 0)
   const levelCount = Math.max(structure.levels.length, 1);
@@ -286,6 +319,7 @@ export async function EvaluationDashboard({
               sub={markedToday ? `${fmt(markedToday)} students marked today` : "Not marked yet, or a day off"}
               warn={att.today.pct !== null && att.today.pct < MIN}
               split={markedToday ? split((c) => ({ value: pctText(todayOf(c)?.pct ?? null), warn: low(todayOf(c)?.pct) })) : undefined}
+              finals={finals((m) => ({ value: pctText(m.pct), warn: low(m.pct) }))}
             />
             <Tile
               icon={UserCheck}
@@ -293,6 +327,7 @@ export async function EvaluationDashboard({
               value={markedToday ? fmt(att.today.present) : "—"}
               sub="Students marked present today"
               split={markedToday ? split((c) => ({ value: fmt(todayOf(c)?.present ?? 0) })) : undefined}
+              finals={finals((m) => ({ value: fmt(m.present) }))}
             />
             <Tile
               icon={UserX}
@@ -301,6 +336,7 @@ export async function EvaluationDashboard({
               sub="Students marked absent today"
               warn={att.today.absent > 0}
               split={markedToday ? split((c) => ({ value: fmt(todayOf(c)?.absent ?? 0) })) : undefined}
+              finals={finals((m) => ({ value: fmt(m.absent) }))}
             />
           </>
         ) : (
