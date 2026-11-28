@@ -8,6 +8,7 @@ Date : 16 Nov 2026
 
 import { CalendarMonth } from "@/common/components/calendar-month";
 import type { StudentDetail } from "@/modules/students/data";
+import type { StudentPeriodView } from "@/common/sample-data/student-detail";
 import { cn } from "@/common/lib/utils";
 import { SectionHeading } from "@/modules/students/components/profile/overview";
 import { ProgressExplorer } from "@/modules/students/components/profile/progress-explorer";
@@ -67,17 +68,60 @@ export function AttendanceSection({ d, student = false }: { d: StudentDetail; st
                 {a.placementReachable ? "Still reachable" : "Not reachable this term"}
               </dd>
             </div>
-            <div className="rounded-xl border border-border bg-card px-4 py-3.5">
-              <dt className="text-xs font-semibold text-muted-foreground">Internship / registration periods</dt>
-              <dd className="mt-1 font-bold">{a.periods.length ? a.periods.map((p) => p.kind).join(", ") : "None recorded"}</dd>
-            </div>
           </dl>
+          {a.periods.length ? <PeriodsCard periods={a.periods} /> : null}
         </div>
       </div>
     </section>
   );
 }
 
+
+const PERIOD_KIND = {
+  Internship: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/60 dark:text-violet-300",
+  "Registration pending": "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900 dark:bg-orange-950/60 dark:text-orange-300",
+} as const;
+const PERIOD_STATE: Record<StudentPeriodView["state"], string> = {
+  upcoming: "Upcoming",
+  active: "In progress",
+  ended: "Ended",
+  pending: "Still pending",
+  completed: "Completed",
+};
+const periodDate = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/** Read-only internship and registration-pending periods (cancelled ones are never shown). */
+function PeriodsCard({ periods }: { periods: StudentPeriodView[] }) {
+  return (
+    <section aria-labelledby="att-periods-h" className="flex flex-col gap-2.5 rounded-xl border border-border bg-card p-4">
+      <div>
+        <h3 id="att-periods-h" className="text-[15px] font-bold">
+          Internship and registration
+        </h3>
+        <p className="text-[13px] text-muted-foreground">Internship days count as Present; days with Term 5 registration pending count as Absent.</p>
+      </div>
+      <ul className="flex flex-col gap-2 text-[13px]">
+        {periods.map((p) => (
+          <li key={`${p.kind}${p.from}`} className="flex flex-col gap-1 rounded-lg border border-border p-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn("rounded-md border px-2 py-0.5 text-xs font-semibold", PERIOD_KIND[p.kind])}>{p.kind}</span>
+              <span className="text-xs font-semibold">{PERIOD_STATE[p.state]}</span>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {periodDate(p.from)} – {periodDate(p.to)} · {p.calendarDays} day{p.calendarDays === 1 ? "" : "s"} ({p.attendanceDays} attendance day
+              {p.attendanceDays === 1 ? "" : "s"})
+              {p.kind === "Registration pending"
+                ? p.completedOn
+                  ? ` · registration completed by ${periodDate(p.completedOn)}`
+                  : ` · not completed yet (last seen pending ${periodDate(p.to)})`
+                : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 export function ProgressSection({ d, student = false }: { d: StudentDetail; student?: boolean }) {
   const p = d.progress;

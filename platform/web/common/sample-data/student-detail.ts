@@ -31,7 +31,29 @@ function seeded(text: string) {
 }
 
 export type DayStatus = "present" | "absent" | "holiday" | "upcoming" | "blank";
-export type CalendarDay = { day: number | null; status: DayStatus; today?: boolean };
+export type CalendarDay = {
+  day: number | null;
+  status: DayStatus;
+  today?: boolean;
+  tag?: string;
+  note?: string;
+  /** The day's mark is an internship or registration-pending mark (DSA attendance student periods). */
+  category?: "INTERNSHIP" | "REGISTRATION_PENDING";
+};
+
+/**
+ * One internship or registration-pending period as the student sees it (cancelled ones are never
+ * shown). state is as of today (IST); attendanceDays are the days in it that count, up to today.
+ */
+export type StudentPeriodView = {
+  kind: "Internship" | "Registration pending";
+  from: string;
+  to: string;
+  state: "upcoming" | "active" | "ended" | "pending" | "completed";
+  completedOn: string | null;
+  calendarDays: number;
+  attendanceDays: number;
+};
 
 const STEP_CODES = [
   ["1.1", "Concept"],
@@ -309,7 +331,7 @@ export function buildStudentDetail(s: RosterStudent) {
       months,
       daysTo75,
       placementReachable: attTerm >= 90,
-      periods: [] as { kind: string; from: string; to: string }[],
+      periods: [] as StudentPeriodView[],
     },
     progress,
     interactions,

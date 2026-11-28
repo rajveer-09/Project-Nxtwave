@@ -11,7 +11,7 @@ import { getDb } from "@/common/db/pool";
 import { flagDetail, RISK_THRESHOLDS } from "@/common/domain/risk";
 import { addDays, formatDate, todayIst } from "@/common/lib/dates";
 import type { RosterStudent } from "@/common/sample-data/roster";
-import type { buildStudentDetail, CalendarDay } from "@/common/sample-data/student-detail";
+import type { buildStudentDetail, CalendarDay, StudentPeriodView } from "@/common/sample-data/student-detail";
 import { listInteractions } from "@nxtone/interactions-ui/data";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 import { liveTopics, studentSteps, subtopicNames, topicSteps } from "@nxtone/interactions-ui/curriculum/lib/structure";
@@ -98,10 +98,11 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
       "SELECT degree_code, joined_on::text, dropped_on::text, status, created_at FROM attendance.students WHERE niat_id = $1", [id]),
     db.query<Term>("SELECT name, start_date::text AS start, end_date::text AS end, is_current FROM attendance.terms ORDER BY start_date"),
     db.query<Entry>("SELECT date::text, applies_to, day_type, counts, label FROM attendance.calendar_days WHERE applies_to IN ('ALL', $1)", [s.college]),
-    db.query<{ date: string; status: "P" | "A" }>("SELECT date::text, status FROM attendance.attendance WHERE niat_id = $1 ORDER BY date", [id]),
+    db.query<{ date: string; status: "P" | "A"; category: "INTERNSHIP" | "REGISTRATION_PENDING" | null }>(
+      "SELECT date::text, status, category FROM attendance.attendance WHERE niat_id = $1 ORDER BY date", [id]),
     db.query<{ month: string; remark: string }>("SELECT to_char(month, 'YYYY-MM') AS month, remark FROM attendance.student_remarks WHERE niat_id = $1", [id]),
-    db.query<{ kind: string; start: string; end: string }>(
-      "SELECT kind, start_date::text AS start, end_date::text AS end FROM attendance.student_periods WHERE niat_id = $1 AND cancelled_at IS NULL ORDER BY start_date", [id]),
+    db.query<{ kind: string; start: string; end: string; completed_on: string | null }>(
+      "SELECT kind, start_date::text AS start, end_date::text AS end, completed_on::text FROM attendance.student_periods WHERE niat_id = $1 AND cancelled_at IS NULL ORDER BY start_date", [id]),
     db.query<{ created_at: string }>("SELECT created_at FROM logs.students WHERE upper(id) = $1", [id]),
     db.query<{ from_level: number; to_level: number; change_date: string; changed_at: string; by: string | null; source: string }>(
       `SELECT lc.from_level, lc.to_level, lc.change_date::text, lc.changed_at, COALESCE(st.name, u.name, lc.changed_by) AS by, lc.source
@@ -121,6 +122,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
   const a = att.rows[0];
   const resolve = dayResolver(a?.degree_code ?? s.college, a?.joined_on ?? null, a?.dropped_on ?? null, terms.rows, calendar.rows, today);
   const markOn = new Map(marks.rows.map((m) => [m.date, m.status]));
+  const categoryOn = new Map(marks.rows.filter((m) => m.category).map((m) => [m.date, m.category!]));
   const term = terms.rows.find((t) => today >= t.start && today <= t.end) ?? terms.rows.find((t) => t.is_current) ?? terms.rows.at(-1) ?? null;
 
   const count = (from: string, to: string) => {
@@ -149,7 +151,11 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
           : mark === "A"
             ? "absent"
             : "blank";
-    cells.push({ day: Number(d.slice(8)), status, today: d === today, ...noClassReason(d, r) });
+    // An internship or registration-pending mark colours the day when it counts (or will: a planned
+    // internship day), as on the attendance service's student calendar.
+    const cat = categoryOn.get(d);
+    const category = cat && r.dayCounts && r.inTerm && r.enrolled ? cat : undefined;
+    cells.push({ day: Number(d.slice(8)), status, today: d === today, ...noClassReason(d, r), ...(category ? { category } : {}) });
   }
   const thisMonth = count(firstOfMonth, today);
 
@@ -457,7 +463,26 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
       months,
       daysTo75: s.attendance30d === null ? 0 : daysTo75,
       placementReachable,
-      periods: periods.rows.map((p) => ({ kind: p.kind === "INTERNSHIP" ? "Internship" : "Registration pending", from: p.start, to: p.end })),
+      periods: periods.rows.map((p): StudentPeriodView => {
+        const internship = p.kind === "INTERNSHIP";
+        // stats.StateOf and PeriodDays in the attendance service.
+        const state: StudentPeriodView["state"] = internship
+          ? today < p.start
+            ? "upcoming"
+            : today > p.end
+              ? "ended"
+              : "active"
+          : p.completed_on
+            ? "completed"
+            : "pending";
+        let calendarDays = 0;
+        let attendanceDays = 0;
+        for (let d = p.start; d <= p.end; d = addDays(d, 1)) {
+          calendarDays++;
+          if (resolve(d).counted) attendanceDays++;
+        }
+        return { kind: internship ? "Internship" : "Registration pending", from: p.start, to: p.end, state, completedOn: p.completed_on, calendarDays, attendanceDays };
+      }),
     },
     progress,
     interactions: items,
