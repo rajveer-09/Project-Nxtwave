@@ -26,7 +26,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
     return <p className="rounded-xl border border-border bg-card px-4 py-3.5 text-sm text-muted-foreground">Analytics needs the database.</p>;
   }
   const today = todayIst();
-  return <EvaluationDashboard range={parseRange(await searchParams, today, 30)} today={today} scope={studentScope(user)} eyebrow="Admin panel · Analytics" />;
+  return <EvaluationDashboard range={parseRange(await searchParams, today, 30)} today={today} scope={studentScope(user)} eyebrow="Admin panel · Analytics" pageTitle="Analytics" />;
 }
 
 export default function AnalyticsPage({ searchParams }: PageProps<"/analytics">) {

@@ -50,7 +50,10 @@ export type AttendanceOverview = {
   period: Marks & { students: number };
   byDay: { day: string; pct: number | null }[];
   byHall: { hall: string; pct: number; students: number }[];
-  byCollege: { college: string; pct: number | null }[];
+  /** The chosen dates per college (students: how many have a mark). */
+  byCollege: (Marks & { college: string; students: number })[];
+  /** Today per college. */
+  todayByCollege: (Marks & { college: string })[];
 };
 
 /**
@@ -63,7 +66,7 @@ export async function getAttendanceOverview(from: string, to: string, today: str
   cacheTag(TAGS.roster, TAGS.home);
   const db = getDb();
   type Row = { p: number; m: number };
-  const [day, period, byDay, byHall, byCollege] = await Promise.all([
+  const [day, period, byDay, byHall, byCollege, todayByCollege] = await Promise.all([
     db.query<Row>(`SELECT count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x`, [today, today, ids]),
     db.query<Row & { students: number }>(
       `SELECT count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m, count(DISTINCT niat_id)::int AS students FROM (${SCOPED_MARKS}) x`,
@@ -75,7 +78,11 @@ export async function getAttendanceOverview(from: string, to: string, today: str
        FROM (${SCOPED_MARKS}) x GROUP BY 1`,
       [from, to, ids],
     ),
-    db.query<Row & { college: string }>(`SELECT college, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x GROUP BY 1`, [from, to, ids]),
+    db.query<Row & { college: string; students: number }>(
+      `SELECT college, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m, count(DISTINCT niat_id)::int AS students FROM (${SCOPED_MARKS}) x GROUP BY 1`,
+      [from, to, ids],
+    ),
+    db.query<Row & { college: string }>(`SELECT college, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x GROUP BY 1`, [today, today, ids]),
   ]);
   const marks = (r: Row): Marks => ({ present: r.p, absent: r.m - r.p, pct: pct(r.p, r.m) });
   return {
@@ -86,7 +93,8 @@ export async function getAttendanceOverview(from: string, to: string, today: str
       .filter((r) => r.m > 0)
       .map((r) => ({ hall: r.hall, pct: Math.round((r.p * 100) / r.m), students: r.students }))
       .sort((a, b) => Number(a.hall.match(/\d+/)?.[0] ?? 999) - Number(b.hall.match(/\d+/)?.[0] ?? 999)),
-    byCollege: byCollege.rows.map((r) => ({ college: r.college, pct: pct(r.p, r.m) })),
+    byCollege: byCollege.rows.map((r) => ({ college: r.college, students: r.students, ...marks(r) })),
+    todayByCollege: todayByCollege.rows.map((r) => ({ college: r.college, ...marks(r) })),
   };
 }
 

@@ -7,7 +7,7 @@ Date : 25 Nov 2026
 */
 
 import Link from "next/link";
-import { BarChart2, CalendarCheck, Download, Percent, UserCheck, Users, UserX } from "lucide-react";
+import { CalendarCheck, Download, Percent, UserCheck, Users, UserX } from "lucide-react";
 import { getStructure } from "@nxtone/interactions-ui/curriculum/structure";
 import { BarList } from "@/common/components/bar-list";
 import { TrendLine } from "@/common/components/charts";
@@ -40,7 +40,9 @@ const MIN = RISK_THRESHOLDS.attendancePct;
 const fmt = (n: number) => n.toLocaleString("en-IN");
 const pctText = (n: number | null) => (n === null ? "—" : `${n}%`);
 
-function Tile({ icon: Icon, label, value, sub, warn }: { icon: typeof Users; label: string; value: string; sub: string; warn?: boolean }) {
+type Split = { label: string; value: string; warn?: boolean }[];
+
+function Tile({ icon: Icon, label, value, sub, warn, split }: { icon: typeof Users; label: string; value: string; sub: string; warn?: boolean; split?: Split }) {
   return (
     <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3.5 sm:p-4">
       <div className="flex items-start gap-1.5 text-xs font-medium text-muted-foreground sm:gap-2">
@@ -48,6 +50,17 @@ function Tile({ icon: Icon, label, value, sub, warn }: { icon: typeof Users; lab
         <span className="min-w-0">{label}</span>
       </div>
       <div className={cn("mt-1.5 font-heading text-2xl leading-tight font-semibold tracking-tight tabular sm:mt-2 sm:text-[28px]", warn && "text-warning")}>{value}</div>
+      {split?.length ? (
+        <dl className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-xs">
+          {split.map((x, i) => (
+            <div key={x.label} className="flex items-baseline gap-1">
+              {i > 0 ? <span aria-hidden="true" className="mr-1 text-muted-foreground/60">|</span> : null}
+              <dt className="font-semibold text-muted-foreground">{x.label}</dt>
+              <dd className={cn("font-semibold tabular text-foreground", x.warn && "text-warning")}>{x.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       <div className="mt-1 text-[11px] leading-snug text-muted-foreground sm:mt-1.5 sm:text-xs">{sub}</div>
     </div>
   );
@@ -105,19 +118,19 @@ function Panel({ title, action, description, className, children }: { title: str
   );
 }
 
-/** heading: the "Cohort Telemetry & Performance" title and its description (Analytics shows it; Home doesn't). */
+/** pageTitle: the page's heading for screen readers (the visible header is the eyebrow and the date controls). */
 export async function EvaluationDashboard({
   range,
   today,
   scope,
   eyebrow,
-  heading = true,
+  pageTitle = "Home",
 }: {
   range: Range;
   today: string;
   scope: StudentScope | undefined;
   eyebrow?: React.ReactNode;
-  heading?: boolean;
+  pageTitle?: string;
 }) {
   const roster = (await getRoster()).filter((s) => inScope(scope, s));
   const ids = scope ? roster.map((s) => s.niatId).sort() : null;
@@ -137,6 +150,14 @@ export async function EvaluationDashboard({
   // "Today" shows today's marks; any other dates show the totals for those dates.
   const isToday = range.from === today && range.to === today;
   const markedInDates = att.period.present + att.period.absent;
+  // CDU | BITS on each attendance card (only when the students span more than one college).
+  const ORDER = ["CDU", "BITS"];
+  const splitColleges = [...colleges].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
+  const split = (pick: (college: string) => { value: string; warn?: boolean }): Split | undefined =>
+    splitColleges.length > 1 ? splitColleges.map((college) => ({ label: college, ...pick(college) })) : undefined;
+  const todayOf = (college: string) => att.todayByCollege.find((x) => x.college === college);
+  const datesOf = (college: string) => att.byCollege.find((x) => x.college === college);
+  const low = (p: number | null | undefined) => p !== null && p !== undefined && p < MIN;
 
   // Level distribution and topic progression (curriculum order; topics nobody is on show 0)
   const levelCount = Math.max(structure.levels.length, 1);
@@ -221,23 +242,10 @@ export async function EvaluationDashboard({
 
   return (
     <div className="flex flex-col gap-4">
-      <header className={cn("flex flex-col justify-between gap-4 rounded-xl border border-border bg-card p-3.5 sm:p-4 xl:flex-row", heading ? "xl:items-end" : "xl:items-center")}>
+      <header className="flex flex-col justify-between gap-4 rounded-xl border border-border bg-card p-3.5 sm:p-4 xl:flex-row xl:items-center">
         <div className="flex min-w-0 flex-col gap-0.5 xl:max-w-xl">
           {eyebrow ? <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{eyebrow}</p> : null}
-          {heading ? (
-            <>
-              <div className="flex items-center gap-2">
-                <BarChart2 aria-hidden="true" className="size-4 text-muted-foreground" />
-                <h1 className="text-base font-semibold tracking-tight">Cohort Telemetry &amp; Performance</h1>
-              </div>
-              <p className="text-[13px] text-muted-foreground">
-                Daily interaction metrics, revisit counts, attendance, and instructor/student analytics
-                {scope ? " for your students" : " across the cohort"} · {fmt(roster.length)} students
-              </p>
-            </>
-          ) : (
-            <h1 className="sr-only">Home</h1>
-          )}
+          <h1 className="sr-only">{pageTitle}</h1>
         </div>
         <div className="flex flex-wrap items-end gap-3 xl:shrink-0 xl:justify-end">
           <LiveForm className="flex min-w-0 flex-wrap items-end gap-3" aria-label="Choose dates">
@@ -277,9 +285,23 @@ export async function EvaluationDashboard({
               value={markedToday ? pctText(att.today.pct) : "—"}
               sub={markedToday ? `${fmt(markedToday)} students marked today` : "Not marked yet, or a day off"}
               warn={att.today.pct !== null && att.today.pct < MIN}
+              split={markedToday ? split((c) => ({ value: pctText(todayOf(c)?.pct ?? null), warn: low(todayOf(c)?.pct) })) : undefined}
             />
-            <Tile icon={UserCheck} label="Present Today" value={markedToday ? fmt(att.today.present) : "—"} sub="Students marked present today" />
-            <Tile icon={UserX} label="Absent Today" value={markedToday ? fmt(att.today.absent) : "—"} sub="Students marked absent today" warn={att.today.absent > 0} />
+            <Tile
+              icon={UserCheck}
+              label="Present Today"
+              value={markedToday ? fmt(att.today.present) : "—"}
+              sub="Students marked present today"
+              split={markedToday ? split((c) => ({ value: fmt(todayOf(c)?.present ?? 0) })) : undefined}
+            />
+            <Tile
+              icon={UserX}
+              label="Absent Today"
+              value={markedToday ? fmt(att.today.absent) : "—"}
+              sub="Students marked absent today"
+              warn={att.today.absent > 0}
+              split={markedToday ? split((c) => ({ value: fmt(todayOf(c)?.absent ?? 0) })) : undefined}
+            />
           </>
         ) : (
           <>
@@ -288,9 +310,23 @@ export async function EvaluationDashboard({
               label="Students Marked"
               value={markedInDates ? fmt(att.period.students) : "—"}
               sub={markedInDates ? `${dates} · ${fmt(markedInDates)} marks` : `Nothing marked ${dates}`}
+              split={markedInDates ? split((c) => ({ value: fmt(datesOf(c)?.students ?? 0) })) : undefined}
             />
-            <Tile icon={UserCheck} label="Present" value={markedInDates ? fmt(att.period.present) : "—"} sub={`Present marks · ${dates}`} />
-            <Tile icon={UserX} label="Absent" value={markedInDates ? fmt(att.period.absent) : "—"} sub={`Absent marks · ${dates}`} warn={att.period.absent > 0} />
+            <Tile
+              icon={UserCheck}
+              label="Present"
+              value={markedInDates ? fmt(att.period.present) : "—"}
+              sub={`Present marks · ${dates}`}
+              split={markedInDates ? split((c) => ({ value: fmt(datesOf(c)?.present ?? 0) })) : undefined}
+            />
+            <Tile
+              icon={UserX}
+              label="Absent"
+              value={markedInDates ? fmt(att.period.absent) : "—"}
+              sub={`Absent marks · ${dates}`}
+              warn={att.period.absent > 0}
+              split={markedInDates ? split((c) => ({ value: fmt(datesOf(c)?.absent ?? 0) })) : undefined}
+            />
           </>
         )}
         <Tile
@@ -299,6 +335,7 @@ export async function EvaluationDashboard({
           value={pctText(att.period.pct)}
           sub={`${dates} · counted days · ${MIN}% minimum`}
           warn={att.period.pct !== null && att.period.pct < MIN}
+          split={att.period.pct !== null ? split((c) => ({ value: pctText(datesOf(c)?.pct ?? null), warn: low(datesOf(c)?.pct) })) : undefined}
         />
       </section>
 

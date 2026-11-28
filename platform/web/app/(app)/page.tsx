@@ -32,7 +32,6 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParamsRec
       range={parseRange(await searchParams, today, 1)}
       today={today}
       scope={studentScope(user)}
-      heading={false}
       eyebrow={`${greetingIst()}, ${user.name.split(" ")[0]} · ${formatDate(today)}`}
     />
   );
