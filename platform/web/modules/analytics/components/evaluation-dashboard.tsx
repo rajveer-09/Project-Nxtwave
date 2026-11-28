@@ -38,60 +38,43 @@ import { TopicProgression } from "@/modules/analytics/components/topic-progressi
 const EXPORT_HREF = "/api/logs/interactions/export";
 const MIN = RISK_THRESHOLDS.attendancePct;
 const fmt = (n: number) => n.toLocaleString("en-IN");
-const pctText = (n: number | null) => (n === null ? "—" : `${n}%`);
 
-type Split = { label: string; value: string; warn?: boolean }[];
+type Half = {
+  college: string;
+  value: React.ReactNode;
+  note?: React.ReactNode;
+  /** 1 PM and 5 PM final updates (null: not yet). */
+  finals?: { at: string; value: string | null }[];
+};
 
-type Finals = { label: string; value: string | null; warn?: boolean }[];
-
-function Tile({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  warn,
-  split,
-  finals,
-}: {
-  icon: typeof Users;
-  label: string;
-  value: string;
-  sub: string;
-  warn?: boolean;
-  split?: Split;
-  finals?: Finals;
-}) {
+/** An attendance card split into one half per college (CDU | BITS); one college fills the card. */
+function HalvesCard({ icon: Icon, label, sub, halves }: { icon: typeof Users; label: string; sub?: string; halves: Half[] }) {
   return (
     <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3.5 sm:p-4">
       <div className="flex items-start gap-1.5 text-xs font-medium text-muted-foreground sm:gap-2">
         <Icon aria-hidden="true" className="mt-px size-3.5 shrink-0" />
         <span className="min-w-0">{label}</span>
       </div>
-      <div className={cn("mt-1.5 font-heading text-2xl leading-tight font-semibold tracking-tight tabular sm:mt-2 sm:text-[28px]", warn && "text-warning")}>{value}</div>
-      {split?.length ? (
-        <dl className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-xs">
-          {split.map((x, i) => (
-            <div key={x.label} className="flex items-baseline gap-1">
-              {i > 0 ? <span aria-hidden="true" className="mr-1 text-muted-foreground/60">|</span> : null}
-              <dt className="font-semibold text-muted-foreground">{x.label}</dt>
-              <dd className={cn("font-semibold tabular text-foreground", x.warn && "text-warning")}>{x.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-      <div className="mt-1 text-[11px] leading-snug text-muted-foreground sm:mt-1.5 sm:text-xs">{sub}</div>
-      {finals?.length ? (
-        <dl className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-t border-border pt-2 text-xs">
-          {finals.map((f) => (
-            <div key={f.label} className="flex items-baseline gap-1">
-              <dt className="text-muted-foreground">{f.label} final</dt>
-              <dd className={cn("font-semibold tabular", f.value === null ? "font-normal text-muted-foreground" : f.warn ? "text-warning" : "text-foreground")}>
-                {f.value ?? "pending"}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
+      <div className={cn("mt-2 grid gap-3", halves.length > 1 && "grid-cols-2 divide-x divide-border")}>
+        {halves.map((h, i) => (
+          <div key={h.college} className={cn("flex min-w-0 flex-col", i > 0 && "pl-3")}>
+            <span className="text-xs font-semibold text-muted-foreground">{h.college}</span>
+            <span className="font-heading text-xl leading-tight font-semibold tracking-tight tabular sm:text-2xl">{h.value}</span>
+            {h.note ? <span className="mt-0.5 text-[11px] leading-snug text-muted-foreground sm:text-xs">{h.note}</span> : null}
+            {h.finals?.length ? (
+              <dl className="mt-1.5 flex flex-col gap-0.5 border-t border-border pt-1.5 text-[11px] sm:text-xs">
+                {h.finals.map((f) => (
+                  <div key={f.at} className="flex items-baseline gap-1">
+                    <dt className="text-muted-foreground">{f.at} final</dt>
+                    <dd className={cn("tabular", f.value === null ? "text-muted-foreground" : "font-semibold text-foreground")}>{f.value ?? "pending"}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {sub ? <div className="mt-2 text-[11px] leading-snug text-muted-foreground sm:text-xs">{sub}</div> : null}
     </div>
   );
 }
@@ -176,21 +159,33 @@ export async function EvaluationDashboard({
 
   // Tiles
   const standingCounts = Object.fromEntries(STANDINGS.map((st) => [st, roster.filter((s) => s.standing === st).length])) as Record<Standing, number>;
-  const markedToday = att.today.present + att.today.absent;
-  // "Today" shows today's marks; any other dates show the totals for those dates.
+  // DSA attendance cards: one half per college (CDU first, then BITS). "Today" adds each college's final
+  // result: CDU's attendance is final at 1 PM, BITS's at 5 PM (any other college shows both).
   const isToday = range.from === today && range.to === today;
-  const markedInDates = att.period.present + att.period.absent;
-  // CDU | BITS on each attendance card (only when the students span more than one college).
   const ORDER = ["CDU", "BITS"];
-  const splitColleges = [...colleges].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
-  const split = (pick: (college: string) => { value: string; warn?: boolean }): Split | undefined =>
-    splitColleges.length > 1 ? splitColleges.map((college) => ({ label: college, ...pick(college) })) : undefined;
-  const todayOf = (college: string) => att.todayByCollege.find((x) => x.college === college);
-  const datesOf = (college: string) => att.byCollege.find((x) => x.college === college);
-  const low = (p: number | null | undefined) => p !== null && p !== undefined && p < MIN;
-  // 1 PM and 5 PM final updates (Today only): "pending" until that time.
-  const finals = (pick: (m: { present: number; absent: number; pct: number | null }) => { value: string; warn?: boolean }): Finals =>
-    att.finals.map((f) => ({ label: f.at, ...(f.due ? pick(f.total) : { value: null }) }));
+  const FINAL_AT: Record<string, string> = { CDU: "1 PM", BITS: "5 PM" };
+  const perCollege = att.coverage
+    .filter((c): c is typeof c & { college: string } => c.college !== null && c.expected > 0)
+    .sort((a, b) => (ORDER.indexOf(a.college) + 1 || 99) - (ORDER.indexOf(b.college) + 1 || 99));
+  const nothingCounts = perCollege.length === 0;
+  const halves = (value: (c: (typeof perCollege)[number]) => React.ReactNode, note?: (c: (typeof perCollege)[number]) => React.ReactNode, final?: (f: (typeof perCollege)[number]["finals"][number], c: (typeof perCollege)[number]) => string): Half[] =>
+    nothingCounts
+      ? [{ college: isToday ? "Today" : dates, value: "—", note: isToday ? "Not a class day, or outside the term" : "No class days in these dates" }]
+      : perCollege.map((c) => ({
+          college: c.college,
+          value: value(c),
+          note: note?.(c),
+          finals:
+            isToday && final
+              ? c.finals.filter((f) => !FINAL_AT[c.college] || f.at === FINAL_AT[c.college]).map((f) => ({ at: f.at, value: f.due ? final(f, c) : null }))
+              : undefined,
+        }));
+  const outOf = (n: number, of: number) => (
+    <>
+      {fmt(n)}
+      <span className="text-base font-medium text-muted-foreground sm:text-lg">/{fmt(of)}</span>
+    </>
+  );
 
   // Level distribution and topic progression (curriculum order; topics nobody is on show 0)
   const levelCount = Math.max(structure.levels.length, 1);
@@ -309,62 +304,41 @@ export async function EvaluationDashboard({
         ))}
       </section>
 
-      <section aria-label="DSA attendance" className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3">
-        {isToday ? (
-          <>
-            <Tile
-              icon={CalendarCheck}
-              label="DSA Attendance Today"
-              value={markedToday ? pctText(att.today.pct) : "—"}
-              sub={markedToday ? `${fmt(markedToday)} students marked today` : "Not marked yet, or a day off"}
-              warn={att.today.pct !== null && att.today.pct < MIN}
-              split={markedToday ? split((c) => ({ value: pctText(todayOf(c)?.pct ?? null), warn: low(todayOf(c)?.pct) })) : undefined}
-              finals={finals((m) => ({ value: pctText(m.pct), warn: low(m.pct) }))}
-            />
-            <Tile
-              icon={UserCheck}
-              label="Present Today"
-              value={markedToday ? fmt(att.today.present) : "—"}
-              sub="Students marked present today"
-              split={markedToday ? split((c) => ({ value: fmt(todayOf(c)?.present ?? 0) })) : undefined}
-              finals={finals((m) => ({ value: fmt(m.present) }))}
-            />
-            <Tile
-              icon={UserX}
-              label="Absent Today"
-              value={markedToday ? fmt(att.today.absent) : "—"}
-              sub="Students marked absent today"
-              warn={att.today.absent > 0}
-              split={markedToday ? split((c) => ({ value: fmt(todayOf(c)?.absent ?? 0) })) : undefined}
-              finals={finals((m) => ({ value: fmt(m.absent) }))}
-            />
-          </>
-        ) : (
-          <>
-            <Tile
-              icon={CalendarCheck}
-              label="Students Marked"
-              value={markedInDates ? fmt(att.period.students) : "—"}
-              sub={markedInDates ? `${dates} · ${fmt(markedInDates)} marks` : `Nothing marked ${dates}`}
-              split={markedInDates ? split((c) => ({ value: fmt(datesOf(c)?.students ?? 0) })) : undefined}
-            />
-            <Tile
-              icon={UserCheck}
-              label="Present"
-              value={markedInDates ? fmt(att.period.present) : "—"}
-              sub={`Present marks · ${dates}`}
-              split={markedInDates ? split((c) => ({ value: fmt(datesOf(c)?.present ?? 0) })) : undefined}
-            />
-            <Tile
-              icon={UserX}
-              label="Absent"
-              value={markedInDates ? fmt(att.period.absent) : "—"}
-              sub={`Absent marks · ${dates}`}
-              warn={att.period.absent > 0}
-              split={markedInDates ? split((c) => ({ value: fmt(datesOf(c)?.absent ?? 0) })) : undefined}
-            />
-          </>
-        )}
+      <section aria-label="DSA attendance" className="grid gap-2.5 sm:gap-3 md:grid-cols-3">
+        <HalvesCard
+          icon={CalendarCheck}
+          label={isToday ? "DSA Attendance Today" : "DSA Attendance"}
+          sub={isToday ? "Present out of the students whose day counts today" : `Present out of student-days that count · ${dates}`}
+          halves={halves(
+            (c) => (
+              <>
+                {outOf(c.present, c.expected)} <span className="text-xs font-medium text-muted-foreground">present</span>
+              </>
+            ),
+            (c) => <span className={cn(c.expected - c.marked > 0 && "font-semibold text-warning")}>{fmt(c.expected - c.marked)} unmarked</span>,
+            (f, c) => `${fmt(f.present)}/${fmt(c.expected)} present`,
+          )}
+        />
+        <HalvesCard
+          icon={UserCheck}
+          label={isToday ? "DSA Present Today" : "DSA Present"}
+          sub={isToday ? undefined : dates}
+          halves={halves(
+            (c) => fmt(c.present),
+            undefined,
+            (f) => fmt(f.present),
+          )}
+        />
+        <HalvesCard
+          icon={UserX}
+          label={isToday ? "DSA Absent Today" : "DSA Absent"}
+          sub={isToday ? undefined : dates}
+          halves={halves(
+            (c) => fmt(c.marked - c.present),
+            undefined,
+            (f) => fmt(f.marked - f.present),
+          )}
+        />
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">

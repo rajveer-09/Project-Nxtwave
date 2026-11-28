@@ -52,14 +52,57 @@ export type AttendanceOverview = {
   byHall: { hall: string; pct: number; students: number }[];
   /** The chosen dates per college (students: how many have a mark). */
   byCollege: (Marks & { college: string; students: number })[];
-  /** Today per college. */
-  todayByCollege: (Marks & { college: string })[];
   /**
-   * Today's final updates: the marks saved by 1 PM and by 5 PM IST, overall and per college; null
-   * until that time has come.
+   * Per college (college null: everyone) for the chosen dates: `expected` is every student-day that
+   * counts (a student whose day counts, on a counted day up to today), `marked`/`present` of those.
+   * `finals` is the same as of 1 PM and 5 PM IST on the last day, `due` once that time has come.
    */
-  finals: { at: "1 PM" | "5 PM"; total: Marks; byCollege: (Marks & { college: string })[] | null; due: boolean }[];
+  coverage: Coverage[];
 };
+
+export type Coverage = {
+  college: string | null;
+  expected: number;
+  marked: number;
+  present: number;
+  finals: { at: "1 PM" | "5 PM"; due: boolean; marked: number; present: number }[];
+};
+
+/**
+ * Every student-day that counts from $1 to $2 (active students of $3, null: everyone; after joining,
+ * inside a term, on a day their degree's calendar counts), with its mark if any, per college and in
+ * total. m1/p1 and m2/p2: marks saved by the times in $4 (1 PM and 5 PM IST on the last day).
+ */
+const EXPECTED_SQL = `
+WITH days AS (SELECT d::date AS d FROM generate_series($1::date, $2::date, interval '1 day') d),
+expected AS (
+  SELECT s.niat_id, days.d, COALESCE(cs.college, 'Other') AS college
+  FROM attendance.students s
+  CROSS JOIN days
+  LEFT JOIN core.students cs ON cs.niat_id = s.niat_id
+  LEFT JOIN attendance.calendar_days cd ON cd.date = days.d AND cd.applies_to = s.degree_code
+  LEFT JOIN attendance.calendar_days ca ON ca.date = days.d AND ca.applies_to = 'ALL'
+  WHERE s.status = 'active'
+    AND (s.joined_on IS NULL OR days.d >= s.joined_on)
+    AND ($3::text[] IS NULL OR s.niat_id = ANY($3::text[]))
+    AND EXISTS (SELECT 1 FROM attendance.terms t WHERE days.d BETWEEN t.start_date AND t.end_date)
+    AND CASE
+          WHEN cd.day_type IS NOT NULL THEN cd.day_type = 'working' OR (cd.day_type = 'event' AND cd.counts)
+          WHEN ca.day_type IS NOT NULL THEN ca.day_type = 'working' OR (ca.day_type = 'event' AND ca.counts)
+          ELSE extract(isodow FROM days.d) <> 7
+        END
+)
+SELECT e.college,
+       count(*)::int AS expected,
+       count(a.niat_id)::int AS marked,
+       count(*) FILTER (WHERE a.status = 'P')::int AS present,
+       count(a.niat_id) FILTER (WHERE a.updated_at <= ($4::timestamptz[])[1])::int AS m1,
+       count(*) FILTER (WHERE a.status = 'P' AND a.updated_at <= ($4::timestamptz[])[1])::int AS p1,
+       count(a.niat_id) FILTER (WHERE a.updated_at <= ($4::timestamptz[])[2])::int AS m2,
+       count(*) FILTER (WHERE a.status = 'P' AND a.updated_at <= ($4::timestamptz[])[2])::int AS p2
+FROM expected e
+LEFT JOIN attendance.attendance a ON a.niat_id = e.niat_id AND a.date = e.d
+GROUP BY ROLLUP (e.college)`;
 
 /** Today's final updates (IST). */
 const FINALS = [
@@ -77,8 +120,8 @@ export async function getAttendanceOverview(from: string, to: string, today: str
   cacheTag(TAGS.roster, TAGS.home);
   const db = getDb();
   type Row = { p: number; m: number };
-  const finalAt = FINALS.map((f) => `${today}T${f.time}:00+05:30`);
-  const [day, period, byDay, byHall, byCollege, todayByCollege, finals] = await Promise.all([
+  const finalAt = FINALS.map((f) => `${to}T${f.time}:00+05:30`);
+  const [day, period, byDay, byHall, byCollege, coverage] = await Promise.all([
     db.query<Row>(`SELECT count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x`, [today, today, ids]),
     db.query<Row & { students: number }>(
       `SELECT count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m, count(DISTINCT niat_id)::int AS students FROM (${SCOPED_MARKS}) x`,
@@ -94,14 +137,12 @@ export async function getAttendanceOverview(from: string, to: string, today: str
       `SELECT college, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m, count(DISTINCT niat_id)::int AS students FROM (${SCOPED_MARKS}) x GROUP BY 1`,
       [from, to, ids],
     ),
-    db.query<Row & { college: string }>(`SELECT college, count(*) FILTER (WHERE status = 'P')::int AS p, count(*)::int AS m FROM (${SCOPED_MARKS}) x GROUP BY 1`, [today, today, ids]),
-    // Marks saved by each final-update time, per college (GROUPING SETS: '' row is everyone).
-    db.query<{ at: number; college: string | null; p: number; m: number }>(
-      `SELECT f.i AS at, x.college, count(*) FILTER (WHERE x.status = 'P')::int AS p, count(*)::int AS m
-       FROM (${SCOPED_MARKS}) x JOIN unnest($4::timestamptz[]) WITH ORDINALITY f(t, i) ON x.updated_at <= f.t
-       GROUP BY GROUPING SETS ((f.i, x.college), (f.i))`,
-      [today, today, ids, finalAt],
-    ),
+    db.query<{ college: string | null; expected: number; marked: number; present: number; m1: number; p1: number; m2: number; p2: number }>(EXPECTED_SQL, [
+      from,
+      to < today ? to : today,
+      ids,
+      finalAt,
+    ]),
   ]);
   const marks = (r: Row): Marks => ({ present: r.p, absent: r.m - r.p, pct: pct(r.p, r.m) });
   return {
@@ -113,17 +154,16 @@ export async function getAttendanceOverview(from: string, to: string, today: str
       .map((r) => ({ hall: r.hall, pct: Math.round((r.p * 100) / r.m), students: r.students }))
       .sort((a, b) => Number(a.hall.match(/\d+/)?.[0] ?? 999) - Number(b.hall.match(/\d+/)?.[0] ?? 999)),
     byCollege: byCollege.rows.map((r) => ({ college: r.college, students: r.students, ...marks(r) })),
-    todayByCollege: todayByCollege.rows.map((r) => ({ college: r.college, ...marks(r) })),
-    finals: FINALS.map((f, i) => {
-      const rows = finals.rows.filter((r) => Number(r.at) === i + 1);
-      const total = rows.find((r) => r.college === null);
-      return {
-        at: f.at,
-        due: Date.now() >= Date.parse(finalAt[i]),
-        total: marks(total ?? { p: 0, m: 0 }),
-        byCollege: rows.filter((r) => r.college !== null).map((r) => ({ college: r.college as string, ...marks(r) })),
-      };
-    }),
+    coverage: coverage.rows.map((r) => ({
+      college: r.college,
+      expected: r.expected,
+      marked: r.marked,
+      present: r.present,
+      finals: [
+        { at: FINALS[0].at, due: Date.now() >= Date.parse(finalAt[0]), marked: r.m1, present: r.p1 },
+        { at: FINALS[1].at, due: Date.now() >= Date.parse(finalAt[1]), marked: r.m2, present: r.p2 },
+      ],
+    })),
   };
 }
 
