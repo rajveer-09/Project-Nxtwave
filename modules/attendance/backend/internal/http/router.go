@@ -59,6 +59,7 @@ func (s *Server) Routes() http.Handler {
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", s.handleHealth)
+		r.Head("/health", s.handleHealth) // uptime pingers (cron-job.org) check it without a body
 
 		// Everything else needs NxtOne's identity token (middleware.go); people sign in to NxtOne only.
 		r.Route("/admin", func(r chi.Router) {

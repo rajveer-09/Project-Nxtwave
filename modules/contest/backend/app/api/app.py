@@ -64,7 +64,8 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     app.include_router(routes_admin.router)
     app.include_router(routes_ops.router)
 
-    @app.get("/api/health", include_in_schema=False)
+    # HEAD too: uptime pingers (cron-job.org) can check it without downloading a body.
+    @app.api_route("/api/health", methods=["GET", "HEAD"], include_in_schema=False)
     def health() -> dict:
         return {"ok": True}
 
