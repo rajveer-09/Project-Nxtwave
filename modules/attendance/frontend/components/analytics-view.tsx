@@ -13,7 +13,6 @@ import { FileSpreadsheet, Printer } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { toast } from "sonner";
 import { Dropdown } from "@/common/components/dropdown";
 import { EmptyState } from "@/common/components/empty-state";
 import { asOptions } from "@/common/lib/options";
@@ -92,6 +91,8 @@ export function AnalyticsView() {
   const customOk = dates.from !== "" && dates.to !== "" && dates.from <= dates.to;
   const [drill, setDrill] = useState<Drill | null>(null);
   const [exporting, setExporting] = useState(false);
+  // A failed export, shown in red in the filter card (cleared by the next export).
+  const [exportError, setExportError] = useState("");
 
   function setParam(changes: Record<string, string | null>) {
     const next = new URLSearchParams(params.toString());
@@ -114,6 +115,7 @@ export function AnalyticsView() {
 
   async function exportExcel() {
     setExporting(true);
+    setExportError("");
     try {
       const { blob, name } = await attendanceApi.analyticsExcel(query);
       const url = URL.createObjectURL(blob);
@@ -123,7 +125,7 @@ export function AnalyticsView() {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Export failed.");
+      setExportError(error instanceof Error ? error.message : "Export failed.");
     } finally {
       setExporting(false);
     }
@@ -249,6 +251,11 @@ export function AnalyticsView() {
           </Button>
           {res.isFetching && a ? <span className="text-xs text-muted-foreground">Updating…</span> : null}
         </div>
+        {exportError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {exportError}
+          </p>
+        ) : null}
       </section>
 
       {res.isError ? (
