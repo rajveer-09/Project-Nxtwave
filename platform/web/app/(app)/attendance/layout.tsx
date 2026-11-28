@@ -9,6 +9,8 @@ Date : 17 Nov 2026
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { authMode } from "@/common/auth/config";
+import { getSessionUser } from "@/common/auth/session";
+import { canAccess } from "@/common/lib/nav";
 import { StatusPill } from "@/common/components/chips";
 import { PageHeader } from "@/common/components/page-header";
 import { AttendanceTabs, AttendanceTabsFallback } from "@nxtone/attendance-ui/components/attendance-tabs";
@@ -25,6 +27,13 @@ async function SourcePill() {
   return <StatusPill>Sample data · attendance service not connected</StatusPill>;
 }
 
+/** The tabs, with Students for the people who may open it (the same rule as the page guard). */
+async function Tabs() {
+  await connection();
+  const user = await getSessionUser();
+  return <AttendanceTabs showStudents={canAccess(user.role, "/attendance/students")} />;
+}
+
 export default function AttendanceLayout({ children }: LayoutProps<"/attendance">) {
   return (
     <>
@@ -34,7 +43,7 @@ export default function AttendanceLayout({ children }: LayoutProps<"/attendance"
           </Suspense>
         } />
       <Suspense fallback={<AttendanceTabsFallback />}>
-        <AttendanceTabs />
+        <Tabs />
       </Suspense>
       {children}
     </>

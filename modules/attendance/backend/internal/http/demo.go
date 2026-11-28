@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -146,6 +147,52 @@ type sheetRow struct {
 	Counted bool    `json:"counted"`
 	Reason  string  `json:"reason"` // why the day cannot be marked, when !counted
 	Status  *string `json:"status"` // "P", "A" or null
+	// SavedBy is who last saved the mark: Owner only (absent from everyone else's response), and
+	// only when there is a mark.
+	SavedBy *savedByJSON `json:"saved_by,omitempty"`
+}
+
+type savedByJSON struct {
+	Name string `json:"name"` // "" when the saver is unknown (shown as "an unknown admin")
+	At   string `json:"at"`   // RFC 3339 in IST
+}
+
+// saverName is who saved a mark: the attendance admin (name, or email when it has none), else the
+// NxtOne user in marked_by ("Name <email>": the name, or the email when the name is empty), else "".
+func saverName(adminName, markedBy string) string {
+	if adminName != "" {
+		return adminName
+	}
+	markedBy = strings.TrimSpace(markedBy)
+	name, rest, ok := strings.Cut(markedBy, "<")
+	if !ok {
+		return markedBy
+	}
+	if name = strings.TrimSpace(name); name != "" {
+		return name
+	}
+	return strings.TrimSpace(strings.TrimSuffix(rest, ">"))
+}
+
+// markSavers maps NIAT ID to who last saved that student's mark on date (Owner only: one query).
+func (s *Server) markSavers(ctx context.Context, ids []string, date time.Time) (map[string]*savedByJSON, error) {
+	rows, err := s.store.ListMarkSavers(ctx, db.ListMarkSaversParams{Date: pgDate(date), NiatIds: ids})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]*savedByJSON, len(rows))
+	for _, r := range rows {
+		at := ""
+		if r.UpdatedAt.Valid {
+			t := r.UpdatedAt.Time
+			if s.loc != nil {
+				t = t.In(s.loc)
+			}
+			at = t.Format(time.RFC3339)
+		}
+		out[r.NiatID] = &savedByJSON{Name: saverName(r.AdminName, r.MarkedBy), At: at}
+	}
+	return out, nil
 }
 
 // GET /api/admin/attendance/sheet?date=YYYY-MM-DD (default today)&hall=:
@@ -184,6 +231,14 @@ func (s *Server) handleAdminSheet(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, "load marks", err)
 		return
 	}
+	// Who saved each mark is for the Owner only; nobody else's response carries it.
+	var savers map[string]*savedByJSON
+	if adminFrom(r.Context()).Role == "owner" && len(ids) > 0 {
+		if savers, err = s.markSavers(r.Context(), ids, date); err != nil {
+			s.internalError(w, "load mark savers", err)
+			return
+		}
+	}
 	rows := []sheetRow{}
 	for _, st := range students {
 		if st.Status != "active" {
@@ -196,6 +251,9 @@ func (s *Server) handleAdminSheet(w http.ResponseWriter, r *http.Request) {
 		}
 		if !day.Counted {
 			row.Reason = notCountedReason(day)
+		}
+		if row.Status != nil {
+			row.SavedBy = savers[st.NiatID]
 		}
 		rows = append(rows, row)
 	}

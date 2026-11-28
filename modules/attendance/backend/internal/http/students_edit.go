@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -108,38 +107,37 @@ func mentorID(ctx context.Context, q *db.Queries, kind, name string) (pgtype.Int
 	return pgtype.Int8{Int64: m.ID, Valid: true}, nil
 }
 
-// decodeStudent reads and validates the form, writing a 422 with per-field
-// details when it is invalid. It also returns the NIAT ID pattern for create.
-func (s *Server) decodeStudent(w http.ResponseWriter, r *http.Request) (studentInput, studentFields, *regexp.Regexp, bool) {
+// decodeStudent reads and validates the form, writing a 422 with every
+// field's message at once when it is invalid. create also checks the NIAT ID
+// against the configured pattern (edit ignores the ID: it cannot change).
+func (s *Server) decodeStudent(w http.ResponseWriter, r *http.Request, create bool) (studentInput, studentFields, bool) {
 	var in studentInput
 	if !decodeJSON(w, r, &in) {
-		return in, studentFields{}, nil, false
+		return in, studentFields{}, false
 	}
 	pattern, degrees, err := s.importRules(r)
 	if err != nil {
 		s.internalError(w, "student rules", err)
-		return in, studentFields{}, nil, false
+		return in, studentFields{}, false
 	}
 	f, errs := validateStudent(in, degrees)
+	if id := normaliseNiatID(in.NiatID); create && !pattern.MatchString(id) {
+		errs["niat_id"] = fmt.Sprintf("%q does not match the NIAT ID format (like N24H01A0598 or N24H01B0225).", id)
+	}
 	if len(errs) > 0 {
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "Some fields need fixing.", errs)
-		return in, f, nil, false
+		return in, f, false
 	}
-	return in, f, pattern, true
+	return in, f, true
 }
 
 // POST /api/admin/students: add one student. 409 if the NIAT ID exists.
 func (s *Server) handleCreateStudent(w http.ResponseWriter, r *http.Request) {
-	in, f, pattern, ok := s.decodeStudent(w, r)
+	in, f, ok := s.decodeStudent(w, r, true)
 	if !ok {
 		return
 	}
 	id := normaliseNiatID(in.NiatID)
-	if !pattern.MatchString(id) {
-		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "Some fields need fixing.",
-			fieldErrors{"niat_id": fmt.Sprintf("%q does not match the NIAT ID format (like N24H01A0598 or N24H01B0225).", id)})
-		return
-	}
 	var created db.Student
 	err := pgx.BeginFunc(r.Context(), s.pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
@@ -178,7 +176,7 @@ func (s *Server) handleUpdateStudent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, f, _, ok := s.decodeStudent(w, r)
+	_, f, ok := s.decodeStudent(w, r, false)
 	if !ok {
 		return
 	}

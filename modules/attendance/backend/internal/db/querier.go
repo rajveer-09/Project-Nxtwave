@@ -81,6 +81,10 @@ type Querier interface {
 	// Saved uploads, newest first, with how many calendar entries still point at
 	// each one (a later upload or edit moves an entry to its own batch).
 	ListImportBatches(ctx context.Context) ([]ListImportBatchesRow, error)
+	// Mark attendance, Owner only: who last saved each mark on one date. admin_name is the attendance
+	// admin's name (or email) when this service saved it; marked_by is "Name <email>" when NxtOne did
+	// (migration 000015); both are '' when the saver is unknown (an admin who was deleted).
+	ListMarkSavers(ctx context.Context, arg ListMarkSaversParams) ([]ListMarkSaversRow, error)
 	// Which degrees already have attendance on each date in the range.
 	ListMarkedDatesByDegree(ctx context.Context, arg ListMarkedDatesByDegreeParams) ([]ListMarkedDatesByDegreeRow, error)
 	ListMarks(ctx context.Context, arg ListMarksParams) ([]ListMarksRow, error)
@@ -91,7 +95,7 @@ type Querier interface {
 	// Every period of one student, cancelled ones included (history).
 	ListStudentPeriods(ctx context.Context, niatID string) ([]StudentPeriod, error)
 	ListStudentRemarks(ctx context.Context, niatID string) ([]ListStudentRemarksRow, error)
-	// q matches part of the name or the start of the NIAT ID; empty filters match all.
+	// q matches any part of the name or of the NIAT ID (B0216 finds N24H01B0216); empty filters match all.
 	// hall: NULL matches all; '' matches students with no hall.
 	ListStudentsForAdmin(ctx context.Context, arg ListStudentsForAdminParams) ([]ListStudentsForAdminRow, error)
 	// Every student, active or dropped, in each degree's sheet order; students

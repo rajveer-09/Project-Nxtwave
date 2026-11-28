@@ -19,12 +19,15 @@ const TABS = [
   { href: "/attendance/internships", label: "Internships" },
 ];
 
-export function AttendanceTabs() {
+/** showStudents: the Students tab, for Owners and admins only (nav.ts PAGE_RULES). */
+export function AttendanceTabs({ showStudents = false }: { showStudents?: boolean }) {
   const pathname = usePathname();
+  const tabs = showStudents ? [...TABS, { href: "/attendance/students", label: "Students" }] : TABS;
   return (
     <nav aria-label="DSA attendance sections" className="flex flex-wrap gap-1 border-b border-border">
-      {TABS.map((tab) => {
-        const active = pathname === tab.href;
+      {tabs.map((tab) => {
+        // Students stays highlighted on a student's own page.
+        const active = pathname === tab.href || (tab.href === "/attendance/students" && pathname.startsWith(tab.href + "/"));
         return (
           <Link
             key={tab.href}

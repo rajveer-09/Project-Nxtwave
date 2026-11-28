@@ -123,6 +123,55 @@ func (q *Queries) InsertMarksKeepExisting(ctx context.Context, arg InsertMarksKe
 	return result.RowsAffected(), nil
 }
 
+const listMarkSavers = `-- name: ListMarkSavers :many
+SELECT a.niat_id, a.updated_at,
+       coalesce(nullif(ad.name, ''), ad.email, '')::text AS admin_name,
+       coalesce(a.marked_by, '')::text AS marked_by
+FROM attendance a
+LEFT JOIN admins ad ON ad.id = a.updated_by
+WHERE a.date = $1::date AND a.niat_id = ANY($2::text[])
+`
+
+type ListMarkSaversParams struct {
+	Date    pgtype.Date `json:"date"`
+	NiatIds []string    `json:"niat_ids"`
+}
+
+type ListMarkSaversRow struct {
+	NiatID    string             `json:"niat_id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	AdminName string             `json:"admin_name"`
+	MarkedBy  string             `json:"marked_by"`
+}
+
+// Mark attendance, Owner only: who last saved each mark on one date. admin_name is the attendance
+// admin's name (or email) when this service saved it; marked_by is "Name <email>" when NxtOne did
+// (migration 000015); both are ” when the saver is unknown (an admin who was deleted).
+func (q *Queries) ListMarkSavers(ctx context.Context, arg ListMarkSaversParams) ([]ListMarkSaversRow, error) {
+	rows, err := q.db.Query(ctx, listMarkSavers, arg.Date, arg.NiatIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMarkSaversRow
+	for rows.Next() {
+		var i ListMarkSaversRow
+		if err := rows.Scan(
+			&i.NiatID,
+			&i.UpdatedAt,
+			&i.AdminName,
+			&i.MarkedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMarks = `-- name: ListMarks :many
 SELECT niat_id, date, status, coalesce(category, '')::text AS category FROM attendance
 WHERE niat_id = ANY($1::text[])

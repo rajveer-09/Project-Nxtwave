@@ -238,15 +238,44 @@ type SheetStudent = {
   mark: string | null;
 };
 
-/** demo.go handleAdminSheet: ?date= (default today) &hall= ("hall=" alone: students with no hall). */
-async function sheet(url: URL, today: string) {
+/** attendance.sql ListMarkSavers: who last saved each mark on $1 (Owner only). */
+const SAVERS_SQL = `
+SELECT a.niat_id, to_char(a.updated_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI:SS"+05:30"') AS at,
+       coalesce(nullif(ad.name, ''), ad.email, '') AS admin_name, coalesce(a.marked_by, '') AS marked_by
+FROM attendance.attendance a
+LEFT JOIN attendance.admins ad ON ad.id = a.updated_by
+WHERE a.date = $1::date AND a.niat_id = ANY($2::text[])`;
+
+/** demo.go saverName: the attendance admin, else NxtOne's marked_by ("Name <email>": the name, or the email), else "". */
+function saverName(adminName: string, markedBy: string) {
+  if (adminName) return adminName;
+  const m = /^(.*?)<(.*)>$/.exec(markedBy.trim());
+  if (!m) return markedBy.trim();
+  return m[1].trim() || m[2].trim();
+}
+
+/**
+ * demo.go handleAdminSheet: ?date= (default today) &hall= ("hall=" alone: students with no hall).
+ * Owner only: saved_by on each saved mark; nobody else's response carries it.
+ */
+async function sheet(url: URL, today: string, isOwner: boolean) {
   const date = url.searchParams.get("date") || today;
   if (!isDate(date)) return err(400, "bad_request", badDate(date));
   const hall = url.searchParams.has("hall") ? (url.searchParams.get("hall") ?? "").trim() : null;
   const { rows } = await getDb().query<{ terms: TermRange[]; entries: EntryRow[]; students: SheetStudent[] }>(SHEET_SQL, [date, hall]);
   const rules = rulesOf(today, rows[0].terms, rows[0].entries);
+  const savers = new Map<string, { name: string; at: string }>();
+  if (isOwner && rows[0].students.length) {
+    const { rows: saved } = await getDb().query<{ niat_id: string; at: string; admin_name: string; marked_by: string }>(SAVERS_SQL, [
+      date,
+      rows[0].students.map((s) => s.niat_id),
+    ]);
+    for (const r of saved) savers.set(r.niat_id, { name: saverName(r.admin_name, r.marked_by), at: r.at });
+  }
   const students: SheetRow[] = rows[0].students.map((st) => {
     const day = resolveDay(date, ruleStudent(st.degree, st.status, st.joined_on, st.dropped_on), rules);
+    const status = st.mark === "P" || st.mark === "A" ? st.mark : null;
+    const savedBy = status ? savers.get(st.niat_id) : undefined;
     return {
       niat_id: st.niat_id,
       name: st.name,
@@ -255,7 +284,8 @@ async function sheet(url: URL, today: string) {
       hall_no: st.hall_no,
       counted: day.counted,
       reason: day.counted ? "" : notCountedReason(day),
-      status: st.mark === "P" || st.mark === "A" ? st.mark : null,
+      status,
+      ...(savedBy ? { saved_by: savedBy } : {}),
     };
   });
   return json(200, { date, today, students });
@@ -563,7 +593,7 @@ export async function attendanceDb(request: Request, path: string[], user: Sessi
       case "GET admin/halls":
         return await listHalls();
       case "GET admin/attendance/sheet":
-        return await sheet(url, today);
+        return await sheet(url, today, user.role === "owner");
       case "GET admin/calendar":
         return await calendarMonth(url, today);
       case "GET admin/terms":

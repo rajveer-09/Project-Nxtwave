@@ -25,6 +25,8 @@ export type SheetRow = {
   /** Why the day can't be marked, when !counted. */
   reason: string;
   status: Mark;
+  /** Who last saved the mark: Owner only (never sent to anyone else), and only when there is a mark. name "" = unknown. */
+  saved_by?: { name: string; at: string };
 };
 
 export type Sheet = { date: string; today: string; students: SheetRow[] };
@@ -263,3 +265,160 @@ export type AttendanceExport = {
   headers: string[];
   degrees: ExportDegree[];
 };
+
+/* ---------- Students (GET/POST/PUT/DELETE /api/admin/students…; Owners and admins) ---------- */
+
+export type Band = "below_60" | "60_to_75" | "75_plus" | "none";
+
+/** One student's counted days over a period (stats.Summary). */
+export type Summary = {
+  counted_days: number;
+  days_attended: number;
+  days_absent: number;
+  not_marked_days: number;
+  /** Present + Absent: the counted days with a mark (the % is taken over these; "working days" in the UI). */
+  marked_days: number;
+  pct: number | null;
+  band: Band;
+};
+
+export type Term = { id: number; name: string; start: string; end: string } | null;
+
+/** The group numbers for the summary cards (stats.Overview). */
+export type Overview = {
+  students: number;
+  average_pct: number | null;
+  below_threshold: number;
+  threshold: number;
+  bands: Record<Band, number>;
+};
+
+export type AdminStudent = {
+  niat_id: string;
+  name: string;
+  degree: string;
+  section: string;
+  /** "" when the student has no hall. */
+  hall_no: string;
+  status: string;
+  /** N99 demo data. */
+  demo: boolean;
+  summary: Summary;
+  band: Band;
+};
+
+/** hall "" means students with no hall, undefined any hall; term is a term id, "" the current term. */
+export type StudentFilters = { q?: string; degree?: string; section?: string; hall?: string; term?: string; from?: string; to?: string; presentToday?: boolean };
+
+export type StudentList = {
+  term: Term;
+  today: string;
+  range: { from: string; to: string; custom: boolean };
+  students: AdminStudent[];
+  overview: Overview;
+};
+
+/** An internship or registration-pending period of one student. */
+export type Period = {
+  id: number;
+  kind: PeriodKind;
+  start: string;
+  end: string;
+  /** Registration only: the day an import showed it done; "" while pending. */
+  completed_on: string;
+  source: "admin" | "import";
+  state: "upcoming" | "active" | "ended" | "pending" | "completed" | "cancelled";
+  calendar_days: number;
+  /** Days in the period that count for attendance, up to today. */
+  attendance_days: number;
+  created_at: string;
+  updated_at: string;
+  cancelled_at: string;
+};
+
+/** Standing against the placement threshold (95%); every number comes from the service. */
+export type Placement = {
+  threshold: number;
+  pct: number | null;
+  below: boolean;
+  days_needed: number;
+  /** Percentage points short (0 when met); null when nothing is marked. */
+  gap: number | null;
+  months: { month: string; pct: number | null; below: boolean }[];
+};
+
+export type ProfileStudent = {
+  niat_id: string;
+  name: string;
+  degree: string;
+  section: string;
+  level?: string;
+  hall_no: string;
+  poc: string;
+  coach: string;
+  status: string;
+  /** "" when blank (counts from the term start). */
+  joined_on?: string;
+  /** "" when not dropped. */
+  dropped_on?: string;
+  demo?: boolean;
+};
+
+/** GET /api/admin/students/{id}: the student's own profile plus admin-only fields. */
+export type Profile = {
+  student: ProfileStudent;
+  term: Term;
+  today: string;
+  summary: Summary;
+  months: (Summary & { month: string })[];
+  placement: Placement;
+  /** Remarks by month (YYYY-MM). */
+  remarks: Record<string, string>;
+  periods: Period[];
+};
+
+export type MonthDay = {
+  date: string;
+  weekday: number; // 0 = Sunday
+  kind: string;
+  label: string;
+  /** Scope of the calendar entry that decided the day: the student's degree, "ALL", or "" (default rule). */
+  applies_to: string;
+  excluded: string;
+  counted: boolean;
+  status: Mark;
+  category: PeriodKind | "";
+};
+
+export type StudentMonth = { month: string; today: string; days: MonthDay[]; summary: Summary };
+
+export type RangeResult = { from: string; to: string; summary: Summary; clipped: boolean; outside_term: boolean };
+
+/** The add / edit form. Blank optional fields are stored empty; poc and coach are names. */
+export type StudentForm = {
+  niat_id?: string;
+  name: string;
+  degree: string;
+  section: string;
+  level: string;
+  hall_no: string;
+  poc: string;
+  coach: string;
+  status: "active" | "dropped";
+  joined_on: string;
+  dropped_on: string;
+};
+
+export type InternshipConflict = { date: string; status: "P" | "A"; category: PeriodKind | "" };
+
+export type InternshipResult = {
+  dry_run: boolean;
+  period: Period | null;
+  days: number;
+  conflicts: InternshipConflict[];
+  marks_saved: number;
+  marks_kept: number;
+  marks_removed: number;
+};
+
+export type InternshipInput = { start: string; end: string; overwrite?: boolean; dry_run?: boolean };

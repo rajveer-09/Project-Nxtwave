@@ -19,10 +19,18 @@ import type {
   DayType,
   Hall,
   ImportResult,
+  InternshipInput,
   InternshipListItem,
+  InternshipResult,
   MarkInput,
+  Profile,
+  RangeResult,
   SaveResult,
   Sheet,
+  StudentFilters,
+  StudentForm,
+  StudentList,
+  StudentMonth,
   TermRow,
   UploadOpts,
 } from "@nxtone/attendance-ui/types";
@@ -87,6 +95,39 @@ export const attendanceApi = {
   exportAttendance: (from: string, to: string) => apiFetch<AttendanceExport>(`${base}/exports/attendance?${exportParams(from, to)}`),
   /** The same as an Excel workbook, one tab per degree. */
   exportExcel: (from: string, to: string) => download(`${base}/exports/attendance.xlsx?${exportParams(from, to)}`, "attendance.xlsx"),
+
+  /* ---------- students (Owners and admins; deleting is Owner only) ---------- */
+  students: (f: StudentFilters = {}) => {
+    const qs = new URLSearchParams({ q: f.q ?? "", degree: f.degree ?? "", section: f.section ?? "" });
+    if (f.hall !== undefined) qs.set("hall", f.hall);
+    if (f.term) qs.set("term", f.term);
+    if (f.presentToday) qs.set("present", "today");
+    if (f.from && f.to) {
+      qs.set("from", f.from);
+      qs.set("to", f.to);
+    }
+    return apiFetch<StudentList>(`${base}/students?${qs}`);
+  },
+  /** The student's own profile plus admin-only fields, for any status and term ("" = current). */
+  student: (id: string, term = "") => apiFetch<Profile>(`${base}/students/${encodeURIComponent(id)}${term ? `?${new URLSearchParams({ term })}` : ""}`),
+  studentMonth: (id: string, ym: string) => apiFetch<StudentMonth>(`${base}/students/${encodeURIComponent(id)}/month?${new URLSearchParams({ ym })}`),
+  studentRange: (id: string, from: string, to: string) =>
+    apiFetch<RangeResult>(`${base}/students/${encodeURIComponent(id)}/range?${new URLSearchParams({ from, to })}`),
+  /** Sets the month's remark (YYYY-MM); an empty remark deletes it. */
+  setRemark: (id: string, ym: string, remark: string) =>
+    apiFetch<{ month: string; remark: string }>(`${base}/students/${encodeURIComponent(id)}/remarks/${ym}`, { method: "PUT", json: { remark } }),
+  createStudent: (f: StudentForm) => apiFetch<{ niat_id: string }>(`${base}/students`, { method: "POST", json: f }),
+  updateStudent: (id: string, f: StudentForm) => apiFetch<{ niat_id: string }>(`${base}/students/${encodeURIComponent(id)}`, { method: "PUT", json: f }),
+  /** Owner only: the student and all their marks; confirm repeats the NIAT ID. */
+  deleteStudent: (id: string, confirm: string) =>
+    apiFetch<{ deleted: string; marks_deleted: number }>(`${base}/students/${encodeURIComponent(id)}?${new URLSearchParams({ confirm })}`, { method: "DELETE" }),
+  /** Owner only: confirm must be "DELETE <count>". */
+  deleteStudents: (niatIds: string[], confirm: string) =>
+    apiFetch<{ deleted: number; not_found: number; marks_deleted: number }>(`${base}/students/bulk-delete`, { method: "POST", json: { niat_ids: niatIds, confirm } }),
+  createInternship: (id: string, input: InternshipInput) =>
+    apiFetch<InternshipResult>(`${base}/students/${encodeURIComponent(id)}/internships`, { method: "POST", json: input }),
+  updateInternship: (periodId: number, input: InternshipInput) => apiFetch<InternshipResult>(`${base}/internships/${periodId}`, { method: "PUT", json: input }),
+  cancelInternship: (periodId: number) => apiFetch<{ cancelled: number; marks_removed: number }>(`${base}/internships/${periodId}/cancel`, { method: "POST" }),
 };
 
 const exportParams = (from: string, to: string) => {

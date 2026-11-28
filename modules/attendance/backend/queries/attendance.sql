@@ -48,3 +48,14 @@ WHERE a.niat_id = d.niat_id AND a.date = d.date;
 
 -- name: DeleteDemoMarks :execrows
 DELETE FROM attendance WHERE niat_id LIKE 'N99%';
+
+-- name: ListMarkSavers :many
+-- Mark attendance, Owner only: who last saved each mark on one date. admin_name is the attendance
+-- admin's name (or email) when this service saved it; marked_by is "Name <email>" when NxtOne did
+-- (migration 000015); both are '' when the saver is unknown (an admin who was deleted).
+SELECT a.niat_id, a.updated_at,
+       coalesce(nullif(ad.name, ''), ad.email, '')::text AS admin_name,
+       coalesce(a.marked_by, '')::text AS marked_by
+FROM attendance a
+LEFT JOIN admins ad ON ad.id = a.updated_by
+WHERE a.date = sqlc.arg(date)::date AND a.niat_id = ANY(sqlc.arg(niat_ids)::text[]);

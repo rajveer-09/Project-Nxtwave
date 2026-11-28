@@ -102,9 +102,18 @@ export function navForRole(role: Role): NavSection[] {
   })).filter((section) => section.items.length > 0);
 }
 
+/**
+ * Pages inside a sidebar section that need narrower access than the section itself. Route guards
+ * only; never shown in the sidebar.
+ */
+const PAGE_RULES: NavItem[] = [
+  // DSA attendance › Students: the attendance service lets only Owners and admins list and edit students.
+  { href: "/attendance/students", label: "DSA attendance students", icon: "attendance", roles: ADMINS },
+];
+
 /** Longest matching nav entry for a path, used for route guards. */
 export function navItemForPath(pathname: string): NavItem | undefined {
-  const all = NAV.flatMap((section) => section.items);
+  const all = [...NAV.flatMap((section) => section.items), ...PAGE_RULES];
   return all
     .filter((item) => (item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/")))
     .sort((a, b) => b.href.length - a.href.length)[0];
