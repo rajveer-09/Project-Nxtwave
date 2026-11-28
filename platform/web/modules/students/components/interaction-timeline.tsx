@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronDown, CircleHelp, Code2, ListChecks, MessageSquareText, NotebookPen, PencilLine, ThumbsUp, TrendingUp, UserRound, Video } from "lucide-react";
+import { ChevronDown, CircleHelp, Code2, FileText, ListChecks, MessageSquareText, NotebookPen, PencilLine, ThumbsUp, TrendingUp, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { EmptyState } from "@/common/components/empty-state";
 import { formatDate } from "@/common/lib/dates";
+import { cleanNote } from "@/common/lib/question-text";
 import { cn } from "@/common/lib/utils";
 import type { HistoryEntry, HistoryStudent } from "../actions";
 
@@ -248,7 +249,7 @@ function Details({ entry: e, id }: { entry: HistoryEntry; id: string }) {
                 <Icon aria-hidden="true" className={cn("size-3.5", iconClass)} />
                 {label}
               </h4>
-              <p className="mt-1 leading-relaxed whitespace-pre-line text-foreground/90">{e[key]}</p>
+              <p className="mt-1 leading-relaxed whitespace-pre-line text-foreground/90">{cleanNote(e[key])}</p>
             </section>
           ))}
         </div>
@@ -263,8 +264,8 @@ function Details({ entry: e, id }: { entry: HistoryEntry; id: string }) {
         </span>
         {e.meetRecording ? (
           <a href={e.meetRecording} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 font-semibold text-primary hover:bg-muted">
-            <Video aria-hidden="true" className="size-3.5" />
-            Recording
+            <FileText aria-hidden="true" className="size-3.5" />
+            Transcript link
           </a>
         ) : null}
         {e.codeRoom ? (

@@ -357,7 +357,6 @@ export function InteractionsList({
                       {student ? null : (
                         <span className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
                           <FileText aria-hidden="true" className="size-4" />
-                          <span className="text-primary">Recording</span>·
                           <span className="text-primary">Transcript link</span>
                           {it.transcriptWords ? (
                             <>

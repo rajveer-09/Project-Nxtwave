@@ -1,10 +1,11 @@
 "use client";
 
-import { Code2, Eye, FileText, Pencil, Video } from "lucide-react";
+import { Code2, Eye, FileText, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { StatusPill } from "@/common/components/chips";
 import { formatDate } from "@/common/lib/dates";
+import { cleanNote } from "@/common/lib/question-text";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/common/ui/dialog";
 import { Skeleton } from "@/common/ui/skeleton";
 import { interactionRecordAction, type HistoryEntry } from "../actions";
@@ -169,7 +170,7 @@ function Record({ entry: e }: { entry: HistoryEntry }) {
           .map(([name, value]) => (
             <div key={name} className={box}>
               <dt className={label}>{name}</dt>
-              <dd className="mt-1 whitespace-pre-line">{value}</dd>
+              <dd className="mt-1 whitespace-pre-line">{cleanNote(value)}</dd>
             </div>
           ))}
       </dl>
@@ -178,8 +179,8 @@ function Record({ entry: e }: { entry: HistoryEntry }) {
         <div className="flex flex-wrap gap-3 text-xs font-semibold">
           {e.meetRecording ? (
             <a href={e.meetRecording} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:text-accent-strong">
-              <Video aria-hidden="true" className="size-3.5" />
-              Recording
+              <FileText aria-hidden="true" className="size-3.5" />
+              Transcript link
             </a>
           ) : null}
           {e.codeRoom ? (
