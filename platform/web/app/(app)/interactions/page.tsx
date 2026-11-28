@@ -225,7 +225,6 @@ async function InteractionsContent({ searchParams }: { searchParams: Promise<Sea
       {showPeople ? (
         <SectionCard
           title="By person"
-          description="Took: interactions they took, for their own students or as support for another POC. Their students got: interactions with the students they were POC for at the time, by them or by a support POC. Click a number to filter."
           bodyClassName="px-0 pb-2"
         >
           <PocSummary rows={all.map((it) => ({ date: it.date, takenBy: it.takenBy, poc: it.pocAtTime }))} from={range.from} to={range.to} today={today} params={params} />
