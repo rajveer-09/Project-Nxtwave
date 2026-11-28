@@ -24,6 +24,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Skeleton } from "@/common/ui/skeleton";
 import { formatDate } from "@/common/lib/dates";
 import { cn } from "@/common/lib/utils";
+import { unmarkedHallsAction } from "@nxtone/attendance-ui/actions";
 import { attendanceApi } from "@nxtone/attendance-ui/api";
 import type { Analytics, AnalyticsPeriod, AnalyticsQuery, AnalyticsShow, AnalyticsStudent, DayTally, GroupTally, Tally } from "@nxtone/attendance-ui/types";
 
@@ -41,12 +42,16 @@ const dec = (n: number | null | undefined) => (n === null || n === undefined ? "
 const control =
   "h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:w-auto";
 
-const PERIODS: { id: AnalyticsPeriod; label: string }[] = [
+/** "day" is one chosen date (sent to the service as custom dates from = to). */
+type ViewPeriod = AnalyticsPeriod | "day";
+const PERIODS: { id: ViewPeriod; label: string }[] = [
   { id: "today", label: "Today" },
+  { id: "day", label: "Pick a day" },
   { id: "last7", label: "Last 7 days" },
   { id: "lastmonth", label: "Last month" },
   { id: "custom", label: "Custom" },
 ];
+const todayInIndia = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 
 const istTime = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 const monthName = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -76,7 +81,9 @@ export function AnalyticsView() {
   const router = useRouter();
   const pathname = usePathname();
   const p = params.get("period");
-  const period: AnalyticsPeriod = PERIODS.some((x) => x.id === p) ? (p as AnalyticsPeriod) : "today";
+  const view: ViewPeriod = PERIODS.some((x) => x.id === p) ? (p as ViewPeriod) : "today";
+  const day = params.get("on") || todayInIndia();
+  const period: AnalyticsPeriod = view === "day" ? "custom" : view;
   const degree = params.get("degree") ?? "";
   const hall = params.has("hall") ? (params.get("hall") ?? "") : undefined;
   const section = params.get("section") ?? "";
@@ -96,11 +103,11 @@ export function AnalyticsView() {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
-  const query: AnalyticsQuery = { period, degree, hall, section, ...(period === "custom" ? dates : {}) };
+  const query: AnalyticsQuery = { period, degree, hall, section, ...(view === "day" ? { from: day, to: day } : period === "custom" ? dates : {}) };
   const res = useQuery({
     queryKey: ["attendance", "analytics", query],
     queryFn: () => attendanceApi.analytics(query),
-    enabled: period !== "custom" || customOk,
+    enabled: view !== "custom" || customOk,
     placeholderData: (prev) => prev,
   });
   const a = res.data;
@@ -125,7 +132,7 @@ export function AnalyticsView() {
   // Filter choices come from every student; hall and section follow the degree.
   const halls = [...new Set((a?.options.halls ?? []).filter((h) => !degree || h.degree === degree).map((h) => h.value))];
   const sections = [...new Set((a?.options.sections ?? []).filter((s) => !degree || s.degree === degree).map((s) => s.value))].sort();
-  const filtered = degree !== "" || hall !== undefined || section !== "" || period !== "today";
+  const filtered = degree !== "" || hall !== undefined || section !== "" || view !== "today";
 
   return (
     <div className="flex flex-col gap-5">
@@ -133,7 +140,7 @@ export function AnalyticsView() {
         <PageHeader
           eyebrow="Admin panel"
           title="DSA attendance analytics"
-          description="Attendance across degrees and halls, ready to share."
+          description="Attendance across degrees and halls."
           actions={
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" className="h-10 px-3.5" onClick={exportExcel} disabled={!a || exporting}>
@@ -154,18 +161,30 @@ export function AnalyticsView() {
               <button
                 key={x.id}
                 type="button"
-                aria-pressed={period === x.id}
-                onClick={() => setParam({ period: x.id === "today" ? null : x.id, ...(x.id === "custom" ? {} : { from: null, to: null }) })}
+                aria-pressed={view === x.id}
+                onClick={() =>
+                  setParam({ period: x.id === "today" ? null : x.id, ...(x.id === "custom" ? {} : { from: null, to: null }), ...(x.id === "day" ? {} : { on: null }) })
+                }
                 className={cn(
                   "h-9 rounded-md px-3 text-[13px] font-semibold whitespace-nowrap transition-colors",
-                  period === x.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  view === x.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {x.label}
               </button>
             ))}
           </div>
-          {period === "custom" ? (
+          {view === "day" ? (
+            <input
+              type="date"
+              aria-label="Day"
+              className={control}
+              value={day}
+              max={a?.today ?? todayInIndia()}
+              onChange={(e) => e.target.value && setParam({ on: e.target.value })}
+            />
+          ) : null}
+          {view === "custom" ? (
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <input
                 type="date"
@@ -236,7 +255,7 @@ export function AnalyticsView() {
       {res.isError ? (
         <EmptyState title="Couldn't load analytics" description={res.error.message} />
       ) : !a ? (
-        period === "custom" && !customOk ? (
+        view === "custom" && !customOk ? (
           <p className="rounded-xl border border-dashed border-border bg-surface-subtle px-4 py-8 text-center text-sm text-muted-foreground">Choose the dates to see the report.</p>
         ) : (
           <div className="flex flex-col gap-4" aria-busy="true">
@@ -253,6 +272,7 @@ export function AnalyticsView() {
         <div className="flex flex-col gap-5" data-testid="analytics-report">
           <ReportHeader a={a} />
           <Kpis a={a} onDrill={setDrill} />
+          <UnmarkedHalls a={a} degree={degree} hall={hall} section={section} />
           {a.total.working_days === 0 ? (
             <p className="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
               No attendance has been marked for {a.period === "today" ? "today" : "these dates"} yet, so there is nothing to compare.
@@ -276,6 +296,65 @@ export function AnalyticsView() {
       )}
       {a ? <AnalyticsDrill a={a} query={query} drill={drill} onClose={() => setDrill(null)} /> : null}
     </div>
+  );
+}
+
+const dayName = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+
+/** Halls with students left unmarked, day by day (same counting rules as the hall sheet). */
+function UnmarkedHalls({ a, degree, hall, section }: { a: Analytics; degree: string; hall: string | undefined; section: string }) {
+  const res = useQuery({
+    queryKey: ["attendance", "unmarked", a.from, a.to, degree, hall ?? null, section],
+    queryFn: async () => {
+      const r = await unmarkedHallsAction(a.from, a.to, { degree, hall: hall ?? null, section });
+      if (!r.ok) throw new Error(r.error);
+      return r.report;
+    },
+    placeholderData: (prev) => prev,
+  });
+  const r = res.data;
+  const single = a.from === a.to;
+  const subtitle = !r
+    ? "Checking every hall…"
+    : r.counted === 0
+      ? "No class days in these dates"
+      : single
+        ? "Students whose day counts but who have no mark"
+        : `${r.counted} class day${r.counted === 1 ? "" : "s"} · ${r.fullyMarked} fully marked · ${r.days.length} with halls left`;
+  return (
+    <Panel title="Halls not marked" subtitle={subtitle}>
+      {res.isError ? (
+        <p className="text-sm text-destructive">{res.error.message}</p>
+      ) : !r ? (
+        <Skeleton className="h-16 rounded-lg" />
+      ) : r.counted === 0 ? (
+        <p className="text-sm text-muted-foreground">{single ? "Nobody has class on this day (a holiday, a Sunday or outside the term)." : "Nobody has class on these dates."}</p>
+      ) : r.days.length === 0 ? (
+        <p className="text-sm font-medium text-foreground">Every hall is marked{single ? " for this day" : " on every class day"}.</p>
+      ) : (
+        <ul className="flex max-h-[28rem] flex-col divide-y divide-muted overflow-y-auto">
+          {r.days.map((d) => (
+            <li key={d.date} className="flex flex-col gap-2 py-2.5 first:pt-0 sm:flex-row sm:items-start sm:gap-4">
+              <span className="w-28 shrink-0 pt-1 text-[13px] font-semibold tabular text-foreground">{dayName.format(new Date(`${d.date}T00:00:00Z`))}</span>
+              <span className="flex flex-wrap gap-1.5">
+                {d.halls.map((h) => (
+                  <span
+                    key={h.hall}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium",
+                      h.marked === 0 ? "bg-destructive/10 text-destructive dark:bg-destructive/20" : "bg-warning-soft text-warning",
+                    )}
+                  >
+                    <b className="font-semibold">{hallLabel(h.hall)}</b>
+                    {h.marked === 0 ? `not marked · ${h.expected}` : `${h.marked} of ${h.expected} marked`}
+                  </span>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
 

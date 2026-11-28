@@ -48,7 +48,7 @@ const PANEL: readonly Role[] = ["owner", "admin", "senior_instructor"];
 const ADMINS: readonly Role[] = ["owner", "admin"];
 const SUPER_ADMIN: readonly Role[] = ["owner"];
 /** Attendance analytics: Owners and success coaches. */
-const ATTENDANCE_ANALYTICS: readonly Role[] = ["owner", "success_coach"];
+const ATTENDANCE_ANALYTICS: readonly Role[] = ["owner", "admin", "success_coach"];
 
 /** Single source for the sidebar and for route access checks. */
 export const NAV: NavSection[] = [

@@ -399,6 +399,68 @@ async function listInternships(url: URL, today: string) {
   return json(200, { from, to, today, current, internships });
 }
 
+/* ------------------------------------------------------------------ halls not marked */
+
+export type UnmarkedHall = { hall: string; expected: number; marked: number };
+export type UnmarkedDay = { date: string; halls: UnmarkedHall[] };
+export type UnmarkedReport = { from: string; to: string; counted: number; fullyMarked: number; days: UnmarkedDay[] };
+export type UnmarkedFilter = { degree?: string; hall?: string | null; section?: string };
+
+/** Longest span checked at once (days). */
+export const UNMARKED_MAX_DAYS = 92;
+
+const UNMARKED_SQL = `
+SELECT ${TERMS_JSON} AS terms,
+  ${entriesJson("c.date BETWEEN $1::date AND $2::date")} AS entries,
+  (SELECT coalesce(json_agg(json_build_object('niat_id', s.niat_id, 'degree', s.degree_code, 'hall_no', coalesce(s.hall_no, ''),
+       'status', s.status, 'joined_on', s.joined_on::text, 'dropped_on', s.dropped_on::text)), '[]'::json)
+     FROM attendance.students s
+     WHERE s.status = 'active' AND ($3::text = '' OR s.degree_code = $3::text)
+       AND ($4::text IS NULL OR coalesce(s.hall_no, '') = $4::text) AND ($5::text = '' OR coalesce(s.section, '') = $5::text)) AS students,
+  (SELECT coalesce(json_object_agg(d, ids), '{}'::json) FROM (
+     SELECT a.date::text AS d, json_agg(a.niat_id) AS ids FROM attendance.attendance a
+     WHERE a.date BETWEEN $1::date AND $2::date AND a.status IN ('P', 'A') GROUP BY a.date) m) AS marks`;
+
+/**
+ * For each day from `from` to `to` (not after today): the halls where some student the day counts for
+ * (same rules as the hall sheet) has no mark. A day nobody's day counts on (a holiday, a Sunday) isn't
+ * listed; `counted` is how many days counted for someone, `fullyMarked` how many of those every hall marked.
+ */
+export async function unmarkedHalls(from: string, to: string, today: string, f: UnmarkedFilter = {}): Promise<UnmarkedReport> {
+  const last = to > today ? today : to;
+  if (!isDate(from) || !isDate(to) || from > last) return { from, to: last, counted: 0, fullyMarked: 0, days: [] };
+  if (daysBetween(from, last) >= UNMARKED_MAX_DAYS) throw new Error(`Choose at most ${UNMARKED_MAX_DAYS} days.`);
+  const { rows } = await getDb().query<{
+    terms: TermRange[];
+    entries: EntryRow[];
+    students: { niat_id: string; degree: string; hall_no: string; status: string; joined_on: string | null; dropped_on: string | null }[];
+    marks: Record<string, string[]>;
+  }>(UNMARKED_SQL, [from, last, f.degree ?? "", f.hall === undefined ? null : f.hall, f.section ?? ""]);
+  const rules = rulesOf(today, rows[0].terms, rows[0].entries);
+  const students = rows[0].students.map((st) => ({ ...st, rule: ruleStudent(st.degree, st.status, st.joined_on, st.dropped_on) }));
+  const days: UnmarkedDay[] = [];
+  let counted = 0;
+  let fullyMarked = 0;
+  for (let i = 0; i <= daysBetween(from, last); i++) {
+    const date = addDays(from, i);
+    const marked = new Set(rows[0].marks[date] ?? []);
+    const byHall = new Map<string, UnmarkedHall>();
+    for (const st of students) {
+      if (!resolveDay(date, st.rule, rules).counted) continue;
+      const h = byHall.get(st.hall_no) ?? { hall: st.hall_no, expected: 0, marked: 0 };
+      h.expected++;
+      if (marked.has(st.niat_id)) h.marked++;
+      byHall.set(st.hall_no, h);
+    }
+    if (!byHall.size) continue;
+    counted++;
+    const missing = [...byHall.values()].filter((h) => h.marked < h.expected).sort((a, b) => compareHalls(a.hall, b.hall));
+    if (missing.length) days.push({ date, halls: missing });
+    else fullyMarked++;
+  }
+  return { from, to: last, counted, fullyMarked, days: days.reverse() };
+}
+
 /* ------------------------------------------------------------------ saving marks from NxtOne */
 
 /** Who can mark attendance in NxtOne: admins, and instructors and senior instructors for any hall. */

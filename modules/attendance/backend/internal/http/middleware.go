@@ -13,7 +13,7 @@ import (
 // role in it decides what the caller may do here, as in NxtOne itself:
 //
 //	owner                          everything
-//	admin                          everything except Owner-only routes
+//	admin                          everything except Owner-only routes (attendance analytics included)
 //	success_coach                  the staff routes below, plus attendance analytics
 //	senior_instructor, instructor  the staff routes below
 //
@@ -116,12 +116,12 @@ func (s *Server) requireOwner(next http.Handler) http.Handler {
 	})
 }
 
-// requireAnalytics must run after requireStaff: attendance analytics are for the Owner and
+// requireAnalytics must run after requireStaff: attendance analytics are for the Owner, admins and
 // success coaches (NxtOne's /admin/attendance-analytics).
 func (s *Server) requireAnalytics(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if role := adminFrom(r.Context()).Role; role != "owner" && role != "success_coach" {
-			writeError(w, http.StatusForbidden, "forbidden", "Only the Owner and success coaches can see attendance analytics.", nil)
+		if role := adminFrom(r.Context()).Role; role != "owner" && role != "admin" && role != "success_coach" {
+			writeError(w, http.StatusForbidden, "forbidden", "Only the Owner, admins and success coaches can see attendance analytics.", nil)
 			return
 		}
 		next.ServeHTTP(w, r)

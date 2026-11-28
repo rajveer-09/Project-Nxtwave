@@ -177,7 +177,7 @@ Checks (from the root): `npm run lint` (the app and every module frontend), `npm
 
 ### Service proxies
 
-`/api/attendance/*` and `/api/contest/*` forward to the Go and NxtRank services once `ATTENDANCE_API_ORIGIN`/`ATTENDANCE_JWT_SECRET` and `CONTEST_API_ORIGIN`/`CONTEST_JWT_SECRET` are set. In development, without them, they answer from sample services that follow the real contracts. Every service trusts NxtOne's identity token and has no sign-in of its own; the attendance service maps NxtOne roles: owner (everything), admin (everything but Owner-only routes), and instructors, senior instructors and success coaches (marking halls and reading the calendar, terms and internships; success coaches also read analytics).
+`/api/attendance/*` and `/api/contest/*` forward to the Go and NxtRank services once `ATTENDANCE_API_ORIGIN`/`ATTENDANCE_JWT_SECRET` and `CONTEST_API_ORIGIN`/`CONTEST_JWT_SECRET` are set. In development, without them, they answer from sample services that follow the real contracts. Every service trusts NxtOne's identity token and has no sign-in of its own; the attendance service maps NxtOne roles: owner (everything), admin (everything but Owner-only routes), and instructors, senior instructors and success coaches (marking halls and reading the calendar, terms and internships; success coaches also read analytics, as do admins).
 
 ## Database
 
