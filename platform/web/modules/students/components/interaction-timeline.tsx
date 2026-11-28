@@ -12,7 +12,7 @@ import type { HistoryEntry, HistoryStudent } from "../actions";
 const dateField =
   "h-8 rounded-md border border-input bg-card px-2 text-xs text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
-const tone = (statusKey: string) => (statusKey === "Cleared" ? "accent" : statusKey === "Need to Revisit" ? "warning" : "neutral");
+const tone = (statusKey: string) => (statusKey === "Cleared" ? "accent" : statusKey === "Need to Revisit" ? "danger" : "neutral");
 
 /** Header line under the student's name: class, hall and current instructor. */
 export function TimelineSubtitle({ student }: { student: HistoryStudent }) {
@@ -156,7 +156,7 @@ export function InteractionTimeline({ student, entries, logHref }: { student: Hi
                           <StatusPill tone={tone(e.statusKey)}>{e.status}</StatusPill>
                         </span>
                         <span className="text-[13px] font-semibold">
-                          L{e.level} · {e.covered || "—"}
+                          Level {e.level} · {e.covered || "—"}
                           {e.steps ? <span className="font-normal text-muted-foreground"> ({e.steps})</span> : null}
                         </span>
                         <span className="text-xs text-muted-foreground">

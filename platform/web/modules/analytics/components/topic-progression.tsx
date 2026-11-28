@@ -32,7 +32,7 @@ export function TopicProgression({ levels }: { levels: TopicLevel[] }) {
           aria-label="Show topics of"
           value={level}
           onValueChange={setLevel}
-          options={[{ value: "all", label: "All topics" }, ...levels.map((l) => ({ value: String(l.level), label: `L${l.level} topics` }))]}
+          options={[{ value: "all", label: "All topics" }, ...levels.map((l) => ({ value: String(l.level), label: `Level ${l.level} topics` }))]}
           className="w-36"
         />
         <SearchField label="Search topic" value={query} onChange={setQuery} className="min-w-40 flex-1" />
@@ -40,7 +40,7 @@ export function TopicProgression({ levels }: { levels: TopicLevel[] }) {
       {chosen ? (
         <p className="flex justify-between border-b border-border pb-2 text-xs text-muted-foreground">
           <span>
-            Students at L{chosen.level} · {chosen.title}
+            Students at Level {chosen.level} · {chosen.title}
           </span>
           <span className="font-semibold text-foreground tabular">{chosen.students}</span>
         </p>
@@ -50,7 +50,7 @@ export function TopicProgression({ levels }: { levels: TopicLevel[] }) {
           rows.map((t) => (
             <li key={`${t.level}-${t.topic}`} className="flex items-center justify-between gap-3 border-b border-muted py-1.5 last:border-0">
               <span className="min-w-0 truncate">
-                {chosen ? null : <span className="mr-1.5 text-xs text-muted-foreground">L{t.level}</span>}
+                {chosen ? null : <span className="mr-1.5 text-xs text-muted-foreground">Level {t.level}</span>}
                 {t.topic}
               </span>
               <span className={t.count ? "font-semibold tabular" : "text-muted-foreground/60 tabular"}>{t.count}</span>

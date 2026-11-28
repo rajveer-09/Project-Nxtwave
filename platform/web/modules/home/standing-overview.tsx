@@ -14,7 +14,7 @@ import type { StandingSummary } from "@/modules/home/data";
 const DOT: Record<Standing, string> = {
   pending: "bg-muted-foreground/60",
   in_progress: "bg-chart-4",
-  revisit: "bg-warning-strong",
+  revisit: "bg-destructive",
   cleared: "bg-primary",
 };
 
@@ -94,17 +94,17 @@ export function StandingOverview({ summary }: { summary: StandingSummary }) {
             {levels.map((row) => (
               <tr key={row.level} className={row.total === 0 ? "opacity-60" : undefined}>
                 <th scope="row" className="border-b border-muted px-3 py-1 text-left font-medium">
-                  L{row.level}
+                  Level {row.level}
                 </th>
                 <td className="border-b border-muted px-1 py-1">
-                  <CountLink value={row.total} href={studentsHref({ level: row.level })} label={`students at L${row.level}`} strong />
+                  <CountLink value={row.total} href={studentsHref({ level: row.level })} label={`students at Level ${row.level}`} strong />
                 </td>
                 {STANDINGS.map((standing) => (
                   <td key={standing} className="border-b border-muted px-1 py-1">
                     <CountLink
                       value={row.counts[standing]}
                       href={studentsHref({ level: row.level, standing })}
-                      label={`students at L${row.level}, ${STANDING_LABEL[standing].toLowerCase()}`}
+                      label={`students at Level ${row.level}, ${STANDING_LABEL[standing].toLowerCase()}`}
                     />
                   </td>
                 ))}

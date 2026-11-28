@@ -250,7 +250,7 @@ export function StudentInteractions({ rows }: { rows: StudentRow[] }) {
               ["Student ID", <span key="id" className="tabular">{detail.niatId}</span>],
               ["College", detail.college],
               ["Instructor", detail.instructor || "—"],
-              ["Level", `L${detail.level}`],
+              ["Level", `Level ${detail.level}`],
               ["Total interactions", num(detail.interactions)],
               ["Cleared", num(detail.cleared, "good")],
               ["Revisits", num(detail.revisits, "warn")],

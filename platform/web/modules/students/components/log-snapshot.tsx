@@ -23,7 +23,7 @@ import { StudentRowActions } from "./row-actions";
  */
 
 const ago = (days: number | null) => (days === null ? "never" : days === 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`);
-const tone = (status: Interaction["status"]) => (status === "Cleared" ? "accent" : status === "Need to Revisit" ? "warning" : "neutral");
+const tone = (status: Interaction["status"]) => (status === "Cleared" ? "accent" : status === "Need to Revisit" ? "danger" : "neutral");
 
 function Tile({ label, value, sub, warn }: { label: string; value: React.ReactNode; sub?: React.ReactNode; warn?: boolean }) {
   return (
@@ -41,7 +41,7 @@ export function LogSnapshot({ student: s, latestTest, interactions }: { student:
   return (
     <section aria-label={`${s.name} at a glance`} className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
-        <Tile label="Level" value={`L${s.level}`} sub={where || "—"} />
+        <Tile label="Level" value={`Level ${s.level}`} sub={where || "—"} />
         <Tile label="Attendance · 30 days" value={s.attendance30d === null ? "—" : `${s.attendance30d}%`} warn={s.attendance30d !== null && s.attendance30d < 75} sub={`${s.college} · ${s.section}`} />
         <Tile label="Interactions" value={interactions.length} sub={`last ${ago(s.lastInteractionDays)}`} warn={s.lastInteractionDays === null || s.lastInteractionDays >= 14} />
         <Tile label="Last outcome" value={last ? STATUS_LABEL[last.status] : "—"} sub={last ? `rating ${last.rating} / 5` : "no interaction yet"} warn={last?.status === "Need to Revisit"} />
@@ -73,7 +73,7 @@ export function LogSnapshot({ student: s, latestTest, interactions }: { student:
                 <span className="font-semibold tabular">{last.rating} / 5</span>
               </span>
               <span className="text-muted-foreground">
-                L{last.level} · {coveredLabel(last.topics, last.subtopics)}
+                Level {last.level} · {coveredLabel(last.topics, last.subtopics)}
               </span>
               {last.actionItems.trim() ? (
                 <span className="line-clamp-2">

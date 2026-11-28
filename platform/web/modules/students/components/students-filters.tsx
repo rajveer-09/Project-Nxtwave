@@ -45,7 +45,7 @@ export function StudentsFilters({ options, hide = [] }: { options: Options; /** 
     { key: "section", label: "Section", all: "All", values: options.sections.map((v) => ({ value: v, label: v })) },
     { key: "hall", label: "Hall", all: "All", values: options.halls.map((v) => ({ value: v, label: v })) },
     { key: "instructor", label: "Instructor", all: "All", values: options.instructors.map((v) => ({ value: v, label: v })) },
-    { key: "level", label: "Level", all: "All", values: [0, 1, 2, 3, 4, 5, 6, 7].map((v) => ({ value: String(v), label: `L${v}` })) },
+    { key: "level", label: "Level", all: "All", values: [0, 1, 2, 3, 4, 5, 6, 7].map((v) => ({ value: String(v), label: `Level ${v}` })) },
     { key: "standing", label: "Standing", all: "All", values: STANDINGS.map((v) => ({ value: v, label: STANDING_LABEL[v] })) },
   ].filter((select) => !hide.includes(select.key));
 

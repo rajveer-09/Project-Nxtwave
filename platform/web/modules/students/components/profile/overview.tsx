@@ -109,7 +109,7 @@ export function Snapshot({ d }: { d: StudentDetail }) {
       sub: s.attendance30d === null ? "Nothing marked in 30 days" : `Last 30 days · term ${s.attendanceTerm ?? "—"}%`,
       warn: s.attendance30d !== null && s.attendance30d < 75,
     },
-    { label: "DSA level", value: `L${s.level}`, sub: `Step ${s.step} · ${s.weeksAtLevel} weeks at this level`, warn: false },
+    { label: "DSA level", value: `Level ${s.level}`, sub: `Step ${s.step} · ${s.weeksAtLevel} weeks at this level`, warn: false },
     { label: "Interactions", value: String(s.interactions), sub: s.lastInteraction ? `Last ${s.lastInteraction}${s.avgRating !== null ? ` · avg ${s.avgRating} / 5` : ""}` : "None yet", warn: false },
     {
       label: "Weekly tests",

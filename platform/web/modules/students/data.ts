@@ -172,7 +172,7 @@ export const getStudent = cache(async (niatId: string) => {
         date: formatDate(it.date),
         round: it.round,
         by: it.takenBy,
-        level: `L${it.level}`,
+        level: `Level ${it.level}`,
         topics: coveredLabel(it.topics, it.subtopics),
         status: STATUS_LABEL[it.status],
         rating: it.rating,

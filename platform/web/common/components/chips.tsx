@@ -8,11 +8,12 @@ Date : 14 Nov 2026
 
 import { cn } from "@/common/lib/utils";
 
-export type PillTone = "accent" | "warning" | "neutral";
+export type PillTone = "accent" | "warning" | "danger" | "neutral";
 
 const PILL_TONE: Record<PillTone, string> = {
   accent: "bg-accent text-accent-foreground",
   warning: "bg-warning-soft text-warning",
+  danger: "bg-destructive/10 text-destructive dark:bg-destructive/20",
   neutral: "bg-muted text-sidebar-foreground",
 };
 

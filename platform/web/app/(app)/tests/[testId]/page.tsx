@@ -21,7 +21,7 @@ import { isAdminRole } from "@/common/auth/roles";
 import { formatDate } from "@/common/lib/dates";
 import { getFormatVersion, getResults, getSubmission, getTest, listSubmissions, listTests, studentsFor } from "@/modules/tests/data";
 import { autofillFor } from "@/modules/tests/autofill";
-import { maxTotal, totalOf } from "@/modules/tests/types";
+import { bandLabel, maxTotal, totalOf } from "@/modules/tests/types";
 
 export const metadata = { title: "Weekly test" };
 
@@ -42,7 +42,7 @@ async function Content({ params }: { params: Promise<{ testId: string }> }) {
           ← Weekly tests
         </Link>
       }
-      title={`${test.name} · ${test.band}`}
+      title={`${test.name} · ${bandLabel(test.band)}`}
       description={`Held ${formatDate(test.heldOn)} · ${format.fields.filter((f) => f.type === "marks").map((f) => `${f.label} ${f.max}`).join(" + ")} = ${maxTotal(format.fields)} · pass ${format.passMark} · format v${format.version}`}
       actions={
         <>
@@ -118,7 +118,7 @@ async function Content({ params }: { params: Promise<{ testId: string }> }) {
     return (
       <>
         {header}
-        <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm">None of your students are in band {test.band}.</p>
+        <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm">None of your students are in {bandLabel(test.band)}.</p>
       </>
     );
   }

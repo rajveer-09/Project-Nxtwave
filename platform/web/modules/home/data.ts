@@ -250,7 +250,7 @@ async function loadHomeData(): Promise<HomeData> {
   // ---- distributions
   const levels = Array.from({ length: LEVEL_COUNT }, (_, level) => {
     const value = roster.filter((s) => s.level === level).length;
-    return { label: `L${level}`, value, display: `${value} · ${roster.length ? Math.round((value * 1000) / roster.length) / 10 : 0}%` };
+    return { label: `Level ${level}`, value, display: `${value} · ${roster.length ? Math.round((value * 1000) / roster.length) / 10 : 0}%` };
   });
   const byHall = new Map<string, number[]>();
   for (const s of withAttendance) {

@@ -22,11 +22,11 @@ const toRow = (it: Interaction, codeRoom: string | null): RecentRow => ({
   round: it.round,
   takenBy: it.takenBy,
   supportFor: isSupport(it) ? it.pocAtTime : null,
-  covered: `L${it.level} · ${coveredLabel(it.topics, it.subtopics)}`,
+  covered: `Level ${it.level} · ${coveredLabel(it.topics, it.subtopics)}`,
   questions: it.questions.length,
   offRoadmap: it.questions.filter((q) => q.offRoadmap).length,
   status: STATUS_LABEL[it.status],
-  tone: it.status === "Cleared" ? "accent" : it.status === "Need to Revisit" ? "warning" : "neutral",
+  tone: it.status === "Cleared" ? "accent" : it.status === "Need to Revisit" ? "danger" : "neutral",
   rating: it.rating,
   codeRoom,
 });

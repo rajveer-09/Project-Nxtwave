@@ -112,7 +112,7 @@ export function buildStudentDetail(s: RosterStudent) {
     })),
     steps: STEP_CODES.map(([code, label], i) => ({ code, label, state: i < stepIndex ? "done" : i === stepIndex ? "now" : "todo" })),
     levelHistory: [
-      ...(s.level > 0 ? [{ change: `L${s.level - 1} → L${s.level}`, date: "22 Sep 2026", by: s.instructor }] : []),
+      ...(s.level > 0 ? [{ change: `Level ${s.level - 1} → Level ${s.level}`, date: "22 Sep 2026", by: s.instructor }] : []),
       { change: "Started at L0", date: "12 Aug 2026", by: "Roster import" },
     ],
     questions: isAarav
@@ -142,7 +142,7 @@ export function buildStudentDetail(s: RosterStudent) {
       date: date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
       round: s.interactions - i,
       by: i === interactionCount - 1 && interactionCount > 2 ? "Neha P." : s.instructor,
-      level: `L${Math.max(0, s.level - (i > 1 ? 1 : 0))}`,
+      level: `Level ${Math.max(0, s.level - (i > 1 ? 1 : 0))}`,
       topics: i === 0 ? `${s.topic}${s.subtopic ? ` › ${s.subtopic}` : ""}` : topics[Math.max(0, currentTopicIndex - 1)],
       status: isAarav && i === 0 ? "Needs revisit" : cleared ? "Cleared" : "Needs revisit",
       rating: isAarav && i === 0 ? 2.5 : Math.round((2.5 + rand() * 2) * 2) / 2,
@@ -247,7 +247,7 @@ export function buildStudentDetail(s: RosterStudent) {
       ["Joined", "12 Aug 2026"],
       ["Term", "Term 5 · 3 Aug – 19 Dec 2026"],
       ["LeetCode handle", s.lcHandle ? `${s.lcHandle} · checked 15 Nov` : "Not provided"],
-      ["DSA level", `L${s.level} · ${s.topic}${s.subtopic ? ` › ${s.subtopic}` : ""} · step ${s.step}`],
+      ["DSA level", `Level ${s.level} · ${s.topic}${s.subtopic ? ` › ${s.subtopic}` : ""} · step ${s.step}`],
     ] as [string, string][],
     assignments: [
       { who: s.instructor, role: "Instructor", when: "22 Sep 2026 → now" },
@@ -257,7 +257,7 @@ export function buildStudentDetail(s: RosterStudent) {
     changeLog: [
       { what: `Weekly Test 12 marks entered by ${s.instructor}`, when: "17 Nov 11:20" },
       ...(isAarav ? [{ what: 'Off-roadmap question "Trapping Rain Water" sent for review', when: "28 Oct 16:05" }] : []),
-      { what: `Level L${Math.max(0, s.level - 1)} → L${s.level} by ${s.instructor}`, when: "22 Sep 09:38" },
+      { what: `Level ${Math.max(0, s.level - 1)} → Level ${s.level} by ${s.instructor}`, when: "22 Sep 09:38" },
       { what: "Added by roster import", when: "12 Aug 10:02" },
     ],
   };
@@ -280,7 +280,7 @@ export function buildStudentDetail(s: RosterStudent) {
     profile: {
       instructorSince: "22 Sep" as string | null,
       coach: null as string | null,
-      levelBand: `L${Math.min(s.level, 3)}${s.level >= 3 ? "+" : ""}`,
+      levelBand: `Level ${Math.min(s.level, 3)}${s.level >= 3 ? "+" : ""}`,
       lastActivity: "Present today, 16 Nov",
       termLabel: "Term 5",
       joinedLabel: "12 Aug 2026" as string | null,

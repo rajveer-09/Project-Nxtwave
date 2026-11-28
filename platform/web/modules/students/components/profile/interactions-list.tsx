@@ -52,8 +52,8 @@ const TONE: Record<string, { rail: string; pill: string }> = {
 };
 const tone = (status: string) =>
   TONE[status] ?? {
-    rail: "bg-warning-strong",
-    pill: "bg-warning-soft text-warning",
+    rail: "bg-destructive",
+    pill: "bg-destructive/10 text-destructive dark:bg-destructive/20",
   };
 
 const empty = (v: string) => !v.trim() || v.trim() === "—";

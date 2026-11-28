@@ -47,10 +47,10 @@ export function InteractionsTable({ rows, caption, empty }: { rows: Interaction[
                     {isSupport(it) ? <div className="mt-0.5 w-fit rounded-md bg-warning-soft px-1.5 text-xs font-semibold text-warning">support</div> : null}
                   </td>
                   <td className={`${td} text-sidebar-foreground`}>
-                    L{it.level} · {coveredLabel(it.topics, it.subtopics)}
+                    Level {it.level} · {coveredLabel(it.topics, it.subtopics)}
                   </td>
                   <td className={td}>
-                    <StatusPill tone={it.status === "Cleared" ? "accent" : it.status === "Need to Revisit" ? "warning" : "neutral"}>{STATUS_LABEL[it.status]}</StatusPill>
+                    <StatusPill tone={it.status === "Cleared" ? "accent" : it.status === "Need to Revisit" ? "danger" : "neutral"}>{STATUS_LABEL[it.status]}</StatusPill>
                   </td>
                   <td className={`${td} font-semibold whitespace-nowrap tabular`}>{it.rating} / 5</td>
                   <td className={`${td} text-sidebar-foreground`}>

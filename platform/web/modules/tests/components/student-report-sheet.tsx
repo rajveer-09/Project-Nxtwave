@@ -9,7 +9,7 @@ Date : 22 Nov 2026
 import { cn } from "@/common/lib/utils";
 import { reportText, type ReportLang } from "@/modules/tests/report-text";
 import type { StudentReport } from "@/modules/tests/student-report";
-import type { ResultValue } from "@/modules/tests/types";
+import { bandLabel, type ResultValue } from "@/modules/tests/types";
 
 /*
  * One student's weekly test report as an A4 sheet (210 × 297 mm), in English or Telugu. The sheet is
@@ -108,7 +108,7 @@ export function StudentReportSheet({ report: r, lang }: { report: StudentReport;
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
           <span className="text-[16px] font-semibold">
-            {t.testName(r.test.name)} · {r.test.band}
+            {t.testName(r.test.name)} · {bandLabel(r.test.band)}
           </span>
           <span className={MUTED}>{t.heldOn(r.test.heldOn)}</span>
           <span className={MUTED}>{t.semesterWeek(a?.semesterName ?? null, r.weekRange.from, r.weekRange.to)}</span>

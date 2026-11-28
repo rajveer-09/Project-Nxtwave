@@ -51,7 +51,7 @@ export async function GET(request: Request) {
       it.assignedInstructor,
       it.pocAtTime,
       isSupport(it) ? "Yes" : "No",
-      `L${it.level}`,
+      `Level ${it.level}`,
       it.topics.join("; "),
       it.subtopics.join("; "),
       Object.entries(it.stepsReached).map(([k, v]) => `${k}: ${v}`).join("; "),

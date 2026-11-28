@@ -44,6 +44,8 @@ export type ResultFormat = { id: string; name: string; versions: FormatVersion[]
 
 export const BANDS = ["L0", "L1", "L2", "L3+"] as const;
 export type Band = (typeof BANDS)[number];
+/** "L0" → "Level 0", "L3+" → "Level 3+" (what people read; the band keys stay short). */
+export const bandLabel = (band: string) => band.replace(/^L/, "Level ");
 export const bandOf = (level: number): Band => (level <= 0 ? "L0" : level === 1 ? "L1" : level === 2 ? "L2" : "L3+");
 
 export type WeeklyTest = {
@@ -109,7 +111,7 @@ export function progressText(p: RoadmapProgress | undefined | null): string {
   if (!p) return "—";
   const where = p.topic ? ` · ${p.topicNo}/${p.topicCount} ${p.topic}${p.subtopic ? ` › ${p.subtopic}` : ""}` : "";
   const step = p.step && p.level > 0 ? ` · step ${p.step}${p.stepLabel ? ` ${p.stepLabel}` : ""}` : "";
-  return `L${p.level}${where}${step}`;
+  return `Level ${p.level}${where}${step}`;
 }
 
 /** A field's value as text (reports, report cards and CSV). */

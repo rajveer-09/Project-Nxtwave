@@ -12,7 +12,7 @@ import { openInteractionLog, type InteractionLogView } from "@nxtone/interaction
 import { InteractionEditForm } from "@nxtone/interactions-ui/components/interaction-edit-form";
 import { QuestionLines } from "./interaction-timeline";
 
-const tone = (statusKey: string) => (statusKey === "Cleared" ? "accent" : statusKey === "Need to Revisit" ? "warning" : "neutral");
+const tone = (statusKey: string) => (statusKey === "Cleared" ? "accent" : statusKey === "Need to Revisit" ? "danger" : "neutral");
 const box = "rounded-lg border border-border px-3.5 py-2.5";
 const label = "text-xs font-semibold text-muted-foreground";
 

@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { createWeeklyTest, unlockTestResults } from "@/modules/tests/actions";
 import { Button } from "@/common/ui/button";
 import { Dropdown } from "@/common/components/dropdown";
-import { BANDS, type Band } from "@/modules/tests/types";
+import { BANDS, bandLabel, type Band } from "@/modules/tests/types";
 
 const input =
   "h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
@@ -83,7 +83,7 @@ export function NewTestForm({ formats, suggestedName, today }: { formats: { id: 
         {BANDS.map((b) => (
           <label key={b} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-input px-3 text-sm">
             <input type="checkbox" checked={bands.includes(b)} onChange={() => setBands((prev) => (prev.includes(b) ? prev.filter((x) => x !== b) : [...prev, b]))} className="size-4 accent-primary" />
-            {b}
+            {bandLabel(b)}
           </label>
         ))}
         <Button type="submit" className="ml-auto h-10" disabled={pending || !bands.length || !name.trim()}>

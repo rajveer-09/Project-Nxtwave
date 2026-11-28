@@ -21,6 +21,7 @@ import { StudentReportSheet } from "@/modules/tests/components/student-report-sh
 import { getTest } from "@/modules/tests/data";
 import { REPORT_LANGS, reportLang } from "@/modules/tests/report-text";
 import { loadStudentReports } from "@/modules/tests/student-report";
+import { bandLabel } from "@/modules/tests/types";
 
 export const metadata = { title: "Student reports" };
 
@@ -40,7 +41,7 @@ async function Content({ params, searchParams }: { params: Promise<{ testId: str
   const { reports, instructors, instructor } = loaded;
   const tooMany = reports.length > MAX_SHEETS;
   const qs = (l: string) => `?lang=${l}${instructor ? `&instructor=${encodeURIComponent(instructor)}` : ""}`;
-  const fileName = `${test.name} ${test.band} - student reports${instructor ? ` - ${instructor}` : ""}${lang === "te" ? " - Telugu" : ""}`.replace(/[\\/:*?"<>|]+/g, " ");
+  const fileName = `${test.name} ${bandLabel(test.band)} - student reports${instructor ? ` - ${instructor}` : ""}${lang === "te" ? " - Telugu" : ""}`.replace(/[\\/:*?"<>|]+/g, " ");
 
   return (
     <>
@@ -48,7 +49,7 @@ async function Content({ params, searchParams }: { params: Promise<{ testId: str
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <div className="flex flex-col gap-1">
           <Link href={`/tests/${test.id}/report${instructor ? `?instructor=${encodeURIComponent(instructor)}` : ""}`} className="text-[13px] font-semibold text-primary hover:text-accent-strong">
-            ← {test.name} · {test.band} report
+            ← {test.name} · {bandLabel(test.band)} report
           </Link>
           <h1 className="text-2xl font-semibold">Student reports</h1>
           <p className="text-[13px] text-muted-foreground">

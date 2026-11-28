@@ -127,7 +127,7 @@ export function StudentsTable({
                   </div>
                 </td>
                 <td className="border-b border-muted px-3 py-2.5">
-                  <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-semibold">L{s.level}</span>
+                  <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-semibold">Level {s.level}</span>
                 </td>
                 <td className="border-b border-muted px-3 py-2.5 text-sidebar-foreground tabular">
                   {s.lcRating ? s.lcRating.toLocaleString("en-IN") : <span className="text-muted-foreground">No handle</span>}

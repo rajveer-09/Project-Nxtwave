@@ -80,7 +80,7 @@ function AddPanel({ candidates, mine }: { candidates: TopKRow[]; mine: boolean }
                   <b>{s.name}</b> <span className="text-muted-foreground tabular">{s.niatId}</span>
                   <span className="text-muted-foreground">
                     {" "}
-                    · L{s.level} · {s.section}
+                    · Level {s.level} · {s.section}
                     {!mine ? ` · ${s.instructor}` : ""}
                   </span>
                 </span>
@@ -172,7 +172,7 @@ function StudentTable({ rows, showPoc, canEdit }: { rows: TopKRow[]; showPoc: bo
                 </td>
                 {showPoc ? <td className="border-b border-muted px-3 py-2.5">{s.instructor}</td> : null}
                 <td className="border-b border-muted px-3 py-2.5 text-sidebar-foreground">
-                  L{s.level} · {s.topic}
+                  Level {s.level} · {s.topic}
                 </td>
                 <td className={cn("border-b border-muted px-3 py-2.5 tabular", s.attendance30d !== null && s.attendance30d < 75 && "font-semibold text-warning")}>
                   {s.attendance30d === null ? "—" : `${s.attendance30d}%`}
@@ -213,7 +213,7 @@ function ByInstructor({ rows, onPick }: { rows: TopKRow[]; onPick: (instructor: 
           <ul className="flex flex-wrap gap-1.5">
             {list.map((s) => (
               <li key={s.niatId}>
-                <Link href={`/students/${s.niatId}`} className="inline-block rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-strong hover:underline" title={`${s.niatId} · L${s.level}`}>
+                <Link href={`/students/${s.niatId}`} className="inline-block rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-strong hover:underline" title={`${s.niatId} · Level ${s.level}`}>
                   {s.name}
                 </Link>
               </li>

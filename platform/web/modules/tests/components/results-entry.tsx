@@ -353,7 +353,7 @@ function AutoCell({ auto }: { auto: AutoFill | null }) {
         <b className={cn(low(auto.week.pct) && "text-warning")}>{pctText(auto.week)}</b>
       </span>
       <span className="max-w-48 truncate text-muted-foreground" title={progressText(p)}>
-        L{p.level}
+        Level {p.level}
         {p.topic ? ` · ${p.topicNo}/${p.topicCount} ${p.topic}` : ""}
         {p.step && p.level > 0 ? ` · ${p.step}` : ""}
       </span>

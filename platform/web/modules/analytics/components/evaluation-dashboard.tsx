@@ -53,11 +53,11 @@ function Tile({ icon: Icon, label, value, sub, warn }: { icon: typeof Users; lab
   );
 }
 
-// Gray not started, blue ongoing, orange to redo, teal cleared (as in the DSA progress view).
+// Gray not started, blue ongoing, red to redo, teal cleared (as in the DSA progress view).
 const STANDING_DOT: Record<Standing, string> = {
   pending: "bg-muted-foreground/60",
   in_progress: "bg-primary",
-  revisit: "bg-warning-strong",
+  revisit: "bg-destructive",
   cleared: "bg-chart-4",
 };
 
@@ -134,6 +134,9 @@ export async function EvaluationDashboard({
   // Tiles
   const standingCounts = Object.fromEntries(STANDINGS.map((st) => [st, roster.filter((s) => s.standing === st).length])) as Record<Standing, number>;
   const markedToday = att.today.present + att.today.absent;
+  // "Today" shows today's marks; any other dates show the totals for those dates.
+  const isToday = range.from === today && range.to === today;
+  const markedInDates = att.period.present + att.period.absent;
 
   // Level distribution and topic progression (curriculum order; topics nobody is on show 0)
   const levelCount = Math.max(structure.levels.length, 1);
@@ -266,15 +269,30 @@ export async function EvaluationDashboard({
       </section>
 
       <section aria-label="DSA attendance" className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
-        <Tile
-          icon={CalendarCheck}
-          label="Attendance Today"
-          value={markedToday ? pctText(att.today.pct) : "—"}
-          sub={markedToday ? `${fmt(markedToday)} students marked today` : "Not marked yet, or a day off"}
-          warn={att.today.pct !== null && att.today.pct < MIN}
-        />
-        <Tile icon={UserCheck} label="Present Today" value={markedToday ? fmt(att.today.present) : "—"} sub="Students marked present today" />
-        <Tile icon={UserX} label="Absent Today" value={markedToday ? fmt(att.today.absent) : "—"} sub="Students marked absent today" warn={att.today.absent > 0} />
+        {isToday ? (
+          <>
+            <Tile
+              icon={CalendarCheck}
+              label="Attendance Today"
+              value={markedToday ? pctText(att.today.pct) : "—"}
+              sub={markedToday ? `${fmt(markedToday)} students marked today` : "Not marked yet, or a day off"}
+              warn={att.today.pct !== null && att.today.pct < MIN}
+            />
+            <Tile icon={UserCheck} label="Present Today" value={markedToday ? fmt(att.today.present) : "—"} sub="Students marked present today" />
+            <Tile icon={UserX} label="Absent Today" value={markedToday ? fmt(att.today.absent) : "—"} sub="Students marked absent today" warn={att.today.absent > 0} />
+          </>
+        ) : (
+          <>
+            <Tile
+              icon={CalendarCheck}
+              label="Students Marked"
+              value={markedInDates ? fmt(att.period.students) : "—"}
+              sub={markedInDates ? `${dates} · ${fmt(markedInDates)} marks` : `Nothing marked ${dates}`}
+            />
+            <Tile icon={UserCheck} label="Present" value={markedInDates ? fmt(att.period.present) : "—"} sub={`Present marks · ${dates}`} />
+            <Tile icon={UserX} label="Absent" value={markedInDates ? fmt(att.period.absent) : "—"} sub={`Absent marks · ${dates}`} warn={att.period.absent > 0} />
+          </>
+        )}
         <Tile
           icon={Percent}
           label="Average Attendance"

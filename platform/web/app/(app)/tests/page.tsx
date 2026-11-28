@@ -18,7 +18,7 @@ import { isAdminRole } from "@/common/auth/roles";
 import { formatDate, todayIst } from "@/common/lib/dates";
 import { getResults, listFormats, listSubmissions, listTests, studentsFor } from "@/modules/tests/data";
 import { getRoster, usingSampleData } from "@/common/data/roster";
-import { bandOf } from "@/modules/tests/types";
+import { bandLabel, bandOf } from "@/modules/tests/types";
 
 export const metadata = { title: "Weekly tests" };
 
@@ -99,7 +99,7 @@ async function Content() {
                         </Link>
                       </div>
                     </td>
-                    <td className="border-b border-muted px-3 py-3 font-semibold">{test.band}</td>
+                    <td className="border-b border-muted px-3 py-3 font-semibold">{bandLabel(test.band)}</td>
                     <td className="border-b border-muted px-3 py-3 tabular">
                       {entered} / {students}
                     </td>

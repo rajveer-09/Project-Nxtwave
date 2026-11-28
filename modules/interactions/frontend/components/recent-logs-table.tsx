@@ -30,7 +30,7 @@ export type RecentRow = {
   questions: number;
   offRoadmap: number;
   status: string;
-  tone: "accent" | "warning" | "neutral";
+  tone: "accent" | "warning" | "danger" | "neutral";
   rating: number;
   codeRoom: string | null;
 };

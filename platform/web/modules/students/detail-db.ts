@@ -204,7 +204,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
       if (asked.size >= 8) break;
       const key = q.title.toLowerCase();
       if (!asked.has(key)) {
-        asked.set(key, { tag: q.offRoadmap ? "Off-roadmap" : (q.step ?? `L${it.level}`), title: q.title, result: `${STATUS_LABEL[it.status].toLowerCase()} · ${shortDate(it.date)}`, offRoadmap: q.offRoadmap });
+        asked.set(key, { tag: q.offRoadmap ? "Off-roadmap" : (q.step ?? `Level ${it.level}`), title: q.title, result: `${STATUS_LABEL[it.status].toLowerCase()} · ${shortDate(it.date)}`, offRoadmap: q.offRoadmap });
       }
     }
   }
@@ -330,11 +330,11 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     }) as StudentDetailShape["progress"]["steps"],
     levelHistory: [
       ...realLevelChanges.map((c) => ({
-        change: `L${c.from_level} → L${c.to_level}`,
+        change: `Level ${c.from_level} → Level ${c.to_level}`,
         date: formatDate(c.change_date),
         by: c.by ?? (c.source === "backfill" ? "From interactions" : "—"),
       })),
-      ...(startedOn ? [{ change: `Started at L${levelChanges.rows.at(-1)?.from_level ?? s.level}`, date: formatDate(startedOn), by: "Roster import" }] : []),
+      ...(startedOn ? [{ change: `Started at Level ${levelChanges.rows.at(-1)?.from_level ?? s.level}`, date: formatDate(startedOn), by: "Roster import" }] : []),
     ],
     questions: [...asked.values()],
   };
@@ -345,7 +345,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     date: formatDate(it.date),
     round: it.round,
     by: it.takenBy,
-    level: `L${it.level}`,
+    level: `Level ${it.level}`,
     topics: coveredLabel(it.topics, it.subtopics),
     status: STATUS_LABEL[it.status],
     rating: it.rating,
@@ -377,7 +377,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
       ["Joined", joined ? formatDate(joined) : "—"],
       ["Term", term ? `${term.name} · ${shortDate(term.start)} – ${formatDate(term.end)}` : "—"],
       ["LeetCode handle", s.lcHandle ? `${s.lcHandle}${contest.checkedOn ? ` · checked ${shortDate(contest.checkedOn)}` : ""}` : "Not provided"],
-      ["DSA level", `L${s.level} · ${s.topic}${s.subtopic ? ` › ${s.subtopic}` : ""}${stepCode(s.step) && s.level > 0 ? ` · step ${stepCode(s.step)}` : ""}`],
+      ["DSA level", `Level ${s.level} · ${s.topic}${s.subtopic ? ` › ${s.subtopic}` : ""}${stepCode(s.step) && s.level > 0 ? ` · step ${stepCode(s.step)}` : ""}`],
     ],
     assignments: assignments.rows.map((r) => ({
       who: r.name,
@@ -385,7 +385,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
       when: `${formatDate(r.from_date)} → ${r.to_date ? formatDate(r.to_date) : "now"}`,
     })),
     changeLog: [
-      ...levelChanges.rows.map((c) => ({ at: c.change_date, what: `Level L${c.from_level} → L${c.to_level}${c.by ? ` by ${c.by}` : ""}`, when: formatDate(c.change_date) })),
+      ...levelChanges.rows.map((c) => ({ at: c.change_date, what: `Level ${c.from_level} → Level ${c.to_level}${c.by ? ` by ${c.by}` : ""}`, when: formatDate(c.change_date) })),
       ...interactions.slice(0, 5).map((it) => ({ at: it.createdAt.slice(0, 10), what: `Round ${it.round} logged by ${it.takenBy}`, when: istStamp(it.createdAt) })),
       ...(firstSeen.length ? [{ at: new Date(Math.min(...firstSeen)).toISOString().slice(0, 10), what: "Added to the roster", when: istStamp(new Date(Math.min(...firstSeen))) }] : []),
     ]
@@ -413,7 +413,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
       title: r.attended ? `${r.name} · solved ${r.solved ?? 0} / 4` : `Missed ${r.name}`,
       detail: r.collegeRank ? `college rank #${r.collegeRank}` : "",
     })),
-    ...levelChanges.rows.slice(0, 3).map((c) => ({ at: c.change_date, date: shortDate(c.change_date), module: "interactions" as const, title: `Level L${c.from_level} → L${c.to_level}`, detail: c.by ?? "" })),
+    ...levelChanges.rows.slice(0, 3).map((c) => ({ at: c.change_date, date: shortDate(c.change_date), module: "interactions" as const, title: `Level ${c.from_level} → Level ${c.to_level}`, detail: c.by ?? "" })),
   ];
   const lastMark = [...marks.rows].reverse().find((m) => resolve(m.date).counted);
   const lastActivity = [
@@ -428,7 +428,7 @@ export async function buildStudentDetailFromDb(s: RosterStudent): Promise<Studen
     profile: {
       instructorSince: current ? shortDate(current.from_date) : null,
       coach: null,
-      levelBand: `L${Math.min(s.level, 3)}${s.level >= 3 ? "+" : ""}`,
+      levelBand: `Level ${Math.min(s.level, 3)}${s.level >= 3 ? "+" : ""}`,
       lastActivity: lastActivity?.text ?? "No activity recorded",
       termLabel: term?.name ?? "",
       joinedLabel: joined ? formatDate(joined) : null,

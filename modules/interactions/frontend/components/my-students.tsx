@@ -29,7 +29,7 @@ export type MyStudent = {
 const DOT: Record<Standing, string> = {
   pending: "bg-muted-foreground/60",
   in_progress: "bg-chart-4",
-  revisit: "bg-warning-strong",
+  revisit: "bg-destructive",
   cleared: "bg-primary",
 };
 
@@ -127,7 +127,7 @@ export function MyStudents({ students, overdueDays }: { students: MyStudent[]; o
                       </div>
                     </td>
                     <td className="border-b border-muted py-2 pr-3 text-sidebar-foreground">
-                      L{s.level} · {s.topic}
+                      Level {s.level} · {s.topic}
                     </td>
                     <td className="border-b border-muted py-2 pr-3 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5" title={STANDING_HINT[s.standing]}>

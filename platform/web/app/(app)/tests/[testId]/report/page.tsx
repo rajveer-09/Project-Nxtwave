@@ -25,6 +25,7 @@ import { asOfDay, weekRange } from "@/modules/tests/autofill";
 import { PrintButton, ReportView } from "@/modules/tests/components/report-view";
 import { getTest } from "@/modules/tests/data";
 import { loadReport } from "@/modules/tests/report";
+import { bandLabel } from "@/modules/tests/types";
 
 export const metadata = { title: "Weekly test report" };
 
@@ -65,7 +66,7 @@ async function Content({ params, searchParams }: { params: Promise<{ testId: str
             ← {test.name}
           </Link>
         }
-        title={`Report · ${test.name} · ${test.band}`}
+        title={`Report · ${test.name} · ${bandLabel(test.band)}`}
         description={`${who} · held ${formatDate(test.heldOn)} · out of ${max}, pass ${format.passMark} · attendance up to ${formatDate(asOf)}${semesterName ? ` (${semesterName})` : ""}, last week ${formatDate(week.from)} – ${formatDate(week.to)}`}
         actions={
           <>
@@ -100,7 +101,7 @@ async function Content({ params, searchParams }: { params: Promise<{ testId: str
       />
 
       {!report.rows.length ? (
-        <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm">No students in band {test.band} for this report.</p>
+        <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm">No students in {bandLabel(test.band)} for this report.</p>
       ) : (
         <>
           <dl className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3 print:grid-cols-3">

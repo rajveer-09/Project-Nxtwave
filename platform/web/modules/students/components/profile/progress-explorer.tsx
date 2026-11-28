@@ -250,7 +250,7 @@ export function ProgressExplorer({ data, history }: { data: ProgressExplore; his
                   type="button"
                   aria-pressed={l.level === level}
                   onClick={() => choose(l.level)}
-                  title={l.title ? `L${l.level} · ${l.title}` : `Level ${l.level}`}
+                  title={l.title ? `Level ${l.level} · ${l.title}` : `Level ${l.level}`}
                   className={cn("flex w-full flex-col items-center gap-1.5 rounded-lg px-1 pt-1 pb-1.5 hover:bg-surface-subtle", l.level === level && "bg-surface-subtle")}
                 >
                   {inner}

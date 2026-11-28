@@ -41,7 +41,7 @@ export async function GET(request: Request, { params }: RouteContext<"/api/tests
         r.niatId, r.name, r.college, r.section, r.instructor, RESULT[r.result], r.total, r.previous,
         ...fields.map((f) => (took ? valueText(f, r.values[f.id]).replace(/^—$/, "") : "")),
         a?.semester.pct, a?.semester.present, a?.semester.counted, a?.week.pct, a?.week.present, a?.week.counted,
-        a ? `L${a.progress.level}` : "", a?.progress.topic, a?.progress.topicNo || "", a?.progress.topicCount, a?.progress.subtopic,
+        a ? `Level ${a.progress.level}` : "", a?.progress.topic, a?.progress.topicNo || "", a?.progress.topicCount, a?.progress.subtopic,
         a?.progress.step ? `${a.progress.step}${a.progress.stepLabel ? ` ${a.progress.stepLabel}` : ""}` : "", a?.progress.percent, a?.asOf,
       ];
     }),

@@ -53,7 +53,7 @@ export function LevelConversions({ counted, notCounted, colleges, levels }: { co
             const cells = (
               <>
                 <span className="flex items-center gap-1.5 font-medium">
-                  L{from} → L{from + 1}
+                  Level {from} → Level {from + 1}
                   {items.length ? <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground transition-transform group-open:rotate-180" /> : null}
                 </span>
                 {colleges.map((c) => (
@@ -106,11 +106,6 @@ export function LevelConversions({ counted, notCounted, colleges, levels }: { co
         </details>
       ) : null}
 
-      <p className="text-xs text-muted-foreground">
-        From 13 Oct 2026, 4 PM, a conversion counts once every required topic of the level (set in Question Bank) has its own Cleared interaction, dated by the
-        topic cleared last; a level changed before that is listed as not counted. Conversions from before then are dated by the last interaction before the
-        promotion. A promotion that was undone isn&apos;t counted. Colleges and instructors are the current ones.
-      </p>
     </div>
   );
 }
@@ -140,7 +135,7 @@ function PeopleTable({ items, dateLabel, showChange }: { items: ConversionItem[]
               <td className="px-3 py-1.5">{c.instructor}</td>
               {showChange ? (
                 <td className="px-3 py-1.5 whitespace-nowrap">
-                  L{c.from} → L{c.from + 1}
+                  Level {c.from} → Level {c.from + 1}
                 </td>
               ) : null}
               <td className="py-1.5 pl-3 text-right whitespace-nowrap tabular">{formatDate(c.date)}</td>
@@ -253,7 +248,7 @@ export function CollegeCards({ cards, attendanceMin = 75 }: { cards: CollegeCard
               ["Total interactions", String(c.interactions), undefined],
               ["Today", String(c.today), undefined],
               ["Cleared", String(c.cleared), "text-accent-strong"],
-              ["Revisit", String(c.revisit), "text-warning"],
+              ["Revisit", String(c.revisit), "text-destructive"],
               ["Attendance", c.attendance === null ? "—" : `${c.attendance}%`, c.attendance !== null && c.attendance < attendanceMin ? "text-warning" : undefined],
             ].map(([label, value, tone]) => (
               <div key={label} className="flex flex-col rounded-md border border-border bg-card px-2.5 py-2 last:col-span-2 sm:last:col-span-1">
