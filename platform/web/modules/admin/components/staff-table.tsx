@@ -14,7 +14,7 @@ import { useConfirm } from "@/common/components/confirm";
 import { Dropdown } from "@/common/components/dropdown";
 import { SearchField } from "@/common/components/search-field";
 import { searchMatcher } from "@/common/lib/search";
-import { canViewAs, ROLE_LABEL, type Role } from "@/common/auth/roles";
+import { canViewAs, ROLE_LABEL, ROLES, type Role } from "@/common/auth/roles";
 import { ViewAsButton } from "@/modules/shell/view-as";
 import { Button } from "@/common/ui/button";
 import { changeRoleAction, deactivateAction, deleteStaffAction, reactivateAction, resetPasswordAction } from "@/modules/admin/actions";
@@ -45,8 +45,19 @@ export function StaffTable({
   const { ask, dialog } = useConfirm();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  // Role filter: "" everyone, a role, or "none" (no NxtOne role).
+  const [roleFilter, setRoleFilter] = useState("");
   const match = searchMatcher(query);
-  const shown = rows.filter((r) => match(r.name, r.email, r.instructorCode, roleName(r.role)));
+  const shown = rows.filter(
+    (r) => match(r.name, r.email, r.instructorCode, roleName(r.role)) && (!roleFilter || (roleFilter === "none" ? r.role === null : r.role === roleFilter)),
+  );
+  const roleCount = (role: Role | null) => rows.filter((r) => r.role === role).length;
+  const roleOptions = [
+    { value: "", label: `All roles (${rows.length})` },
+    ...ROLES.filter((role) => roleCount(role) > 0).map((role) => ({ value: role, label: `${ROLE_LABEL[role]} (${roleCount(role)})` })),
+    ...(roleCount(null) > 0 ? [{ value: "none", label: `No access (${roleCount(null)})` }] : []),
+  ];
+  const filtering = !!query.trim() || !!roleFilter;
   // "Select everyone" and bulk actions cover the people shown by the search.
   const selectable = mode !== "readonly" ? shown.filter((r) => r.editable) : [];
   const chosen = selectable.filter((r) => picked.has(r.id));
@@ -115,7 +126,8 @@ export function StaffTable({
       {rows.length > 6 ? (
         <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-3">
           <SearchField label="Search staff" placeholder="Name, email, instructor code or role" value={query} onChange={setQuery} className="w-full max-w-80" />
-          {query.trim() ? <span className="text-[13px] text-muted-foreground">{shown.length} of {rows.length}</span> : null}
+          <Dropdown aria-label="Filter by role" value={roleFilter} onValueChange={setRoleFilter} options={roleOptions} className="w-full sm:w-56" />
+          {filtering ? <span className="text-[13px] text-muted-foreground">{shown.length} of {rows.length}</span> : null}
         </div>
       ) : null}
       {selectable.length ? (
@@ -258,7 +270,13 @@ export function StaffTable({
             {!shown.length ? (
               <tr>
                 <td colSpan={6}className="px-5 py-6 text-center text-muted-foreground">
-                  {rows.length ? `Nobody matches “${query.trim()}”.` : mode === "deactivated" ? "Nobody is deactivated." : "Nobody here."}
+                  {rows.length
+                    ? query.trim()
+                      ? `Nobody matches “${query.trim()}”${roleFilter ? " with that role" : ""}.`
+                      : "Nobody has that role."
+                    : mode === "deactivated"
+                      ? "Nobody is deactivated."
+                      : "Nobody here."}
                 </td>
               </tr>
             ) : null}
