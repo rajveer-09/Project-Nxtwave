@@ -14,10 +14,18 @@ import type {
   AnalyticsStudent,
   AttendanceExport,
   AttendanceImportResult,
+  CalendarDeletion,
+  CalendarEntryRange,
+  CalendarImpact,
   CalendarImportResult,
   CalendarMonth,
   DayType,
+  DeletedEntry,
+  DeletionPreview,
+  DeletionSelector,
+  EntryKey,
   Hall,
+  ImportBatch,
   ImportResult,
   InternshipInput,
   InternshipListItem,
@@ -128,6 +136,25 @@ export const attendanceApi = {
     apiFetch<InternshipResult>(`${base}/students/${encodeURIComponent(id)}/internships`, { method: "POST", json: input }),
   updateInternship: (periodId: number, input: InternshipInput) => apiFetch<InternshipResult>(`${base}/internships/${periodId}`, { method: "PUT", json: input }),
   cancelInternship: (periodId: number) => apiFetch<{ cancelled: number; marks_removed: number }>(`${base}/internships/${periodId}/cancel`, { method: "POST" }),
+
+  /* ---------- calendar editing (Owners and admins; resetting imported entries is Owner only) ---------- */
+  /** Month view Save: one entry per date in from..to for the scope (Sundays only when asked). */
+  setCalendar: (e: { from: string; to: string; applies_to: string; day_type: DayType; counts?: boolean; label: string; include_sundays: boolean }) =>
+    apiFetch<{ saved: number; unchanged: number; warning?: string }>(`${base}/calendar`, { method: "PUT", json: e }),
+  calendarEntries: () => apiFetch<{ entries: CalendarEntryRange[] }>(`${base}/calendar/entries`),
+  importHistory: () => apiFetch<{ batches: ImportBatch[] }>(`${base}/imports/history`),
+  previewDeletion: (sel: DeletionSelector) => apiFetch<DeletionPreview>(`${base}/calendar/deletions/preview`, { method: "POST", json: sel }),
+  /** confirm: true for selected entries; "RESET <count>" for a reset of imported entries. */
+  deleteEntries: (sel: DeletionSelector, token: string, confirm: true | string) =>
+    apiFetch<{ deletion_id: number; deleted: number; impact: CalendarImpact }>(`${base}/calendar/deletions`, {
+      method: "POST",
+      json: { ...sel, token, ...(confirm === true ? { confirmed: true } : { confirm }) },
+    }),
+  editEntries: (e: { entries: EntryKey[]; token: string; day_type: DayType; counts?: boolean; label: string }) =>
+    apiFetch<{ updated: number; impact: CalendarImpact }>(`${base}/calendar/entries`, { method: "PATCH", json: e }),
+  deletions: () => apiFetch<{ deletions: CalendarDeletion[] }>(`${base}/calendar/deletions`),
+  deletion: (id: number) => apiFetch<{ entries: DeletedEntry[] }>(`${base}/calendar/deletions/${id}`),
+  restoreDeletion: (id: number) => apiFetch<{ restored: number; skipped: number }>(`${base}/calendar/deletions/${id}/restore`, { method: "POST" }),
 };
 
 const exportParams = (from: string, to: string) => {

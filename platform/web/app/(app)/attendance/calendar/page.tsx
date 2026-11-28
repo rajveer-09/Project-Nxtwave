@@ -8,17 +8,18 @@ Date : 17 Nov 2026
 
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { CalendarView } from "@nxtone/attendance-ui/components/calendar-view";
+import { CalendarPage as CalendarScreen } from "@nxtone/attendance-ui/components/calendar/calendar-page";
 import { Skeleton } from "@/common/ui/skeleton";
 import { requireAccess } from "@/common/auth/guard";
-import { todayIst } from "@/common/lib/dates";
 
 export const metadata = { title: "DSA attendance calendar" };
 
 async function Content() {
   await connection();
-  await requireAccess("/attendance");
-  return <CalendarView today={todayIst()} />;
+  const user = await requireAccess("/attendance");
+  // Everyone sees the month view; Owners and admins edit (the attendance service checks it again).
+  const canEdit = user.role === "owner" || user.role === "admin";
+  return <CalendarScreen canEdit={canEdit} isOwner={user.role === "owner"} />;
 }
 
 export default function CalendarPage() {

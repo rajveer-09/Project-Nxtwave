@@ -48,6 +48,8 @@ export type CalendarDay = {
   in_term: boolean;
   counted: boolean;
   entries: CalendarEntry[];
+  /** How every degree's students see this date (a degree-specific entry only ever under its own degree). */
+  by_degree?: { degree: string; kind: DayType | "sunday"; label: string; counted: boolean; applies_to: string }[];
 };
 
 export type CalendarMonth = { month: string; view: string; today: string; applies_to: string[]; days: CalendarDay[] };
@@ -422,3 +424,81 @@ export type InternshipResult = {
 };
 
 export type InternshipInput = { start: string; end: string; overwrite?: boolean; dry_run?: boolean };
+
+/* ---------- Calendar entries, deletions and import history (Owners and admins; resets Owner only) ---------- */
+
+export type EntrySource = "legacy" | "manual" | "calendar_import" | "attendance_import" | "students_import";
+export type AdminRef = { name: string; email: string } | null;
+
+/** Consecutive calendar days saved together (a Sunday with no entry is skipped over). */
+export type CalendarEntryRange = {
+  start: string;
+  end: string;
+  days: number;
+  applies_to: string;
+  day_type: DayType;
+  counts: boolean;
+  label: string;
+  source: EntrySource;
+  batch: { id: number; file_name: string; kind: string } | null;
+  created_at: string | null;
+  updated_at: string | null;
+  created_by: AdminRef;
+  updated_by: AdminRef;
+  dates: string[];
+  /** Fingerprint of these rows; an edit or deletion is refused if they changed since. */
+  token: string;
+};
+
+export type EntryKey = { date: string; applies_to: string };
+
+export type DeletionSelector =
+  | { mode: "selected"; entries: EntryKey[] }
+  | { mode: "imported"; batch_ids?: number[]; degrees?: string[]; types?: DayType[]; from?: string; to?: string };
+
+export type ImpactDay = { kind: DayType | "sunday"; label: string; counts: boolean; counted: boolean };
+export type CalendarImpact = {
+  changes: { date: string; degree: string; before: ImpactDay; after: ImpactDay; counting_changes: boolean; marks: number }[];
+  start_counting: number;
+  stop_counting: number;
+  marks_start: number;
+  marks_stop: number;
+};
+
+export type DeletionPreview = {
+  entries: CalendarEntryRange[];
+  count: number;
+  dates: string[];
+  degrees: string[];
+  types: Record<string, number>;
+  kept: { manual: number; legacy: number };
+  missing: number;
+  impact: CalendarImpact;
+  token: string;
+};
+
+export type CalendarDeletion = {
+  id: number;
+  kind: "selected" | "imported";
+  criteria: { dates?: string[]; degrees?: string[]; types?: Record<string, number>; kept?: { manual: number; legacy: number } };
+  entry_count: number;
+  deleted_at: string;
+  deleted_by: AdminRef;
+  restored_at: string | null;
+  restored_by: AdminRef;
+  restored_entries: number;
+};
+
+export type DeletedEntry = { date: string; applies_to: string; day_type: DayType; counts: boolean; label: string; source: EntrySource; file_name: string; restored: boolean };
+
+/** A saved upload that wrote calendar entries. */
+export type ImportBatch = {
+  id: number;
+  kind: "calendar" | "attendance" | "students";
+  file_name: string;
+  status: string;
+  uploaded_at: string;
+  uploaded_by: AdminRef;
+  summary: { created: number; updated: number; unchanged: number; skipped: number; from?: string; to?: string; degrees: string[] };
+  current_entries: number;
+};
